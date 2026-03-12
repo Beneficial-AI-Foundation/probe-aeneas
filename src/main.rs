@@ -19,9 +19,9 @@ struct Cli {
 enum Commands {
     /// Full pipeline: generate functions.json, build translations, merge atoms.
     Merge {
-        /// Path to Verus atoms JSON (from probe-verus atomize).
+        /// Path to Rust atoms JSON (from probe-rust extract).
         #[arg(long)]
-        verus: PathBuf,
+        rust: PathBuf,
 
         /// Path to Lean atoms JSON (from probe-lean extract).
         #[arg(long)]
@@ -36,13 +36,13 @@ enum Commands {
         output: PathBuf,
     },
 
-    /// Generate a translations file mapping Verus code-names to Lean code-names.
+    /// Generate a translations file mapping Rust code-names to Lean code-names.
     Translate {
-        /// Path to Verus atoms JSON.
+        /// Path to Rust atoms JSON (from probe-rust extract).
         #[arg(long)]
-        verus: PathBuf,
+        rust: PathBuf,
 
-        /// Path to Lean atoms JSON.
+        /// Path to Lean atoms JSON (from probe-lean extract).
         #[arg(long)]
         lean: PathBuf,
 
@@ -72,18 +72,18 @@ fn main() {
 
     let result = match cli.command {
         Commands::Merge {
-            verus,
+            rust,
             lean,
             lean_project,
             output,
-        } => merge::run_merge(&verus, &lean, &lean_project, &output),
+        } => merge::run_merge(&rust, &lean, &lean_project, &output),
 
         Commands::Translate {
-            verus,
+            rust,
             lean,
             functions,
             output,
-        } => merge::run_translate_only(&verus, &lean, &functions, &output),
+        } => merge::run_translate_only(&rust, &lean, &functions, &output),
 
         Commands::Listfuns {
             lean_project,

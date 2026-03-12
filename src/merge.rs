@@ -11,7 +11,7 @@ use crate::translate::{
 
 /// Run the full merge pipeline: listfuns -> translate -> merge.
 pub fn run_merge(
-    verus_path: &Path,
+    rust_path: &Path,
     lean_path: &Path,
     lean_project: &Path,
     output_path: &Path,
@@ -22,21 +22,21 @@ pub fn run_merge(
 
     // Step 2: Generate translations
     let translations_result =
-        run_translate(verus_path, lean_path, &functions_path)?;
+        run_translate(rust_path, lean_path, &functions_path)?;
 
     // Step 3: Merge with translations
-    run_merge_with_translations(verus_path, lean_path, &translations_result, output_path)
+    run_merge_with_translations(rust_path, lean_path, &translations_result, output_path)
 }
 
 /// Run just the translate step, returning the bidirectional maps and the translations JSON.
 fn run_translate(
-    verus_path: &Path,
+    rust_path: &Path,
     lean_path: &Path,
     functions_path: &Path,
 ) -> Result<(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>), String> {
-    println!("Loading Verus atoms from {}...", verus_path.display());
-    let verus_data = load_atoms(verus_path)?;
-    println!("  {} atoms", verus_data.len());
+    println!("Loading Rust atoms from {}...", rust_path.display());
+    let rust_data = load_atoms(rust_path)?;
+    println!("  {} atoms", rust_data.len());
 
     println!("Loading Lean atoms from {}...", lean_path.display());
     let lean_data = load_atoms(lean_path)?;
@@ -47,7 +47,7 @@ fn run_translate(
     println!("  {} entries", functions.len());
 
     println!("\nGenerating translations...");
-    let (mappings, stats) = generate_translations(&verus_data, &lean_data, &functions);
+    let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {
@@ -67,18 +67,18 @@ fn run_translate(
 
 /// Merge atoms with pre-computed translations.
 fn run_merge_with_translations(
-    verus_path: &Path,
+    rust_path: &Path,
     lean_path: &Path,
     translations: &(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>),
     output_path: &Path,
 ) -> Result<(), String> {
     // Load atom files with provenance
-    let (verus_atoms, verus_prov) = probe::types::load_atom_file(verus_path)?;
+    let (rust_atoms, rust_prov) = probe::types::load_atom_file(rust_path)?;
     let (lean_atoms, lean_prov) = probe::types::load_atom_file(lean_path)?;
 
-    println!("\nMerging {} + {} atoms with translations...", verus_atoms.len(), lean_atoms.len());
+    println!("\nMerging {} + {} atoms with translations...", rust_atoms.len(), lean_atoms.len());
 
-    let (merged, stats) = merge_atom_maps(vec![verus_atoms, lean_atoms], Some(translations));
+    let (merged, stats) = merge_atom_maps(vec![rust_atoms, lean_atoms], Some(translations));
 
     // Build merged envelope
     let timestamp = chrono::Utc::now()
@@ -86,7 +86,7 @@ fn run_merge_with_translations(
         .to_string();
 
     let mut all_prov: Vec<InputProvenance> = Vec::new();
-    all_prov.extend(verus_prov);
+    all_prov.extend(rust_prov);
     all_prov.extend(lean_prov);
 
     let envelope = MergedAtomEnvelope {
@@ -118,14 +118,14 @@ fn run_merge_with_translations(
 
 /// Public entry point for the `translate` subcommand (no merge, just translations).
 pub fn run_translate_only(
-    verus_path: &Path,
+    rust_path: &Path,
     lean_path: &Path,
     functions_path: &Path,
     output_path: &Path,
 ) -> Result<(), String> {
-    println!("Loading Verus atoms from {}...", verus_path.display());
-    let verus_data = load_atoms(verus_path)?;
-    println!("  {} atoms", verus_data.len());
+    println!("Loading Rust atoms from {}...", rust_path.display());
+    let rust_data = load_atoms(rust_path)?;
+    println!("  {} atoms", rust_data.len());
 
     println!("Loading Lean atoms from {}...", lean_path.display());
     let lean_data = load_atoms(lean_path)?;
@@ -136,7 +136,7 @@ pub fn run_translate_only(
     println!("  {} entries", functions.len());
 
     println!("\nGenerating translations...");
-    let (mappings, stats) = generate_translations(&verus_data, &lean_data, &functions);
+    let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {
@@ -144,11 +144,11 @@ pub fn run_translate_only(
     }
 
     // Read raw envelopes for source metadata
-    let verus_raw: serde_json::Value = {
-        let content = std::fs::read_to_string(verus_path)
-            .map_err(|e| format!("Failed to read {}: {e}", verus_path.display()))?;
+    let rust_raw: serde_json::Value = {
+        let content = std::fs::read_to_string(rust_path)
+            .map_err(|e| format!("Failed to read {}: {e}", rust_path.display()))?;
         serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse {}: {e}", verus_path.display()))?
+            .map_err(|e| format!("Failed to parse {}: {e}", rust_path.display()))?
     };
     let lean_raw: serde_json::Value = {
         let content = std::fs::read_to_string(lean_path)
@@ -157,7 +157,7 @@ pub fn run_translate_only(
             .map_err(|e| format!("Failed to parse {}: {e}", lean_path.display()))?
     };
 
-    let json_value = build_translations_json(&mappings, &verus_raw, &lean_raw);
+    let json_value = build_translations_json(&mappings, &rust_raw, &lean_raw);
     let json = serde_json::to_string_pretty(&json_value)
         .map_err(|e| format!("Failed to serialize translations: {e}"))?;
     std::fs::write(output_path, format!("{json}\n"))

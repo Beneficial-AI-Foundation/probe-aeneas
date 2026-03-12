@@ -264,6 +264,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 [[package]]
 name = "probe"
 version = "0.1.0"
+source = "git+https://github.com/Beneficial-AI-Foundation/probe.git#15b8454de0bf114902c9178731b225bcf634c610"
 dependencies = [
  "chrono",
  "clap",

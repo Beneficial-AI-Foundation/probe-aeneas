@@ -1,0 +1,1038 @@
+{
+  "mappings": [
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/backend/get_selected_backend()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.get_selected_backend"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/backend/variable_base_mul()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.variable_base_mul"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/constants/u64/serial/backend/spec_eight_torsion()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.backend.serial.u64.constants.EIGHT_TORSION_INNER_DOC_HIDDEN"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/&CompletedPoint#CompletedPoint<ProjectivePoint>#as_projective()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint.as_projective"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/&ProjectivePoint#ProjectivePoint<CompletedPoint>#double()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.curve_models.ProjectivePoint.double"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/AffineNielsPoint#ConditionallySelectable<&Self>#conditional_select()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.Shared0AffineNielsPoint.Insts.CoreOpsArithNegAffineNielsPoint"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/AffineNielsPoint#Default<AffineNielsPoint>#default()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.backend.serial.curve_models.AffineNielsPoint.Insts.SubtleConditionallySelectable"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/AffineNielsPoint#Identity<AffineNielsPoint>#identity()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint.Insts.SubtleConditionallySelectable"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/AffineNielsPoint#Zeroize#zeroize()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.IdentityCurveModelsProjectivePoint"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/ProjectiveNielsPoint#ConditionallySelectable<&Self>#conditional_assign()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAAffineNielsPointCompletedPoint"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/ProjectiveNielsPoint#ConditionallySelectable<&Self>#conditional_select()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAProjectiveNielsPointCompletedPoint"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/ProjectiveNielsPoint#Default<ProjectiveNielsPoint>#default()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint.Insts.SubtleConditionallySelectable.conditional_select"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/ProjectiveNielsPoint#Identity<ProjectiveNielsPoint>#identity()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.backend.serial.curve_models.ProjectivePoint.Insts.Curve25519_dalekTraitsValidityCheck"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/ProjectiveNielsPoint#Zeroize#zeroize()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.backend.serial.curve_models.AffineNielsPoint.Insts.Curve25519_dalekTraitsIdentity"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/curve_models/serial/backend/ProjectivePoint#ValidityCheck<bool>#is_valid()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.curve_models.ProjectivePoint.Insts.Curve25519_dalekTraitsValidityCheck.is_valid"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/decompress/edwards/step_1()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.decompress.step_1"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/decompress/edwards/step_2()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.decompress.step_2"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/decompress/ristretto/step_1()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.decompress.step_1"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/decompress/ristretto/step_2()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.decompress.step_2"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&CompressedEdwardsY#CompressedEdwardsY<Option<EdwardsPoint>>#decompress()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.CompressedEdwardsY.decompress"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&CompressedEdwardsY#CompressedEdwardsY<[u8;/32]>#as_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.CompressedEdwardsY.as_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&CompressedEdwardsY#CompressedEdwardsY<[u8;/32]>#to_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.CompressedEdwardsY.to_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#Add<&EdwardsPoint>#add()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAEdwardsPointEdwardsPoint.add"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<AffineNielsPoint>#as_affine_niels()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.as_affine_niels"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<CompressedEdwardsY>#compress()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.compress"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<EdwardsPoint>#double()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.double"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<EdwardsPoint>#mul_by_cofactor()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.mul_by_cofactor"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<EdwardsPoint>#mul_by_pow_2()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.mul_by_pow_2"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<MontgomeryPoint>#to_montgomery()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.to_montgomery"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<ProjectiveNielsPoint>#as_projective_niels()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.as_projective_niels"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<ProjectivePoint>#as_projective()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.as_projective"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<bool>#is_small_order()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.is_small_order"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#EdwardsPoint<bool>#is_torsion_free()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.is_torsion_free"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#Sub<&EdwardsPoint>#sub()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAEdwardsPointEdwardsPoint.sub"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/CompressedEdwardsY#Debug<&core::fmt::Formatter<'_>>#fmt()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.edwards.CompressedEdwardsY.Insts.CoreConvertTryFromShared0SliceU8TryFromSliceError"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/CompressedEdwardsY#Identity<CompressedEdwardsY>#identity()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.Shared0Scalar.Insts.CoreOpsArithMulSharedAEdwardsPointEdwardsPoint"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/CompressedEdwardsY#TryFrom<&[u8]>#try_from()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.CompressedEdwardsY.Insts.CoreConvertTryFromShared0SliceU8TryFromSliceError.try_from"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/CompressedEdwardsY<&[u8]>#from_slice()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.CompressedEdwardsY.from_slice"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/EdwardsBasepointTable#BasepointTable<&Scalar>#mul_base()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.mul_base"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/EdwardsPoint#AddAssign<&EdwardsPoint>#add_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithAddAssignSharedAEdwardsPoint.add_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/EdwardsPoint#ConditionallySelectable<&EdwardsPoint>#conditional_select()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.SubtleConditionallySelectable.conditional_select"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/EdwardsPoint#EdwardsPoint<[u8;/32]>#mul_clamped()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.mul_clamped"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/EdwardsPoint#MulAssign<&Scalar>#mul_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/EdwardsPoint#SubAssign<&EdwardsPoint>#sub_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithSubAssignSharedAEdwardsPoint.sub_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/EdwardsPoint#ValidityCheck<bool>#is_valid()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.Curve25519_dalekTraitsValidityCheck.is_valid"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/edwards/EdwardsPoint<[u8;/32]>#mul_base_clamped()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.mul_base_clamped"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/&FieldElement51#FieldElement51<(Choice,/FieldElement)>#invsqrt()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.field.FieldElement51.invsqrt"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/&FieldElement51#FieldElement51<(FieldElement,/FieldElement)>#pow22501()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.field.FieldElement51.pow22501"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/&FieldElement51#FieldElement51<Choice>#is_negative()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.field.FieldElement51.is_negative"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/&FieldElement51#FieldElement51<Choice>#is_zero()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.field.FieldElement51.is_zero"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/&FieldElement51#FieldElement51<FieldElement>#invert()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.field.FieldElement51.invert"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/&FieldElement51#FieldElement51<FieldElement>#pow_p58()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.field.FieldElement51.pow_p58"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/FieldElement51#ConstantTimeEq<&FieldElement>#ct_eq()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.SubtleConstantTimeEq.ct_eq"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/FieldElement51#PartialEq<&FieldElement>#eq()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreCmpPartialEqFieldElement51.eq"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/FieldElement51<(Choice,/FieldElement)>#sqrt_ratio_i()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.field.FieldElement51.sqrt_ratio_i"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/&FieldElement51#Add<&FieldElement51>#add()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithAddSharedAFieldElement51FieldElement51.add"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/&FieldElement51#FieldElement51<FieldElement51>#square()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.square"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/&FieldElement51#FieldElement51<FieldElement51>#square2()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.square2"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/&FieldElement51#FieldElement51<u32>#pow2k()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.pow2k"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/&FieldElement51#Mul<&FieldElement51>#mul()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithMulSharedAFieldElement51FieldElement51.mul"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/&FieldElement51#Neg<FieldElement51>#neg()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithNegFieldElement51.neg"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/&FieldElement51#Sub<&FieldElement51>#sub()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithSubSharedAFieldElement51FieldElement51.sub"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/&mut/FieldElement51#FieldElement51#negate()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.negate"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#AddAssign<&FieldElement51>#add_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#ConditionallySelectable<&FieldElement51>#conditional_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.SubtleConditionallySelectable.conditional_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#ConditionallySelectable<&FieldElement51>#conditional_select()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.SubtleConditionallySelectable.conditional_select"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#ConditionallySelectable<&FieldElement51>#conditional_swap()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.SubtleConditionallySelectable.conditional_swap"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#Debug<&core::fmt::Formatter<'_>>#fmt()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithMulSharedAFieldElement51FieldElement51"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#FieldElement51<[u8;/32]>#as_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.as_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#MulAssign<&FieldElement51>#mul_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithMulAssignSharedAFieldElement51.mul_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#SubAssign<&FieldElement51>#sub_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithSubAssignSharedAFieldElement51.sub_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51#Zeroize#zeroize()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.ZeroizeZeroize.zeroize"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51<&[u8;/32]>#from_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.from_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51<FieldElement51>#from_limbs()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.from_limbs"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/FieldElement51<[u64;/5]>#reduce()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.reduce"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/field/u64/serial/backend/load8_at()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.from_bytes.load8_at"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/&MontgomeryPoint#MontgomeryPoint<[u8;/32]>#as_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.as_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/&MontgomeryPoint#MontgomeryPoint<[u8;/32]>#to_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.to_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/&MontgomeryPoint#MontgomeryPoint<u8>#to_edwards()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.to_edwards"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/&ProjectivePoint#ProjectivePoint<MontgomeryPoint>#as_affine()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.ProjectivePoint.as_affine"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#ConstantTimeEq<&MontgomeryPoint>#ct_eq()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.SubtleConstantTimeEq.ct_eq"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#Hash<&H>#hash()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.IdentityMontgomeryProjectivePoint"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#Identity<MontgomeryPoint>#identity()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.montgomery.ProjectivePoint.Insts.SubtleConditionallySelectable"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#MontgomeryPoint<[u8;/32]>#mul_clamped()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_clamped"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#MulAssign<&Scalar>#mul_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulAssignShared0Scalar.mul_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#PartialEq<&MontgomeryPoint>#eq()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreCmpPartialEqMontgomeryPoint.eq"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint#Zeroize#zeroize()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.ZeroizeZeroize.zeroize"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint<&Scalar>#mul_base()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_base"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/MontgomeryPoint<[u8;/32]>#mul_base_clamped()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_base_clamped"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/differential_add_and_double()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.differential_add_and_double"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/montgomery/elligator_encode()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.montgomery.elligator_encode"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/&CompressedRistretto#CompressedRistretto<Option<RistrettoPoint>>#decompress()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.CompressedRistretto.decompress"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/&CompressedRistretto#CompressedRistretto<[u8;/32]>#as_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.CompressedRistretto.as_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/&CompressedRistretto#CompressedRistretto<[u8;/32]>#to_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.CompressedRistretto.to_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#Add<&RistrettoPoint>#add()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0RistrettoPoint.Insts.CoreOpsArithAddSharedARistrettoPointRistrettoPoint.add"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#RistrettoPoint<CompressedRistretto>#compress()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.compress"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#RistrettoPoint<[EdwardsPoint;/4]>#coset4()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.coset4"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#Sub<&RistrettoPoint>#sub()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0RistrettoPoint.Insts.CoreOpsArithSubSharedARistrettoPointRistrettoPoint.sub"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/CompressedRistretto#Default<CompressedRistretto>#default()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.Shared0RistrettoPoint.Insts.CoreOpsArithNegRistrettoPoint"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/CompressedRistretto#TryFrom<&[u8]>#try_from()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.CompressedRistretto.Insts.CoreConvertTryFromShared0SliceU8TryFromSliceError.try_from"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/CompressedRistretto<&[u8]>#from_slice()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.CompressedRistretto.from_slice"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/RistrettoPoint#AddAssign<&RistrettoPoint>#add_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithAddAssignShared0RistrettoPoint.add_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/RistrettoPoint#ConditionallySelectable<&RistrettoPoint>#conditional_select()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.SubtleConditionallySelectable.conditional_select"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/RistrettoPoint#MulAssign<&Scalar>#mul_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/RistrettoPoint#SubAssign<&RistrettoPoint>#sub_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithSubAssignShared0RistrettoPoint.sub_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/RistrettoPoint<&Scalar>#mul_base()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.mul_base"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/RistrettoPoint<&[u8;/64]>#from_uniform_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.from_uniform_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/ristretto/RistrettoPoint<RistrettoPoint>#elligator_ristretto_flavor()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.elligator_ristretto_flavor"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Add<&Scalar>#add()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0Scalar.Insts.CoreOpsArithAddSharedAScalarScalar.add"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Mul<&Scalar>#mul()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0Scalar.Insts.CoreOpsArithMulSharedAScalarScalar.mul"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Scalar<Choice>#is_canonical()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.is_canonical"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Scalar<Scalar>#reduce()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.reduce"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Scalar<UnpackedScalar>#unpack()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.unpack"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Scalar<[i8;/256]>#non_adjacent_form()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.non_adjacent_form"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Scalar<[i8;/64]>#as_radix_16()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_16"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Scalar<[i8;/64]>#as_radix_2w()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_2w"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Scalar<[u8;/32]>#as_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.as_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Scalar<[u8;/32]>#to_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.to_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#Sub<&Scalar>#sub()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.Shared0Scalar.Insts.CoreOpsArithSubSharedAScalarScalar.sub"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar52#Scalar52<Scalar>#pack()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar52.pack"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar52#Scalar52<UnpackedScalar>#montgomery_invert()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar52.montgomery_invert"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#AddAssign<&Scalar>#add_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithAddAssignSharedAScalar.add_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#ConditionallySelectable<&Self>#conditional_select()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.SubtleConditionallySelectable.conditional_select"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#ConstantTimeEq<&Self>#ct_eq()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.SubtleConstantTimeEq.ct_eq"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#Debug<&core::fmt::Formatter<'_>>#fmt()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU16"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#Default<Scalar>#default()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreDefaultDefault.default"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#From<u32>#from()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.scalar.Scalar52.montgomery_invert.square_multiply_loop"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#Index<usize>#index()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsIndexIndexUsizeU8.index"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#MulAssign<&Scalar>#mul_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#Neg<Scalar>#neg()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.scalar.Scalar.non_adjacent_form_loop"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#PartialEq<&Self>#eq()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreCmpPartialEqScalar.eq"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#Product<I>#product()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_16_loop1"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#SubAssign<&Scalar>#sub_assign()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithSubAssignSharedAScalar.sub_assign"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar#Zeroize#zeroize()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.ZeroizeZeroize.zeroize"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar<&[Scalar]>#batch_invert()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.batch_invert"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar<&[u8;/64]>#from_bytes_mod_order_wide()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order_wide"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar<[u8;/32]>#from_bytes_mod_order()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar<[u8;/32]>#from_canonical_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.from_canonical_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/Scalar<usize>#to_radix_2w_size_hint()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.to_radix_2w_size_hint"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/bot_half()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_16.bot_half"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/clamp_integer()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.clamp_integer"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/read_le_u64_into()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.read_le_u64_into"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/square_multiply()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar52.montgomery_invert.square_multiply"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/top_half()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_16.top_half"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/&Scalar52#Scalar52<Scalar52>#as_montgomery()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.as_montgomery"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/&Scalar52#Scalar52<Scalar52>#from_montgomery()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_montgomery"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/&Scalar52#Scalar52<Scalar52>#montgomery_square()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_square"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/&Scalar52#Scalar52<Scalar52>#square()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.square"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/&mut/Scalar52#Scalar52<u64>#conditional_add_l()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.conditional_add_l"
+    },
+    {
+      "confidence": "file-and-lines",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52#Debug<&core::fmt::Formatter<'_>>#fmt()",
+      "method": "file+line-overlap",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_bytes_wide_loop"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52#Index<usize>#index()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.Insts.CoreOpsIndexIndexUsizeU64.index"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52#IndexMut<usize>#index_mut()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.Insts.CoreOpsIndexIndexMutUsizeU64.index_mut"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52#Zeroize#zeroize()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.Insts.ZeroizeZeroize.zeroize"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<&Scalar52>#add()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.add"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<&Scalar52>#montgomery_mul()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_mul"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<&Scalar52>#mul()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.mul"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<&Scalar52>#sub()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<&[u8;/32]>#from_bytes()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_bytes"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<&[u8;/64]>#from_bytes_wide()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_bytes_wide"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<Scalar52>#montgomery_reduce()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_reduce"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<[u128;/9]>#mul_internal()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.mul_internal"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<[u128;/9]>#square_internal()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.square_internal"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<u128>#part1()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_reduce.part1"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/Scalar52<u128>#part2()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_reduce.part2"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/scalar/u64/serial/backend/m()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.m"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/traits/CompressedEdwardsY#IsIdentity<bool>#is_identity()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.traits.IsIdentity.Blanket.is_identity"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/variable_base/scalar_mul/serial/backend/mul()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.backend.serial.scalar_mul.variable_base.mul"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/window/&LookupTable<AffineNielsPoint>#LookupTable<i8>#select()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.window.LookupTable.select"
+    },
+    {
+      "confidence": "file-and-name",
+      "from": "probe:curve25519-dalek/4.1.3/window/LookupTable<AffineNielsPoint>#From<&EdwardsPoint>#from()",
+      "method": "file+display-name",
+      "to": "probe:curve25519_dalek.window.LookupTableProjectiveNielsPoint.Insts.CoreConvertFromSharedAEdwardsPoint.from"
+    }
+  ],
+  "schema": "probe/translations",
+  "schema-version": "2.0",
+  "sources": {
+    "from": {
+      "package": "curve25519-dalek",
+      "package-version": "4.1.3",
+      "schema": "probe-verus/atoms"
+    },
+    "to": {
+      "package": "Curve25519Dalek",
+      "package-version": "0.1.0",
+      "schema": "probe-lean/extract"
+    }
+  },
+  "timestamp": "2026-03-12T16:17:03Z",
+  "tool": {
+    "command": "translate",
+    "name": "probe-aeneas",
+    "version": "0.1.0"
+  }
+}

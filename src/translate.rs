@@ -8,21 +8,21 @@ use crate::types::{FunctionRecord, FunctionsFile, LineRange};
 
 /// Statistics from translation generation.
 pub struct TranslateStats {
-    pub verus_total: usize,
+    pub rust_total: usize,
     pub lean_total: usize,
     pub functions_total: usize,
     pub by_confidence: HashMap<String, usize>,
 }
 
-/// Generate translation mappings between Verus and Lean atoms using functions.json
+/// Generate translation mappings between Rust and Lean atoms using functions.json
 /// as the bridge.
 pub fn generate_translations(
-    verus_data: &BTreeMap<String, Atom>,
+    rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     functions: &[FunctionRecord],
 ) -> (Vec<TranslationMapping>, TranslateStats) {
     let mut mappings = Vec::new();
-    let mut matched_verus: HashSet<String> = HashSet::new();
+    let mut matched_rust: HashSet<String> = HashSet::new();
     let mut matched_lean: HashSet<String> = HashSet::new();
 
     // Build indexes from functions.json
@@ -46,31 +46,31 @@ pub fn generate_translations(
 
     // Strategy 1: rust-qualified-name matching
     strategy_rust_qualified_name(
-        verus_data,
+        rust_data,
         lean_data,
         functions,
         &mut mappings,
-        &mut matched_verus,
+        &mut matched_rust,
         &mut matched_lean,
     );
 
     // Strategy 2: file + display-name matching
     strategy_file_display_name(
-        verus_data,
+        rust_data,
         lean_data,
         &file_name_to_funcs,
         &mut mappings,
-        &mut matched_verus,
+        &mut matched_rust,
         &mut matched_lean,
     );
 
     // Strategy 3: file + line overlap matching
     strategy_file_line_overlap(
-        verus_data,
+        rust_data,
         lean_data,
         &file_to_funcs,
         &mut mappings,
-        &mut matched_verus,
+        &mut matched_rust,
         &mut matched_lean,
     );
 
@@ -82,7 +82,7 @@ pub fn generate_translations(
     }
 
     let stats = TranslateStats {
-        verus_total: verus_data.len(),
+        rust_total: rust_data.len(),
         lean_total: lean_data.len(),
         functions_total: functions.len(),
         by_confidence,
@@ -110,20 +110,20 @@ fn extract_base_name(display_name: &str) -> &str {
 }
 
 fn strategy_rust_qualified_name(
-    verus_data: &BTreeMap<String, Atom>,
+    rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     functions: &[FunctionRecord],
     mappings: &mut Vec<TranslationMapping>,
-    matched_verus: &mut HashSet<String>,
+    matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
-    // Build index: normalized_rust_name -> verus_code_name
-    let mut rqn_to_verus: HashMap<String, String> = HashMap::new();
-    for (code_name, atom) in verus_data {
+    // Build index: normalized_rust_name -> rust_code_name
+    let mut rqn_to_rust: HashMap<String, String> = HashMap::new();
+    for (code_name, atom) in rust_data {
         if let Some(rqn) = atom.extensions.get("rust-qualified-name") {
             if let Some(rqn_str) = rqn.as_str() {
                 let norm = normalize_rust_name(rqn_str);
-                rqn_to_verus.insert(norm, code_name.clone());
+                rqn_to_rust.insert(norm, code_name.clone());
             }
         }
     }
@@ -141,18 +141,18 @@ fn strategy_rust_qualified_name(
         let norm_rn = normalize_rust_name(rn);
         let lean_code_name = format!("probe:{ln}");
 
-        if let Some(verus_code_name) = rqn_to_verus.get(&norm_rn) {
+        if let Some(rust_code_name) = rqn_to_rust.get(&norm_rn) {
             if lean_data.contains_key(&lean_code_name)
-                && !matched_verus.contains(verus_code_name)
+                && !matched_rust.contains(rust_code_name)
                 && !matched_lean.contains(&lean_code_name)
             {
                 mappings.push(TranslationMapping {
-                    from: verus_code_name.clone(),
+                    from: rust_code_name.clone(),
                     to: lean_code_name.clone(),
                     confidence: "exact".to_string(),
                     method: Some("rust-qualified-name".to_string()),
                 });
-                matched_verus.insert(verus_code_name.clone());
+                matched_rust.insert(rust_code_name.clone());
                 matched_lean.insert(lean_code_name);
             }
         }
@@ -160,15 +160,15 @@ fn strategy_rust_qualified_name(
 }
 
 fn strategy_file_display_name(
-    verus_data: &BTreeMap<String, Atom>,
+    rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     file_name_to_funcs: &HashMap<(String, String), Vec<&FunctionRecord>>,
     mappings: &mut Vec<TranslationMapping>,
-    matched_verus: &mut HashSet<String>,
+    matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
-    for (code_name, atom) in verus_data {
-        if matched_verus.contains(code_name) || atom.code_path.is_empty() {
+    for (code_name, atom) in rust_data {
+        if matched_rust.contains(code_name) || atom.code_path.is_empty() {
             continue;
         }
 
@@ -192,22 +192,22 @@ fn strategy_file_display_name(
                 confidence: "file-and-name".to_string(),
                 method: Some("file+display-name".to_string()),
             });
-            matched_verus.insert(code_name.clone());
+            matched_rust.insert(code_name.clone());
             matched_lean.insert(lean_code_name);
         }
     }
 }
 
 fn strategy_file_line_overlap(
-    verus_data: &BTreeMap<String, Atom>,
+    rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     file_to_funcs: &HashMap<String, Vec<&FunctionRecord>>,
     mappings: &mut Vec<TranslationMapping>,
-    matched_verus: &mut HashSet<String>,
+    matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
-    for (code_name, atom) in verus_data {
-        if matched_verus.contains(code_name) || atom.code_path.is_empty() {
+    for (code_name, atom) in rust_data {
+        if matched_rust.contains(code_name) || atom.code_path.is_empty() {
             continue;
         }
         let v_start = atom.code_text.lines_start;
@@ -216,7 +216,7 @@ fn strategy_file_line_overlap(
             continue;
         }
 
-        let verus_range = LineRange {
+        let rust_range = LineRange {
             start: v_start,
             end: v_end,
         };
@@ -240,8 +240,8 @@ fn strategy_file_line_overlap(
                 None => continue,
             };
 
-            if verus_range.overlaps(&func_range, 10) {
-                let overlap = verus_range.overlap_amount(&func_range);
+            if rust_range.overlaps(&func_range, 10) {
+                let overlap = rust_range.overlap_amount(&func_range);
                 if overlap > best_overlap {
                     best_overlap = overlap;
                     best_match = Some(func);
@@ -258,7 +258,7 @@ fn strategy_file_line_overlap(
                     confidence: "file-and-lines".to_string(),
                     method: Some("file+line-overlap".to_string()),
                 });
-                matched_verus.insert(code_name.clone());
+                matched_rust.insert(code_name.clone());
                 matched_lean.insert(lean_code_name);
             }
         }
@@ -283,14 +283,14 @@ pub fn load_atoms(path: &Path) -> Result<BTreeMap<String, Atom>, String> {
 /// Build a full translations JSON value ready to write to disk.
 pub fn build_translations_json(
     mappings: &[TranslationMapping],
-    verus_envelope: &serde_json::Value,
+    rust_envelope: &serde_json::Value,
     lean_envelope: &serde_json::Value,
 ) -> serde_json::Value {
     let timestamp = chrono::Utc::now()
         .format("%Y-%m-%dT%H:%M:%SZ")
         .to_string();
 
-    let verus_source = verus_envelope
+    let rust_source = rust_envelope
         .get("source")
         .cloned()
         .unwrap_or(serde_json::json!({}));
@@ -310,9 +310,9 @@ pub fn build_translations_json(
         "timestamp": timestamp,
         "sources": {
             "from": {
-                "schema": verus_envelope.get("schema").and_then(|v| v.as_str()).unwrap_or("probe-verus/atoms"),
-                "package": verus_source.get("package").and_then(|v| v.as_str()).unwrap_or(""),
-                "package-version": verus_source.get("package-version").and_then(|v| v.as_str()).unwrap_or(""),
+                "schema": rust_envelope.get("schema").and_then(|v| v.as_str()).unwrap_or("probe-rust/atoms"),
+                "package": rust_source.get("package").and_then(|v| v.as_str()).unwrap_or(""),
+                "package-version": rust_source.get("package-version").and_then(|v| v.as_str()).unwrap_or(""),
             },
             "to": {
                 "schema": lean_envelope.get("schema").and_then(|v| v.as_str()).unwrap_or("probe-lean/extract"),
@@ -330,7 +330,7 @@ mod tests {
     use probe::types::CodeText;
     use std::collections::BTreeSet;
 
-    fn make_verus_atom(display: &str, path: &str, start: usize, end: usize) -> Atom {
+    fn make_rust_atom(display: &str, path: &str, start: usize, end: usize) -> Atom {
         Atom {
             display_name: display.to_string(),
             dependencies: BTreeSet::new(),
@@ -414,10 +414,10 @@ mod tests {
 
     #[test]
     fn test_strategy_file_display_name() {
-        let mut verus = BTreeMap::new();
-        verus.insert(
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
             "probe:crate/1.0/reduce()".to_string(),
-            make_verus_atom("FieldElement51::reduce", "crate/src/field.rs", 100, 120),
+            make_rust_atom("FieldElement51::reduce", "crate/src/field.rs", 100, 120),
         );
 
         let mut lean = BTreeMap::new();
@@ -433,7 +433,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&verus, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "file-and-name");
         assert_eq!(mappings[0].from, "probe:crate/1.0/reduce()");
@@ -442,10 +442,10 @@ mod tests {
 
     #[test]
     fn test_strategy_file_line_overlap() {
-        let mut verus = BTreeMap::new();
-        verus.insert(
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
             "probe:crate/1.0/mystery()".to_string(),
-            make_verus_atom("mystery_fn", "crate/src/field.rs", 200, 250),
+            make_rust_atom("mystery_fn", "crate/src/field.rs", 200, 250),
         );
 
         let mut lean = BTreeMap::new();
@@ -461,20 +461,20 @@ mod tests {
             "L210-L240",
         )];
 
-        let (mappings, _) = generate_translations(&verus, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "file-and-lines");
     }
 
     #[test]
     fn test_strategy_rust_qualified_name() {
-        let mut verus = BTreeMap::new();
-        let mut atom = make_verus_atom("reduce", "crate/src/field.rs", 100, 120);
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom("reduce", "crate/src/field.rs", 100, 120);
         atom.extensions.insert(
             "rust-qualified-name".to_string(),
             serde_json::json!("my_crate::field::FieldElement51::reduce"),
         );
-        verus.insert("probe:crate/1.0/reduce()".to_string(), atom);
+        rust_atoms.insert("probe:crate/1.0/reduce()".to_string(), atom);
 
         let mut lean = BTreeMap::new();
         lean.insert(
@@ -489,7 +489,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&verus, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "exact");
         assert_eq!(mappings[0].method.as_deref(), Some("rust-qualified-name"));
@@ -497,13 +497,13 @@ mod tests {
 
     #[test]
     fn test_no_duplicate_mappings() {
-        let mut verus = BTreeMap::new();
-        let mut atom = make_verus_atom("FieldElement51::reduce", "crate/src/field.rs", 100, 120);
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom("FieldElement51::reduce", "crate/src/field.rs", 100, 120);
         atom.extensions.insert(
             "rust-qualified-name".to_string(),
             serde_json::json!("my_crate::field::FieldElement51::reduce"),
         );
-        verus.insert("probe:crate/1.0/reduce()".to_string(), atom);
+        rust_atoms.insert("probe:crate/1.0/reduce()".to_string(), atom);
 
         let mut lean = BTreeMap::new();
         lean.insert(
@@ -518,7 +518,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&verus, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
         // Should only match once (via strategy 1), not again via strategy 2 or 3
         assert_eq!(mappings.len(), 1);
     }
