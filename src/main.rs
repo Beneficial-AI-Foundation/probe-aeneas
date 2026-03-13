@@ -1,3 +1,4 @@
+mod extract_runner;
 mod listfuns;
 mod merge;
 mod translate;
@@ -17,19 +18,32 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Full pipeline: generate functions.json, build translations, merge atoms.
+    /// Full pipeline: extract atoms (if needed), generate translations, merge.
+    ///
+    /// Provide either pre-generated JSON files (--rust / --lean) or project paths
+    /// (--rust-project / --lean-project) which will run probe-rust/probe-lean
+    /// automatically.
     Merge {
-        /// Path to Rust atoms JSON (from probe-rust extract).
-        #[arg(long)]
-        rust: PathBuf,
+        /// Path to pre-generated Rust atoms JSON (from probe-rust extract).
+        #[arg(long, group = "rust_input")]
+        rust: Option<PathBuf>,
 
-        /// Path to Lean atoms JSON (from probe-lean extract).
-        #[arg(long)]
-        lean: PathBuf,
+        /// Path to a Rust project directory (runs probe-rust extract automatically).
+        #[arg(long, group = "rust_input")]
+        rust_project: Option<PathBuf>,
 
-        /// Path to the Lean project directory (where `lake exe listfuns` runs).
+        /// Path to pre-generated Lean atoms JSON (from probe-lean extract).
+        #[arg(long, group = "lean_input")]
+        lean: Option<PathBuf>,
+
+        /// Path to a Lean project directory (runs probe-lean extract automatically).
+        #[arg(long, group = "lean_input")]
+        lean_project: Option<PathBuf>,
+
+        /// Path to functions.json (Aeneas name mapping).
+        /// Auto-generated via `lake exe listfuns` when --lean-project is given.
         #[arg(long)]
-        lean_project: PathBuf,
+        functions: Option<PathBuf>,
 
         /// Output path for the merged atoms JSON.
         #[arg(short, long, default_value = "merged_atoms.json")]
@@ -73,10 +87,19 @@ fn main() {
     let result = match cli.command {
         Commands::Merge {
             rust,
+            rust_project,
             lean,
             lean_project,
+            functions,
             output,
-        } => merge::run_merge(&rust, &lean, &lean_project, &output),
+        } => merge::run_merge(
+            rust.as_deref(),
+            rust_project.as_deref(),
+            lean.as_deref(),
+            lean_project.as_deref(),
+            functions.as_deref(),
+            &output,
+        ),
 
         Commands::Translate {
             rust,
