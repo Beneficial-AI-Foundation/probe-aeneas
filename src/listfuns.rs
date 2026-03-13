@@ -7,7 +7,10 @@ pub fn run_listfuns(lean_project: &Path, output: &Path) -> Result<(), String> {
         .to_str()
         .ok_or_else(|| "Output path is not valid UTF-8".to_string())?;
 
-    println!("Running `lake exe listfuns {output_str}` in {}...", lean_project.display());
+    println!(
+        "Running `lake exe listfuns {output_str}` in {}...",
+        lean_project.display()
+    );
 
     let status = Command::new("lake")
         .args(["exe", "listfuns", output_str])

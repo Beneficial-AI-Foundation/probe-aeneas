@@ -8,9 +8,8 @@ use crate::types::{FunctionRecord, FunctionsFile, LineRange};
 
 /// Statistics from translation generation.
 pub struct TranslateStats {
-    pub rust_total: usize,
-    pub lean_total: usize,
-    pub functions_total: usize,
+    pub matched_rust_unique: usize,
+    pub matched_lean_unique: usize,
     pub by_confidence: HashMap<String, usize>,
 }
 
@@ -22,7 +21,10 @@ pub fn generate_translations(
     functions: &[FunctionRecord],
 ) -> (Vec<TranslationMapping>, TranslateStats) {
     let mut mappings = Vec::new();
-    let mut matched_rust: HashSet<String> = HashSet::new();
+    // Only track matched Lean atoms to prevent two different Rust atoms from
+    // claiming the same Lean atom. We deliberately do NOT track matched Rust
+    // atoms: one Rust function can (and should) map to multiple Lean
+    // definitions (e.g. add_assign, add_assign_loop, add_assign_loop.mutual).
     let mut matched_lean: HashSet<String> = HashSet::new();
 
     // Build indexes from functions.json
@@ -50,7 +52,6 @@ pub fn generate_translations(
         lean_data,
         functions,
         &mut mappings,
-        &mut matched_rust,
         &mut matched_lean,
     );
 
@@ -60,7 +61,6 @@ pub fn generate_translations(
         lean_data,
         &file_name_to_funcs,
         &mut mappings,
-        &mut matched_rust,
         &mut matched_lean,
     );
 
@@ -70,7 +70,6 @@ pub fn generate_translations(
         lean_data,
         &file_to_funcs,
         &mut mappings,
-        &mut matched_rust,
         &mut matched_lean,
     );
 
@@ -81,10 +80,15 @@ pub fn generate_translations(
         *by_confidence.entry(m.confidence.clone()).or_insert(0) += 1;
     }
 
+    let matched_rust_unique = mappings
+        .iter()
+        .map(|m| &m.from)
+        .collect::<HashSet<_>>()
+        .len();
+
     let stats = TranslateStats {
-        rust_total: rust_data.len(),
-        lean_total: lean_data.len(),
-        functions_total: functions.len(),
+        matched_rust_unique,
+        matched_lean_unique: matched_lean.len(),
         by_confidence,
     };
 
@@ -114,7 +118,6 @@ fn strategy_rust_qualified_name(
     lean_data: &BTreeMap<String, Atom>,
     functions: &[FunctionRecord],
     mappings: &mut Vec<TranslationMapping>,
-    matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
     // Build index: normalized_rust_name -> rust_code_name
@@ -142,17 +145,13 @@ fn strategy_rust_qualified_name(
         let lean_code_name = format!("probe:{ln}");
 
         if let Some(rust_code_name) = rqn_to_rust.get(&norm_rn) {
-            if lean_data.contains_key(&lean_code_name)
-                && !matched_rust.contains(rust_code_name)
-                && !matched_lean.contains(&lean_code_name)
-            {
+            if lean_data.contains_key(&lean_code_name) && !matched_lean.contains(&lean_code_name) {
                 mappings.push(TranslationMapping {
                     from: rust_code_name.clone(),
                     to: lean_code_name.clone(),
                     confidence: "exact".to_string(),
                     method: Some("rust-qualified-name".to_string()),
                 });
-                matched_rust.insert(rust_code_name.clone());
                 matched_lean.insert(lean_code_name);
             }
         }
@@ -164,11 +163,10 @@ fn strategy_file_display_name(
     lean_data: &BTreeMap<String, Atom>,
     file_name_to_funcs: &HashMap<(String, String), Vec<&FunctionRecord>>,
     mappings: &mut Vec<TranslationMapping>,
-    matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
     for (code_name, atom) in rust_data {
-        if matched_rust.contains(code_name) || atom.code_path.is_empty() {
+        if atom.code_path.is_empty() {
             continue;
         }
 
@@ -192,7 +190,6 @@ fn strategy_file_display_name(
                 confidence: "file-and-name".to_string(),
                 method: Some("file+display-name".to_string()),
             });
-            matched_rust.insert(code_name.clone());
             matched_lean.insert(lean_code_name);
         }
     }
@@ -203,11 +200,10 @@ fn strategy_file_line_overlap(
     lean_data: &BTreeMap<String, Atom>,
     file_to_funcs: &HashMap<String, Vec<&FunctionRecord>>,
     mappings: &mut Vec<TranslationMapping>,
-    matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
     for (code_name, atom) in rust_data {
-        if matched_rust.contains(code_name) || atom.code_path.is_empty() {
+        if atom.code_path.is_empty() {
             continue;
         }
         let v_start = atom.code_text.lines_start;
@@ -258,7 +254,6 @@ fn strategy_file_line_overlap(
                     confidence: "file-and-lines".to_string(),
                     method: Some("file+line-overlap".to_string()),
                 });
-                matched_rust.insert(code_name.clone());
                 matched_lean.insert(lean_code_name);
             }
         }
@@ -267,8 +262,8 @@ fn strategy_file_line_overlap(
 
 /// Load functions.json from disk.
 pub fn load_functions(path: &Path) -> Result<Vec<FunctionRecord>, String> {
-    let content =
-        std::fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
     let file: FunctionsFile = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
     Ok(file.functions)
@@ -286,9 +281,7 @@ pub fn build_translations_json(
     rust_envelope: &serde_json::Value,
     lean_envelope: &serde_json::Value,
 ) -> serde_json::Value {
-    let timestamp = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%SZ")
-        .to_string();
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     let rust_source = rust_envelope
         .get("source")
@@ -359,7 +352,12 @@ mod tests {
         }
     }
 
-    fn make_func(lean_name: &str, rust_name: Option<&str>, source: &str, lines: &str) -> FunctionRecord {
+    fn make_func(
+        lean_name: &str,
+        rust_name: Option<&str>,
+        source: &str,
+        lines: &str,
+    ) -> FunctionRecord {
         FunctionRecord {
             lean_name: lean_name.to_string(),
             rust_name: rust_name.map(|s| s.to_string()),
@@ -378,10 +376,7 @@ mod tests {
 
     #[test]
     fn test_normalize_strips_generics_and_refs() {
-        assert_eq!(
-            normalize_rust_name("&'a Foo<Bar>"),
-            "Foo"
-        );
+        assert_eq!(normalize_rust_name("&'a Foo<Bar>"), "Foo");
     }
 
     #[test]
@@ -399,16 +394,28 @@ mod tests {
 
     #[test]
     fn test_line_range_overlap() {
-        let a = LineRange { start: 100, end: 200 };
-        let b = LineRange { start: 150, end: 250 };
+        let a = LineRange {
+            start: 100,
+            end: 200,
+        };
+        let b = LineRange {
+            start: 150,
+            end: 250,
+        };
         assert!(a.overlaps(&b, 0));
         assert_eq!(a.overlap_amount(&b), 50);
     }
 
     #[test]
     fn test_line_range_no_overlap() {
-        let a = LineRange { start: 100, end: 200 };
-        let b = LineRange { start: 300, end: 400 };
+        let a = LineRange {
+            start: 100,
+            end: 200,
+        };
+        let b = LineRange {
+            start: 300,
+            end: 400,
+        };
         assert!(!a.overlaps(&b, 0));
     }
 
@@ -521,5 +528,127 @@ mod tests {
         let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
         // Should only match once (via strategy 1), not again via strategy 2 or 3
         assert_eq!(mappings.len(), 1);
+    }
+
+    #[test]
+    fn test_one_to_many_rust_qualified_name() {
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom("add_assign", "crate/src/field.rs", 100, 120);
+        atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("my_crate::field::FieldElement51::add_assign"),
+        );
+        rust_atoms.insert("probe:crate/1.0/add_assign()".to_string(), atom);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:my_crate.field.FieldElement51.add_assign".to_string(),
+            make_lean_atom("add_assign", "Field.lean"),
+        );
+        lean.insert(
+            "probe:my_crate.field.FieldElement51.add_assign_loop".to_string(),
+            make_lean_atom("add_assign_loop", "Field.lean"),
+        );
+        lean.insert(
+            "probe:my_crate.field.FieldElement51.add_assign_loop.mutual".to_string(),
+            make_lean_atom("mutual", "Field.lean"),
+        );
+
+        // functions.json has the same rust_name for all three Lean definitions
+        let funcs = vec![
+            make_func(
+                "my_crate.field.FieldElement51.add_assign",
+                Some("my_crate::field::FieldElement51::add_assign"),
+                "crate/src/field.rs",
+                "L100-L120",
+            ),
+            make_func(
+                "my_crate.field.FieldElement51.add_assign_loop",
+                Some("my_crate::field::FieldElement51::add_assign"),
+                "crate/src/field.rs",
+                "L100-L120",
+            ),
+            make_func(
+                "my_crate.field.FieldElement51.add_assign_loop.mutual",
+                Some("my_crate::field::FieldElement51::add_assign"),
+                "crate/src/field.rs",
+                "L100-L120",
+            ),
+        ];
+
+        let (mappings, stats) = generate_translations(&rust_atoms, &lean, &funcs);
+
+        assert_eq!(
+            mappings.len(),
+            3,
+            "one Rust atom should map to all three Lean atoms"
+        );
+        assert_eq!(
+            stats.matched_rust_unique, 1,
+            "only one unique Rust atom was matched"
+        );
+        assert_eq!(
+            stats.matched_lean_unique, 3,
+            "three Lean atoms were matched"
+        );
+
+        let lean_targets: HashSet<&str> = mappings.iter().map(|m| m.to.as_str()).collect();
+        assert!(lean_targets.contains("probe:my_crate.field.FieldElement51.add_assign"));
+        assert!(lean_targets.contains("probe:my_crate.field.FieldElement51.add_assign_loop"));
+        assert!(lean_targets.contains("probe:my_crate.field.FieldElement51.add_assign_loop.mutual"));
+
+        for m in &mappings {
+            assert_eq!(m.from, "probe:crate/1.0/add_assign()");
+            assert_eq!(m.confidence, "exact");
+            assert_eq!(m.method.as_deref(), Some("rust-qualified-name"));
+        }
+    }
+
+    #[test]
+    fn test_one_to_many_does_not_double_claim_lean() {
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom1 = make_rust_atom("foo", "crate/src/mod.rs", 100, 120);
+        atom1.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("my_crate::mod::foo"),
+        );
+        rust_atoms.insert("probe:crate/1.0/foo()".to_string(), atom1);
+
+        let mut atom2 = make_rust_atom("bar", "crate/src/mod.rs", 200, 220);
+        atom2.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("my_crate::mod::bar"),
+        );
+        rust_atoms.insert("probe:crate/1.0/bar()".to_string(), atom2);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:my_crate.mod.shared_lean".to_string(),
+            make_lean_atom("shared_lean", "Mod.lean"),
+        );
+
+        // Both rust_names try to claim the same lean_name — first wins
+        let funcs = vec![
+            make_func(
+                "my_crate.mod.shared_lean",
+                Some("my_crate::mod::foo"),
+                "crate/src/mod.rs",
+                "L100-L120",
+            ),
+            make_func(
+                "my_crate.mod.shared_lean",
+                Some("my_crate::mod::bar"),
+                "crate/src/mod.rs",
+                "L200-L220",
+            ),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        assert_eq!(
+            mappings.len(),
+            1,
+            "same Lean atom should not be claimed by two Rust atoms"
+        );
+        assert_eq!(mappings[0].from, "probe:crate/1.0/foo()");
     }
 }

@@ -28,7 +28,7 @@
       }
     }
   ],
-  "timestamp": "2026-03-13T12:36:11Z",
+  "timestamp": "2026-03-13T20:57:33Z",
   "data": {
     "probe:Aeneas.Std.Array.index_SliceIndexRangeUsizeSlice": {
       "display-name": "index_SliceIndexRangeUsizeSlice",
@@ -17596,6 +17596,7 @@
     "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAEdwardsPointEdwardsPoint.add": {
       "display-name": "add",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&ProjectivePoint#impl<EdwardsPoint>#[ProjectivePoint]as_extended()",
         "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<ProjectiveNielsPoint>#[EdwardsPoint]as_projective_niels()",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint.add",
@@ -17625,6 +17626,7 @@
     "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint": {
       "display-name": "CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint.add",
         "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint",
         "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint",
@@ -17705,6 +17707,7 @@
         "probe:Edwards.instAddPointCurveFieldEd25519",
         "probe:Edwards.lift_mod_eq",
         "probe:Field51_as_Nat",
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint.add",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint.add_spec_bounds",
         "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint",
@@ -17765,6 +17768,7 @@
       "display-name": "add_spec_bounds",
       "dependencies": [
         "probe:Field51_as_Nat",
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint.add",
         "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint",
         "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint.T",
@@ -18094,6 +18098,7 @@
     "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAEdwardsPointEdwardsPoint.sub": {
       "display-name": "sub",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Sub<&'b/ProjectiveNielsPoint>`]sub()",
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&ProjectivePoint#impl<EdwardsPoint>#[ProjectivePoint]as_extended()",
         "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<ProjectiveNielsPoint>#[EdwardsPoint]as_projective_niels()",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAProjectiveNielsPointCompletedPoint.sub",
@@ -18155,6 +18160,7 @@
     "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAProjectiveNielsPointCompletedPoint": {
       "display-name": "CoreOpsArithSubSharedAProjectiveNielsPointCompletedPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Sub<&'b/ProjectiveNielsPoint>`]sub()",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAProjectiveNielsPointCompletedPoint.sub",
         "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint",
         "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint",
@@ -18221,6 +18227,7 @@
       "display-name": "sub_spec",
       "dependencies": [
         "probe:Field51_as_Nat",
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Sub<&'b/ProjectiveNielsPoint>`]sub()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[`&'a/FieldElement51`][`Add<&'b/FieldElement51>`]add()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[`&'a/FieldElement51`][`Mul<&'b/FieldElement51>`]mul()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[`&'a/FieldElement51`][`Sub<&'b/FieldElement51>`]sub()",
@@ -18851,6 +18858,7 @@
     "probe:curve25519_dalek.Shared0RistrettoPoint.Insts.CoreOpsArithMulSharedAScalarRistrettoPoint.mul": {
       "display-name": "mul",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&Scalar#impl<&EdwardsPoint>#[`&'a/Scalar`][`Mul<&'b/EdwardsPoint>`]mul()",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulSharedBScalarEdwardsPoint.mul",
         "probe:curve25519_dalek.ristretto.RistrettoPoint",
@@ -18883,6 +18891,7 @@
         "probe:Edwards.instSMulNatPointCurveFieldEd25519",
         "probe:L",
         "probe:U8x32_as_Nat",
+        "probe:curve25519-dalek/4.1.3/edwards/&Scalar#impl<&EdwardsPoint>#[`&'a/Scalar`][`Mul<&'b/EdwardsPoint>`]mul()",
         "probe:curve25519-dalek/4.1.3/ristretto/&Scalar#impl<&RistrettoPoint>#[`&'a/Scalar`][`Mul<&'b/RistrettoPoint>`]mul()",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithMulSharedAScalarEdwardsPoint.mul",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithMulSharedAScalarEdwardsPoint.mul_spec",
@@ -19840,6 +19849,7 @@
     "probe:curve25519_dalek.SharedAEdwardsPoint.Insts.CoreOpsArithAddEdwardsPointEdwardsPoint": {
       "display-name": "CoreOpsArithAddEdwardsPointEdwardsPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/EdwardsPoint>`]add()",
         "probe:curve25519_dalek.SharedAEdwardsPoint.Insts.CoreOpsArithAddEdwardsPointEdwardsPoint.add",
         "probe:curve25519_dalek.core.ops.arith.Add",
         "probe:curve25519_dalek.edwards.EdwardsPoint"
@@ -19937,6 +19947,7 @@
     "probe:curve25519_dalek.SharedAEdwardsPoint.Insts.CoreOpsArithSubEdwardsPointEdwardsPoint": {
       "display-name": "CoreOpsArithSubEdwardsPointEdwardsPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[`&'a/EdwardsPoint`][`Sub<&'b/EdwardsPoint>`]sub()",
         "probe:curve25519_dalek.SharedAEdwardsPoint.Insts.CoreOpsArithSubEdwardsPointEdwardsPoint.sub",
         "probe:curve25519_dalek.core.ops.arith.Sub",
         "probe:curve25519_dalek.edwards.EdwardsPoint"
@@ -20034,6 +20045,7 @@
     "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithAddRistrettoPointRistrettoPoint": {
       "display-name": "CoreOpsArithAddRistrettoPointRistrettoPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[`&'a/RistrettoPoint`][`Add<&'b/RistrettoPoint>`]add()",
         "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithAddRistrettoPointRistrettoPoint.add",
         "probe:curve25519_dalek.core.ops.arith.Add",
         "probe:curve25519_dalek.ristretto.RistrettoPoint"
@@ -20082,6 +20094,7 @@
     "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithMulScalarRistrettoPoint": {
       "display-name": "CoreOpsArithMulScalarRistrettoPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&Scalar#impl<&RistrettoPoint>#[`&'a/Scalar`][`Mul<&'b/RistrettoPoint>`]mul()",
         "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithMulScalarRistrettoPoint.mul",
         "probe:curve25519_dalek.core.ops.arith.Mul",
         "probe:curve25519_dalek.ristretto.RistrettoPoint",
@@ -20132,6 +20145,7 @@
     "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithSubRistrettoPointRistrettoPoint": {
       "display-name": "CoreOpsArithSubRistrettoPointRistrettoPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[`&'a/RistrettoPoint`][`Sub<&'b/RistrettoPoint>`]sub()",
         "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithSubRistrettoPointRistrettoPoint.sub",
         "probe:curve25519_dalek.core.ops.arith.Sub",
         "probe:curve25519_dalek.ristretto.RistrettoPoint"
@@ -20180,6 +20194,7 @@
     "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithAddScalarScalar": {
       "display-name": "CoreOpsArithAddScalarScalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[`&'a/Scalar`][`Add<&'b/Scalar>`]add()",
         "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithAddScalarScalar.add",
         "probe:curve25519_dalek.core.ops.arith.Add",
         "probe:curve25519_dalek.scalar.Scalar"
@@ -20375,6 +20390,7 @@
     "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithMulScalarScalar": {
       "display-name": "CoreOpsArithMulScalarScalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[`&'a/Scalar`][`Mul<&'b/Scalar>`]mul()",
         "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithMulScalarScalar.mul",
         "probe:curve25519_dalek.core.ops.arith.Mul",
         "probe:curve25519_dalek.scalar.Scalar"
@@ -20423,6 +20439,7 @@
     "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithSubScalarScalar": {
       "display-name": "CoreOpsArithSubScalarScalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[`&'a/Scalar`][`Sub<&'b/Scalar>`]sub()",
         "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithSubScalarScalar.sub",
         "probe:curve25519_dalek.core.ops.arith.Sub",
         "probe:curve25519_dalek.scalar.Scalar"
@@ -22428,6 +22445,7 @@
       "display-name": "add_spec_aux",
       "dependencies": [
         "probe:Field51_as_Nat",
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[`&'a/FieldElement51`][`Add<&'b/FieldElement51>`]add()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[`&'a/FieldElement51`][`Mul<&'b/FieldElement51>`]mul()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[`&'a/FieldElement51`][`Sub<&'b/FieldElement51>`]sub()",
@@ -24679,7 +24697,9 @@
     "probe:curve25519_dalek.backend.serial.scalar_mul.variable_base.mul": {
       "display-name": "mul",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&ProjectivePoint#impl<EdwardsPoint>#[ProjectivePoint]as_extended()",
+        "probe:curve25519-dalek/4.1.3/backend/serial/scalar_mul/variable_base/mul()",
         "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]as_radix_16()",
         "probe:curve25519-dalek/4.1.3/window/&NafLookupTable8<T>#impl<usize>#[`NafLookupTable8<T>`]select()",
         "probe:curve25519-dalek/4.1.3/window/impl<&EdwardsPoint>#[`NafLookupTable8<ProjectiveNielsPoint>`][`From<&'a/EdwardsPoint>`]from()",
@@ -24721,6 +24741,7 @@
       "display-name": "mul_loop",
       "dependencies": [
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&CompletedPoint#impl<ProjectivePoint>#[CompletedPoint]as_projective()",
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&ProjectivePoint#impl<CompletedPoint>#[ProjectivePoint]double()",
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&ProjectivePoint#impl<EdwardsPoint>#[ProjectivePoint]as_extended()",
         "probe:curve25519-dalek/4.1.3/window/&NafLookupTable8<T>#impl<usize>#[`NafLookupTable8<T>`]select()",
@@ -25961,6 +25982,7 @@
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign": {
       "display-name": "add_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[FieldElement51][`AddAssign<&'b/FieldElement51>`]add_assign()",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign_loop"
       ],
@@ -25984,6 +26006,7 @@
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign_loop": {
       "display-name": "add_assign_loop",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[FieldElement51][`AddAssign<&'b/FieldElement51>`]add_assign()",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign_loop.mutual"
       ],
@@ -26029,6 +26052,7 @@
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign_loop_spec": {
       "display-name": "add_assign_loop_spec",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[FieldElement51][`AddAssign<&'b/FieldElement51>`]add_assign()",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign_loop"
       ],
@@ -27212,6 +27236,7 @@
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.pow2k": {
       "display-name": "pow2k",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<u32>#[FieldElement51]pow2k()",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.pow2k_loop"
       ],
@@ -27526,6 +27551,7 @@
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.square2": {
       "display-name": "square2",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<FieldElement51>#[FieldElement51]square2()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<u32>#[FieldElement51]pow2k()",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.pow2k",
@@ -27573,6 +27599,7 @@
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.square2_loop_spec": {
       "display-name": "square2_loop_spec",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<FieldElement51>#[FieldElement51]square2()",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51",
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.square2_loop"
       ],
@@ -28285,6 +28312,7 @@
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.add": {
       "display-name": "add",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/add()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/sub()",
         "probe:curve25519_dalek.backend.serial.u64.constants.L",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
@@ -28312,6 +28340,7 @@
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.add_loop": {
       "display-name": "add_loop",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/add()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.add_loop.mutual"
       ],
@@ -28362,6 +28391,7 @@
       "display-name": "add_loop_spec",
       "dependencies": [
         "probe:Scalar52_as_Nat",
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/add()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.add_loop"
       ],
@@ -28640,6 +28670,7 @@
       "display-name": "from_bytes",
       "dependencies": [
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/&Scalar52#impl<usize>#[Scalar52][`IndexMut<usize>`]index_mut()",
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/impl<&[u8;/{const}]>#[Scalar52]from_bytes()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.Insts.CoreOpsIndexIndexMutUsizeU64.index_mut",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.ZERO",
@@ -28713,6 +28744,7 @@
       "dependencies": [
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/&Scalar52#impl<usize>#[Scalar52][`IndexMut<usize>`]index_mut()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/add()",
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/from_bytes_wide()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/montgomery_mul()",
         "probe:curve25519_dalek.backend.serial.u64.constants.R",
         "probe:curve25519_dalek.backend.serial.u64.constants.RR",
@@ -28790,6 +28822,7 @@
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_montgomery": {
       "display-name": "from_montgomery",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/&Scalar52#impl<Scalar52>#[Scalar52]from_montgomery()",
         "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/impl<Scalar52>#[Scalar52]montgomery_reduce()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_montgomery_loop",
@@ -28839,6 +28872,7 @@
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_montgomery_loop_spec": {
       "display-name": "from_montgomery_loop_spec",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/&Scalar52#impl<Scalar52>#[Scalar52]from_montgomery()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_montgomery_loop"
       ],
@@ -29368,6 +29402,7 @@
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub": {
       "display-name": "sub",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/sub()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.ZERO",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.conditional_add_l",
@@ -29395,6 +29430,7 @@
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub_loop": {
       "display-name": "sub_loop",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/sub()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub_loop.mutual"
       ],
@@ -29445,6 +29481,7 @@
       "display-name": "sub_loop_spec",
       "dependencies": [
         "probe:Scalar52_as_Nat",
+        "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/sub()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.Scalar52_partial_as_Nat",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub_loop"
@@ -31569,6 +31606,7 @@
     "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithAddAssignEdwardsPoint.add_assign": {
       "display-name": "add_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[EdwardsPoint][`AddAssign<&'b/EdwardsPoint>`]add_assign()",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithAddAssignSharedAEdwardsPoint.add_assign"
       ],
@@ -31592,6 +31630,7 @@
     "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithAddAssignSharedAEdwardsPoint": {
       "display-name": "CoreOpsArithAddAssignSharedAEdwardsPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[EdwardsPoint][`AddAssign<&'b/EdwardsPoint>`]add_assign()",
         "probe:curve25519_dalek.core.ops.arith.AddAssign",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithAddAssignSharedAEdwardsPoint.add_assign"
@@ -31793,6 +31832,7 @@
     "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulAssignScalar.mul_assign": {
       "display-name": "mul_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&Scalar>#[EdwardsPoint][`MulAssign<&'b/Scalar>`]mul_assign()",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign",
         "probe:curve25519_dalek.scalar.Scalar"
@@ -31817,6 +31857,7 @@
     "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulAssignSharedAScalar": {
       "display-name": "CoreOpsArithMulAssignSharedAScalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&Scalar>#[EdwardsPoint][`MulAssign<&'b/Scalar>`]mul_assign()",
         "probe:curve25519_dalek.core.ops.arith.MulAssign",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign",
@@ -31916,6 +31957,7 @@
     "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulSharedBScalarEdwardsPoint": {
       "display-name": "CoreOpsArithMulSharedBScalarEdwardsPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&Scalar#impl<&EdwardsPoint>#[`&'a/Scalar`][`Mul<&'b/EdwardsPoint>`]mul()",
         "probe:curve25519_dalek.core.ops.arith.Mul",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulSharedBScalarEdwardsPoint.mul",
@@ -32038,6 +32080,7 @@
     "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithSubAssignEdwardsPoint.sub_assign": {
       "display-name": "sub_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[EdwardsPoint][`SubAssign<&'b/EdwardsPoint>`]sub_assign()",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithSubAssignSharedAEdwardsPoint.sub_assign"
       ],
@@ -32061,6 +32104,7 @@
     "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithSubAssignSharedAEdwardsPoint": {
       "display-name": "CoreOpsArithSubAssignSharedAEdwardsPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[EdwardsPoint][`SubAssign<&'b/EdwardsPoint>`]sub_assign()",
         "probe:curve25519_dalek.core.ops.arith.SubAssign",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithSubAssignSharedAEdwardsPoint.sub_assign"
@@ -33605,6 +33649,7 @@
       "dependencies": [
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&ProjectivePoint#impl<CompletedPoint>#[ProjectivePoint]double()",
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&ProjectivePoint#impl<EdwardsPoint>#[ProjectivePoint]as_extended()",
+        "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<EdwardsPoint>#[EdwardsPoint]mul_by_pow_2()",
         "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<ProjectivePoint>#[EdwardsPoint]as_projective()",
         "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint",
         "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint.as_extended",
@@ -38330,6 +38375,7 @@
     "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulAssignScalar.mul_assign": {
       "display-name": "mul_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/montgomery/&MontgomeryPoint#impl<&Scalar>#[MontgomeryPoint][`MulAssign<&Scalar>`]mul_assign()",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulAssignShared0Scalar.mul_assign",
         "probe:curve25519_dalek.scalar.Scalar"
@@ -38354,6 +38400,7 @@
     "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulAssignShared0Scalar": {
       "display-name": "CoreOpsArithMulAssignShared0Scalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/montgomery/&MontgomeryPoint#impl<&Scalar>#[MontgomeryPoint][`MulAssign<&Scalar>`]mul_assign()",
         "probe:curve25519_dalek.core.ops.arith.MulAssign",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulAssignShared0Scalar.mul_assign",
@@ -38410,6 +38457,7 @@
         "probe:Montgomery.instDecidableEqCurveField",
         "probe:Montgomery.instFactPrimeP",
         "probe:U8x32_as_Nat",
+        "probe:curve25519-dalek/4.1.3/montgomery/&MontgomeryPoint#impl<&Scalar>#[MontgomeryPoint][`MulAssign<&Scalar>`]mul_assign()",
         "probe:curve25519_dalek.Shared1MontgomeryPoint.Insts.CoreOpsArithMulShared0ScalarMontgomeryPoint.mul",
         "probe:curve25519_dalek.Shared1MontgomeryPoint.Insts.CoreOpsArithMulShared0ScalarMontgomeryPoint.mul_spec",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint",
@@ -38488,6 +38536,7 @@
     "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulSharedBScalarMontgomeryPoint": {
       "display-name": "CoreOpsArithMulSharedBScalarMontgomeryPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/montgomery/&Scalar#impl<&MontgomeryPoint>#[`&Scalar`][`Mul<&MontgomeryPoint>`]mul()",
         "probe:curve25519_dalek.core.ops.arith.Mul",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulSharedBScalarMontgomeryPoint.mul",
@@ -38544,6 +38593,7 @@
         "probe:Montgomery.instDecidableEqCurveField",
         "probe:Montgomery.instFactPrimeP",
         "probe:U8x32_as_Nat",
+        "probe:curve25519-dalek/4.1.3/montgomery/&Scalar#impl<&MontgomeryPoint>#[`&Scalar`][`Mul<&MontgomeryPoint>`]mul()",
         "probe:curve25519_dalek.Shared1MontgomeryPoint.Insts.CoreOpsArithMulShared0ScalarMontgomeryPoint.mul",
         "probe:curve25519_dalek.Shared1MontgomeryPoint.Insts.CoreOpsArithMulShared0ScalarMontgomeryPoint.mul_spec",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint",
@@ -41816,6 +41866,7 @@
     "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithAddAssignRistrettoPoint.add_assign": {
       "display-name": "add_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[RistrettoPoint][`AddAssign<&'b/RistrettoPoint>`]add_assign()",
         "probe:curve25519_dalek.ristretto.RistrettoPoint",
         "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithAddAssignShared0RistrettoPoint.add_assign"
       ],
@@ -41839,6 +41890,7 @@
     "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithAddAssignShared0RistrettoPoint": {
       "display-name": "CoreOpsArithAddAssignShared0RistrettoPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[RistrettoPoint][`AddAssign<&'b/RistrettoPoint>`]add_assign()",
         "probe:curve25519_dalek.core.ops.arith.AddAssign",
         "probe:curve25519_dalek.ristretto.RistrettoPoint",
         "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithAddAssignShared0RistrettoPoint.add_assign"
@@ -42009,6 +42061,7 @@
     "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithMulAssignScalar.mul_assign": {
       "display-name": "mul_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&Scalar>#[RistrettoPoint][`MulAssign<&'b/Scalar>`]mul_assign()",
         "probe:curve25519_dalek.ristretto.RistrettoPoint",
         "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign",
         "probe:curve25519_dalek.scalar.Scalar"
@@ -42033,6 +42086,7 @@
     "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithMulAssignSharedAScalar": {
       "display-name": "CoreOpsArithMulAssignSharedAScalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&Scalar>#[RistrettoPoint][`MulAssign<&'b/Scalar>`]mul_assign()",
         "probe:curve25519_dalek.core.ops.arith.MulAssign",
         "probe:curve25519_dalek.ristretto.RistrettoPoint",
         "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign",
@@ -42256,6 +42310,7 @@
     "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithSubAssignRistrettoPoint.sub_assign": {
       "display-name": "sub_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[RistrettoPoint][`SubAssign<&'b/RistrettoPoint>`]sub_assign()",
         "probe:curve25519_dalek.ristretto.RistrettoPoint",
         "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithSubAssignShared0RistrettoPoint.sub_assign"
       ],
@@ -42279,6 +42334,7 @@
     "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithSubAssignShared0RistrettoPoint": {
       "display-name": "CoreOpsArithSubAssignShared0RistrettoPoint",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[RistrettoPoint][`SubAssign<&'b/RistrettoPoint>`]sub_assign()",
         "probe:curve25519_dalek.core.ops.arith.SubAssign",
         "probe:curve25519_dalek.ristretto.RistrettoPoint",
         "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithSubAssignShared0RistrettoPoint.sub_assign"
@@ -44050,6 +44106,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU16": {
       "display-name": "CoreConvertFromU16",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/impl<u8>#[Scalar][`From<u8>`]from()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU16.from"
       ],
@@ -44095,6 +44152,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU32": {
       "display-name": "CoreConvertFromU32",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/impl<u8>#[Scalar][`From<u8>`]from()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU32.from"
       ],
@@ -44140,6 +44198,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU64": {
       "display-name": "CoreConvertFromU64",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/impl<u8>#[Scalar][`From<u8>`]from()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU64.from"
       ],
@@ -44185,6 +44244,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU8": {
       "display-name": "CoreConvertFromU8",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/impl<u8>#[Scalar][`From<u8>`]from()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU8.from"
       ],
@@ -44325,6 +44385,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithAddAssignScalar.add_assign": {
       "display-name": "add_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`AddAssign<&'b/Scalar>`]add_assign()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithAddAssignSharedAScalar.add_assign"
       ],
@@ -44348,6 +44409,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithAddAssignSharedAScalar": {
       "display-name": "CoreOpsArithAddAssignSharedAScalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`AddAssign<&'b/Scalar>`]add_assign()",
         "probe:curve25519_dalek.core.ops.arith.AddAssign",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithAddAssignSharedAScalar.add_assign"
@@ -44567,6 +44629,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithMulAssignScalar.mul_assign": {
       "display-name": "mul_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`MulAssign<&'b/Scalar>`]mul_assign()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign"
       ],
@@ -44590,6 +44653,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithMulAssignSharedAScalar": {
       "display-name": "CoreOpsArithMulAssignSharedAScalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`MulAssign<&'b/Scalar>`]mul_assign()",
         "probe:curve25519_dalek.core.ops.arith.MulAssign",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign"
@@ -45194,6 +45258,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithSubAssignScalar.sub_assign": {
       "display-name": "sub_assign",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`SubAssign<&'b/Scalar>`]sub_assign()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithSubAssignSharedAScalar.sub_assign"
       ],
@@ -45217,6 +45282,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithSubAssignSharedAScalar": {
       "display-name": "CoreOpsArithSubAssignSharedAScalar",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`SubAssign<&'b/Scalar>`]sub_assign()",
         "probe:curve25519_dalek.core.ops.arith.SubAssign",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithSubAssignSharedAScalar.sub_assign"
@@ -45482,6 +45548,7 @@
     "probe:curve25519_dalek.scalar.Scalar.Insts.SubtleConditionallySelectable.conditional_select": {
       "display-name": "conditional_select",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/impl<&Self>#[Scalar][ConditionallySelectable]conditional_select()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.SubtleConditionallySelectable.conditional_select_loop",
         "probe:curve25519_dalek.subtle.Choice"
@@ -45900,6 +45967,7 @@
     "probe:curve25519_dalek.scalar.Scalar.as_radix_16": {
       "display-name": "as_radix_16",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]as_radix_16()",
         "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<usize>#[Scalar][`Index<usize>`]index()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsIndexIndexUsizeU8.index",
@@ -46013,6 +46081,7 @@
       "display-name": "as_radix_2w",
       "dependencies": [
         "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]as_radix_16()",
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]as_radix_2w()",
         "probe:curve25519-dalek/4.1.3/scalar/read_le_u64_into()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.as_radix_16",
@@ -46065,6 +46134,7 @@
         "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<UnpackedScalar>#[Scalar]unpack()",
         "probe:curve25519-dalek/4.1.3/scalar/&Scalar52#impl<Scalar>#[`backend::serial::u64::scalar::Scalar52`]pack()",
         "probe:curve25519-dalek/4.1.3/scalar/&Scalar52#impl<UnpackedScalar>#[`backend::serial::u64::scalar::Scalar52`]montgomery_invert()",
+        "probe:curve25519-dalek/4.1.3/scalar/impl<&[Scalar]>#[Scalar]batch_invert()",
         "probe:curve25519_dalek.alloc.vec.Vec.Insts.ZeroizeZeroize.zeroize",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.Insts.CoreCloneClone",
@@ -46101,6 +46171,7 @@
     "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop0": {
       "display-name": "batch_invert_loop0",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/impl<&[Scalar]>#[Scalar]batch_invert()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop0.mutual"
@@ -46156,6 +46227,7 @@
     "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop1": {
       "display-name": "batch_invert_loop1",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/impl<&[Scalar]>#[Scalar]batch_invert()",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop1.mutual"
@@ -46600,6 +46672,7 @@
     "probe:curve25519_dalek.scalar.Scalar.non_adjacent_form": {
       "display-name": "non_adjacent_form",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]non_adjacent_form()",
         "probe:curve25519-dalek/4.1.3/scalar/read_le_u64_into()",
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.scalar.Scalar.bytes",
@@ -46626,6 +46699,7 @@
     "probe:curve25519_dalek.scalar.Scalar.non_adjacent_form_loop": {
       "display-name": "non_adjacent_form_loop",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]non_adjacent_form()",
         "probe:curve25519_dalek.scalar.Scalar.non_adjacent_form_loop.mutual"
       ],
       "code-module": "Curve25519Dalek.Funs",
@@ -47435,6 +47509,7 @@
     "probe:curve25519_dalek.scalar.read_le_u64_into": {
       "display-name": "read_le_u64_into",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/scalar/read_le_u64_into()",
         "probe:curve25519_dalek.scalar.read_le_u64_into_loop"
       ],
       "code-module": "Curve25519Dalek.Funs",
@@ -48441,6 +48516,7 @@
     "probe:curve25519_dalek.window.LookupTable.select": {
       "display-name": "select",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/window/&NafLookupTable8<T>#impl<usize>#[`NafLookupTable8<T>`]select()",
         "probe:curve25519_dalek.core.ops.arith.Neg",
         "probe:curve25519_dalek.core.ops.arith.Neg.neg",
         "probe:curve25519_dalek.subtle.Choice",
@@ -48499,6 +48575,7 @@
       "display-name": "from",
       "dependencies": [
         "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<ProjectiveNielsPoint>#[EdwardsPoint]as_projective_niels()",
+        "probe:curve25519-dalek/4.1.3/window/impl<&EdwardsPoint>#[`NafLookupTable8<ProjectiveNielsPoint>`][`From<&'a/EdwardsPoint>`]from()",
         "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.edwards.EdwardsPoint.as_projective_niels",
@@ -48525,6 +48602,7 @@
     "probe:curve25519_dalek.window.LookupTableProjectiveNielsPoint.Insts.CoreConvertFromSharedAEdwardsPoint.from_loop": {
       "display-name": "from_loop",
       "dependencies": [
+        "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
         "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&ProjectivePoint#impl<EdwardsPoint>#[ProjectivePoint]as_extended()",
         "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<ProjectiveNielsPoint>#[EdwardsPoint]as_projective_niels()",
         "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint.add",

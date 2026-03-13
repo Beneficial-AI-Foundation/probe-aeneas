@@ -36,16 +36,13 @@ pub fn run_merge(
         );
     }
     if functions_json.is_none() && lean_project.is_none() {
-        return Err(
-            "--functions is required when --lean-project is not given \
+        return Err("--functions is required when --lean-project is not given \
              (cannot auto-generate functions.json without a Lean project path)"
-                .to_string(),
-        );
+            .to_string());
     }
 
     // --- Resolve inputs (extract if needed) ---
-    let (rust_path, lean_path) =
-        resolve_inputs(rust_json, rust_project, lean_json, lean_project)?;
+    let (rust_path, lean_path) = resolve_inputs(rust_json, rust_project, lean_json, lean_project)?;
 
     // --- Resolve functions.json ---
     let functions_path = resolve_functions(functions_json, lean_project)?;
@@ -110,8 +107,8 @@ fn resolve_functions(
         return Ok(path.to_path_buf());
     }
 
-    let lean_proj = lean_project
-        .ok_or("Cannot auto-generate functions.json without --lean-project")?;
+    let lean_proj =
+        lean_project.ok_or("Cannot auto-generate functions.json without --lean-project")?;
     let functions_path = lean_proj.join("functions.json");
     run_listfuns(lean_proj, &functions_path)?;
     Ok(functions_path)
@@ -138,15 +135,26 @@ fn run_translate(
     println!("\nGenerating translations...");
     let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
 
-    println!("  {} translations generated", mappings.len());
+    println!(
+        "  {} translations generated ({} unique Rust atoms, {} Lean targets)",
+        mappings.len(),
+        stats.matched_rust_unique,
+        stats.matched_lean_unique,
+    );
     for (conf, count) in &stats.by_confidence {
         println!("    {conf}: {count}");
     }
 
+    // from_to keeps only the primary (first) Lean target per Rust atom since
+    // the probe crate's merge_atom_maps expects HashMap<String, String>.
+    // to_from naturally handles 1:many because each Lean atom maps to exactly
+    // one Rust atom, so all reverse mappings fit in a HashMap.
     let mut from_to = HashMap::new();
     let mut to_from = HashMap::new();
     for m in &mappings {
-        from_to.insert(m.from.clone(), m.to.clone());
+        from_to
+            .entry(m.from.clone())
+            .or_insert_with(|| m.to.clone());
         to_from.insert(m.to.clone(), m.from.clone());
     }
 
@@ -171,9 +179,7 @@ fn run_merge_with_translations(
 
     let (merged, stats) = merge_atom_maps(vec![rust_atoms, lean_atoms], Some(translations));
 
-    let timestamp = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%SZ")
-        .to_string();
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     let mut all_prov: Vec<InputProvenance> = Vec::new();
     all_prov.extend(rust_prov);
@@ -228,7 +234,12 @@ pub fn run_translate_only(
     println!("\nGenerating translations...");
     let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
 
-    println!("  {} translations generated", mappings.len());
+    println!(
+        "  {} translations generated ({} unique Rust atoms, {} Lean targets)",
+        mappings.len(),
+        stats.matched_rust_unique,
+        stats.matched_lean_unique,
+    );
     for (conf, count) in &stats.by_confidence {
         println!("    {conf}: {count}");
     }
