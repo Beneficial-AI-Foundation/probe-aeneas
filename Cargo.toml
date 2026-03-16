@@ -2,7 +2,7 @@
 name = "probe-aeneas"
 version = "0.1.0"
 edition = "2021"
-description = "Cross-language merge tool for Aeneas-transpiled projects (Rust ↔ Lean)"
+description = "Cross-language extract tool for Aeneas-transpiled projects (Rust ↔ Lean)"
 license = "MIT"
 repository = "https://github.com/Beneficial-AI-Foundation/probe-aeneas"
 keywords = ["aeneas", "lean", "rust", "call-graph", "cross-language"]

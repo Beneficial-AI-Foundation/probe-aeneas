@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 probe-aeneas is a Rust CLI tool that bridges Rust and Lean call graphs for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects. It has three subcommands:
-- **merge**: Full pipeline -- extract atoms (if needed), generate translation mappings, and merge Rust + Lean call graphs into a unified atom file with cross-language edges.
+- **extract**: Full pipeline -- extract atoms (if needed), generate translation mappings, and merge Rust + Lean call graphs into a unified atom file with cross-language edges.
 - **translate**: Generate translation mappings between Rust and Lean code-names using `functions.json` as the bridge.
 - **listfuns**: Run `lake exe listfuns` in a Lean project to produce `functions.json`.
 
@@ -34,7 +34,7 @@ cargo fmt && cargo clippy --all-targets && cargo test
 ```
 src/
 ├── main.rs            # CLI entry point with subcommand routing (clap)
-├── merge.rs           # Merge pipeline: input resolution, translation, merge orchestration
+├── extract.rs         # Extract pipeline: input resolution, translation, merge orchestration
 ├── translate.rs       # Translation logic: three matching strategies, JSON I/O, unit tests
 ├── extract_runner.rs  # Runs probe-rust and probe-lean extractors, auto-install logic
 ├── listfuns.rs        # Runs `lake exe listfuns` in a Lean project
@@ -50,7 +50,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 ### Pipeline
 
-1. **Merge Pipeline** (`merge` command): resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → merge atom maps → Schema 2.0 envelope → output
+1. **Extract Pipeline** (`extract` command): resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → merge atom maps → Schema 2.0 envelope → output
 2. **Translate Pipeline** (`translate` command): load Rust atoms + Lean atoms + functions.json → three-strategy matching → translations JSON
 3. **Listfuns Pipeline** (`listfuns` command): `lake exe listfuns` → functions.json
 

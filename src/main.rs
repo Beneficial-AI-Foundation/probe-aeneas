@@ -1,6 +1,6 @@
+mod extract;
 mod extract_runner;
 mod listfuns;
-mod merge;
 mod translate;
 mod types;
 
@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "probe-aeneas")]
-#[command(about = "Cross-language merge tool for Aeneas-transpiled projects (Rust ↔ Lean)")]
+#[command(about = "Cross-language extract tool for Aeneas-transpiled projects (Rust ↔ Lean)")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -18,12 +18,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Full pipeline: extract atoms (if needed), generate translations, merge.
+    /// Full pipeline: extract atoms (if needed), generate translations, and
+    /// merge Rust + Lean call graphs into a unified atom file.
     ///
     /// Provide either pre-generated JSON files (--rust / --lean) or project paths
     /// (--rust-project / --lean-project) which will run probe-rust/probe-lean
     /// automatically.
-    Merge {
+    Extract {
         /// Path to pre-generated Rust atoms JSON (from probe-rust extract).
         #[arg(long, group = "rust_input")]
         rust: Option<PathBuf>,
@@ -85,14 +86,14 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Merge {
+        Commands::Extract {
             rust,
             rust_project,
             lean,
             lean_project,
             functions,
             output,
-        } => merge::run_merge(
+        } => extract::run_extract(
             rust.as_deref(),
             rust_project.as_deref(),
             lean.as_deref(),
@@ -106,7 +107,7 @@ fn main() {
             lean,
             functions,
             output,
-        } => merge::run_translate_only(&rust, &lean, &functions, &output),
+        } => extract::run_translate_only(&rust, &lean, &functions, &output),
 
         Commands::Listfuns {
             lean_project,

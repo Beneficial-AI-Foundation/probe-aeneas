@@ -12,11 +12,11 @@ use crate::translate::{
 
 type TranslationMaps = (HashMap<String, String>, HashMap<String, String>);
 
-/// Run the full merge pipeline with the new flexible input resolution.
+/// Run the full extract pipeline with flexible input resolution.
 ///
 /// Accepts either pre-generated JSON paths or project paths for Rust and Lean.
 /// When project paths are given, the corresponding extractors are run automatically.
-pub fn run_merge(
+pub fn run_extract(
     rust_json: Option<&Path>,
     rust_project: Option<&Path>,
     lean_json: Option<&Path>,
@@ -50,8 +50,8 @@ pub fn run_merge(
     // --- Generate translations ---
     let translations_result = run_translate(&rust_path, &lean_path, &functions_path)?;
 
-    // --- Merge ---
-    run_merge_with_translations(&rust_path, &lean_path, &translations_result, output_path)
+    // --- Merge atom maps ---
+    run_extract_with_translations(&rust_path, &lean_path, &translations_result, output_path)
 }
 
 /// Resolve Rust and Lean inputs, running extractors in parallel when both are
@@ -150,8 +150,8 @@ fn run_translate(
     Ok((from_to, to_from))
 }
 
-/// Merge atoms with pre-computed translations.
-fn run_merge_with_translations(
+/// Merge atoms with pre-computed translations and produce the final output.
+fn run_extract_with_translations(
     rust_path: &Path,
     lean_path: &Path,
     translations: &TranslationMaps,
@@ -212,7 +212,7 @@ fn run_merge_with_translations(
         tool: Tool {
             name: "probe-aeneas".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
-            command: "merge".to_string(),
+            command: "extract".to_string(),
         },
         inputs: all_prov,
         timestamp,
@@ -233,7 +233,7 @@ fn run_merge_with_translations(
     Ok(())
 }
 
-/// Public entry point for the `translate` subcommand (no merge, just translations).
+/// Public entry point for the `translate` subcommand (translations only, no merge).
 pub fn run_translate_only(
     rust_path: &Path,
     lean_path: &Path,

@@ -33,10 +33,10 @@ Sample translations:
 | `probe:curve25519-dalek/4.1.3/backend/get_selected_backend()` | `probe:curve25519_dalek.backend.get_selected_backend` | exact |
 | `probe:curve25519-dalek/4.1.3/scalar/Scalar::from_bytes_mod_order()` | `probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order` | exact |
 
-## `merge` subcommand (from pre-generated JSONs)
+## `extract` subcommand (from pre-generated JSONs)
 
 ```bash
-probe-aeneas merge \
+probe-aeneas extract \
   --rust examples/rust_curve25519-dalek_4.1.3_atoms.json \
   --lean examples/lean_Curve25519Dalek_0.1.0.json \
   --functions examples/functions.json \

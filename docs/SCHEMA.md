@@ -13,7 +13,7 @@ the `data` field and the output of non-enveloped commands.
 
 ## Common: Schema 2.0 Envelope
 
-Both `merge` and `translate` commands wrap their output in a standardized
+Both `extract` and `translate` commands wrap their output in a standardized
 metadata envelope. The envelope fields vary slightly between commands (see
 sections below), but share this structure:
 
@@ -30,7 +30,7 @@ sections below), but share this structure:
 
 ## 1. `probe/merged-atoms` -- Merged Call Graph
 
-**Produced by:** `merge`
+**Produced by:** `extract`
 **Envelope schema:** `"probe/merged-atoms"`
 
 ### Envelope Shape
@@ -42,7 +42,7 @@ sections below), but share this structure:
   "tool": {
     "name": "probe-aeneas",
     "version": "0.1.0",
-    "command": "merge"
+    "command": "extract"
   },
   "inputs": [
     {
@@ -71,7 +71,7 @@ sections below), but share this structure:
 }
 ```
 
-### Envelope Fields (merge-specific)
+### Envelope Fields (extract-specific)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -101,7 +101,7 @@ input files, potentially enriched with cross-language dependency edges. The
 atom format follows the shared `probe` atom schema with language-specific
 extension fields passed through verbatim.
 
-**Rust atom example** (with translation metadata added by merge):
+**Rust atom example** (with translation metadata added by extract):
 
 ```json
 {
@@ -159,7 +159,7 @@ extension fields passed through verbatim.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `display-name` | string | yes | Human-readable name |
-| `dependencies` | array of strings | yes | Sorted code-names of callees, including cross-language edges added by merge |
+| `dependencies` | array of strings | yes | Sorted code-names of callees, including cross-language edges added by extract |
 | `code-module` | string | yes | Module path |
 | `code-path` | string | yes | Relative source file path (empty for external stubs) |
 | `code-text` | object | yes | `{"lines-start": N, "lines-end": M}` (1-based, inclusive) |
@@ -174,7 +174,7 @@ extension fields passed through verbatim.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
-| `translation-name` | string | no | Code-name of the primary Lean translation (added by merge) |
+| `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
 

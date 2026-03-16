@@ -2,14 +2,14 @@
 
 ## Commands
 
-### `merge`
+### `extract`
 
 Full pipeline: extract atoms (if needed), generate translation mappings, and
 merge Rust + Lean call graphs into a unified atom file with cross-language
 dependency edges.
 
 ```
-probe-aeneas merge [OPTIONS]
+probe-aeneas extract [OPTIONS]
 ```
 
 **Input options (Rust):**
@@ -42,7 +42,7 @@ Exactly one of `--lean` or `--lean-project` is required.
 **From project paths (fully automated):**
 
 ```bash
-probe-aeneas merge \
+probe-aeneas extract \
   --rust-project path/to/rust/project \
   --lean-project path/to/lean/project \
   --output merged.json
@@ -51,7 +51,7 @@ probe-aeneas merge \
 **From pre-generated JSON files:**
 
 ```bash
-probe-aeneas merge \
+probe-aeneas extract \
   --rust path/to/rust_atoms.json \
   --lean path/to/lean_atoms.json \
   --functions path/to/functions.json \
@@ -61,7 +61,7 @@ probe-aeneas merge \
 **Mixed mode (one project path, one JSON):**
 
 ```bash
-probe-aeneas merge \
+probe-aeneas extract \
   --rust-project path/to/rust/project \
   --lean path/to/lean_atoms.json \
   --functions path/to/functions.json \
@@ -164,7 +164,7 @@ For the complete JSON schema specification covering all commands, see
 
 ### Merged Atoms
 
-The `merge` command produces a JSON file wrapped in a Schema 2.0 metadata
+The `extract` command produces a JSON file wrapped in a Schema 2.0 metadata
 envelope with `"probe/merged-atoms"` schema. The `data` field contains all
 atoms from both inputs, with cross-language dependency edges added where
 translations exist.
@@ -211,4 +211,4 @@ installs the required extractor tools automatically.
 
 When both `--rust-project` and `--lean-project` are given, `probe-rust extract`
 and `probe-lean extract` are run in parallel using scoped threads. This can
-significantly reduce wall-clock time for the merge pipeline.
+significantly reduce wall-clock time for the extract pipeline.
