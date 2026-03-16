@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
 Version: 2.0
-Date: 2026-03-13
+Date: 2026-03-16
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -47,18 +47,26 @@ sections below), but share this structure:
   "inputs": [
     {
       "schema": "probe-rust/atoms",
-      "package": "curve25519-dalek",
-      "package-version": "4.1.3",
-      "language": "rust"
+      "source": {
+        "repo": "https://github.com/dalek-cryptography/curve25519-dalek.git",
+        "commit": "5312a0311ec40df95be953eacfa8a11b9a34bc54",
+        "language": "rust",
+        "package": "curve25519-dalek",
+        "package-version": "4.1.3"
+      }
     },
     {
       "schema": "probe-lean/extract",
-      "package": "Curve25519Dalek",
-      "package-version": "0.1.0",
-      "language": "lean"
+      "source": {
+        "repo": "https://github.com/Beneficial-AI-Foundation/curve25519-dalek-lean-verify.git",
+        "commit": "924fd9b5249edbd5dd0765bc21891f8bb0eb5d86",
+        "language": "lean",
+        "package": "Curve25519Dalek",
+        "package-version": "0.1.0"
+      }
     }
   ],
-  "timestamp": "2026-03-13T12:00:00Z",
+  "timestamp": "2026-03-16T12:00:05Z",
   "data": { ... }
 }
 ```
@@ -74,15 +82,26 @@ sections below), but share this structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema` | string | Schema of the input file (e.g. `"probe-rust/atoms"`, `"probe-lean/extract"`) |
-| `package` | string | Package/crate name from the input |
-| `package-version` | string | Package version from the input |
+| `source` | Source | Source metadata propagated from the input envelope |
+
+### Source
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `repo` | string | Git repository URL |
+| `commit` | string | Git commit hash |
 | `language` | string | Language of the input (`"rust"` or `"lean"`) |
+| `package` | string | Package/crate name |
+| `package-version` | string | Package version |
 
 ### Data Shape
 
 `data` is an object keyed by code-name. Each value is an atom from one of the
 input files, potentially enriched with cross-language dependency edges. The
-atom format follows the shared `probe` atom schema:
+atom format follows the shared `probe` atom schema with language-specific
+extension fields passed through verbatim.
+
+**Rust atom example** (with translation metadata added by merge):
 
 ```json
 {
@@ -93,16 +112,49 @@ atom format follows the shared `probe` atom schema:
       "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order"
     ],
     "code-module": "scalar",
-    "code-path": "curve25519-dalek/src/scalar.rs",
-    "code-text": { "lines-start": 142, "lines-end": 167 },
+    "code-path": "src/scalar.rs",
+    "code-text": { "lines-start": 237, "lines-end": 246 },
     "kind": "exec",
     "language": "rust",
-    "rust-qualified-name": "curve25519_dalek::scalar::Scalar::from_bytes_mod_order"
+    "rust-qualified-name": "curve25519_dalek::scalar::Scalar::from_bytes_mod_order",
+    "translation-name": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
+    "translation-path": "Curve25519Dalek/Funs.lean",
+    "translation-text": { "lines-start": 7089, "lines-end": 7098 }
+  }
+}
+```
+
+**Lean atom example** (with probe-lean extension fields):
+
+```json
+{
+  "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order": {
+    "display-name": "from_bytes_mod_order",
+    "dependencies": [
+      "probe:curve25519_dalek.scalar.Scalar.reduce",
+      "probe:curve25519-dalek/4.1.3/scalar/Scalar#from_bytes_mod_order()"
+    ],
+    "code-module": "Curve25519Dalek.Funs",
+    "code-path": "Curve25519Dalek/Funs.lean",
+    "code-text": { "lines-start": 7089, "lines-end": 7098 },
+    "kind": "def",
+    "language": "lean",
+    "name": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
+    "verification-status": "verified",
+    "specified": true,
+    "specs": ["probe:from_bytes_mod_order_spec"],
+    "is-relevant": true,
+    "is-ignored": false,
+    "is-hidden": false,
+    "is-extraction-artifact": false,
+    "rust-source": null
   }
 }
 ```
 
 ### Atom Field Reference
+
+#### Core fields (all atoms)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -111,12 +163,37 @@ atom format follows the shared `probe` atom schema:
 | `code-module` | string | yes | Module path |
 | `code-path` | string | yes | Relative source file path (empty for external stubs) |
 | `code-text` | object | yes | `{"lines-start": N, "lines-end": M}` (1-based, inclusive) |
-| `kind` | string | yes | Declaration kind (`"exec"` for Rust, `"def"` for Lean) |
+| `kind` | string | yes | Declaration kind (see below) |
 | `language` | string | yes | `"rust"` or `"lean"` |
-| `rust-qualified-name` | string | no | Rust-qualified path (Rust atoms only, when available) |
-| `translation-name` | string | no | Code-name of the primary Lean translation (Rust atoms only, when translation exists) |
+
+**`kind` values:** `"exec"` (Rust functions), `"def"` (Lean definitions),
+`"theorem"` (Lean theorems/specs).
+
+#### Rust-specific fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
+| `translation-name` | string | no | Code-name of the primary Lean translation (added by merge) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
+
+#### Lean-specific fields
+
+These fields originate from `probe-lean extract` and are passed through
+verbatim via the atom's extension map:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Full code-name (same as the map key) |
+| `verification-status` | string | yes | `"verified"`, `"unverified"`, or `"failed"` |
+| `specified` | bool | yes | Whether the definition has associated specs |
+| `specs` | array of strings | no | Code-names of spec theorems (present when `specified` is true) |
+| `is-relevant` | bool | yes | Whether the atom is part of the project's own code |
+| `is-ignored` | bool | yes | Whether the atom is explicitly ignored |
+| `is-hidden` | bool | yes | Whether the atom is hidden from default views |
+| `is-extraction-artifact` | bool | yes | Whether the atom is an Aeneas extraction artifact |
+| `rust-source` | string or null | no | Rust source reference from Aeneas docstring |
 
 ### Translation Metadata
 
@@ -173,7 +250,7 @@ entries with:
     "version": "0.1.0",
     "command": "translate"
   },
-  "timestamp": "2026-03-13T12:00:00Z",
+  "timestamp": "2026-03-16T12:00:00Z",
   "sources": {
     "from": {
       "schema": "probe-rust/atoms",
