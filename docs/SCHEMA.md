@@ -19,7 +19,7 @@ sections below), but share this structure:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema` | string | Data type identifier (e.g. `"probe/merged-atoms"`) |
+| `schema` | string | Data type identifier (e.g. `"probe-aeneas/extract"`) |
 | `schema-version` | string | Interchange spec version (`"2.0"`) |
 | `tool.name` | string | Always `"probe-aeneas"` |
 | `tool.version` | string | Semver version of the probe-aeneas binary |
@@ -28,16 +28,16 @@ sections below), but share this structure:
 
 ---
 
-## 1. `probe/merged-atoms` -- Merged Call Graph
+## 1. `probe-aeneas/extract` -- Merged Call Graph
 
 **Produced by:** `extract`
-**Envelope schema:** `"probe/merged-atoms"`
+**Envelope schema:** `"probe-aeneas/extract"`
 
 ### Envelope Shape
 
 ```json
 {
-  "schema": "probe/merged-atoms",
+  "schema": "probe-aeneas/extract",
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
@@ -101,15 +101,15 @@ input files, potentially enriched with cross-language dependency edges. The
 atom format follows the shared `probe` atom schema with language-specific
 extension fields passed through verbatim.
 
-**Rust atom example** (with translation metadata added by extract):
+**Rust atom example** (with translation metadata and cross-language edge):
 
 ```json
 {
   "probe:curve25519-dalek/4.1.3/scalar/Scalar#from_bytes_mod_order()": {
     "display-name": "Scalar::from_bytes_mod_order",
     "dependencies": [
-      "probe:curve25519-dalek/4.1.3/scalar/helper()",
-      "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order"
+      "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()",
+      "probe:curve25519_dalek.scalar.Scalar.reduce"
     ],
     "code-module": "scalar",
     "code-path": "src/scalar.rs",
@@ -124,25 +124,34 @@ extension fields passed through verbatim.
 }
 ```
 
+In this example, `from_bytes_mod_order` calls Rust `reduce`, which has a
+Lean translation `probe:curve25519_dalek.scalar.Scalar.reduce`. The
+cross-language edge to the Lean `reduce` is added automatically by the
+merge step (see [Cross-Language Edges](#cross-language-edges) below).
+
 **Lean atom example** (with probe-lean extension fields):
 
 ```json
 {
-  "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order": {
-    "display-name": "from_bytes_mod_order",
+  "probe:curve25519_dalek.scalar.Scalar.reduce": {
+    "display-name": "reduce",
     "dependencies": [
-      "probe:curve25519_dalek.scalar.Scalar.reduce",
-      "probe:curve25519-dalek/4.1.3/scalar/Scalar#from_bytes_mod_order()"
+      "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()",
+      "probe:curve25519_dalek.scalar.Scalar.reduce_inner"
+    ],
+    "type-dependencies": [],
+    "term-dependencies": [
+      "probe:curve25519_dalek.scalar.Scalar.reduce_inner"
     ],
     "code-module": "Curve25519Dalek.Funs",
     "code-path": "Curve25519Dalek/Funs.lean",
-    "code-text": { "lines-start": 7089, "lines-end": 7098 },
+    "code-text": { "lines-start": 5012, "lines-end": 5030 },
     "kind": "def",
     "language": "lean",
-    "name": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
+    "name": "probe:curve25519_dalek.scalar.Scalar.reduce",
     "verification-status": "verified",
     "specified": true,
-    "specs": ["probe:from_bytes_mod_order_spec"],
+    "specs": ["probe:reduce_spec"],
     "is-relevant": true,
     "is-ignored": false,
     "is-hidden": false,
@@ -151,6 +160,10 @@ extension fields passed through verbatim.
   }
 }
 ```
+
+Here the Lean `reduce` calls Lean `reduce_inner`, and its dependency on
+Rust `Scalar#reduce()` is a cross-language edge back to the Rust
+translation partner.
 
 ### Atom Field Reference
 
@@ -188,7 +201,9 @@ verbatim via the atom's extension map:
 | `name` | string | yes | Full code-name (same as the map key) |
 | `verification-status` | string | yes | `"verified"`, `"unverified"`, or `"failed"` |
 | `specified` | bool | yes | Whether the definition has associated specs |
-| `specs` | array of strings | no | Code-names of spec theorems (present when `specified` is true) |
+| `specs` | array of strings | no | Code-names of spec theorems (may be present when `specified` is true) |
+| `type-dependencies` | array of strings | yes | Sorted code-names of dependencies used in the type signature |
+| `term-dependencies` | array of strings | yes | Sorted code-names of dependencies used in the definition body |
 | `is-relevant` | bool | yes | Whether the atom is part of the project's own code |
 | `is-ignored` | bool | yes | Whether the atom is explicitly ignored |
 | `is-hidden` | bool | yes | Whether the atom is hidden from default views |
@@ -220,9 +235,20 @@ separate translations.
 
 ### Cross-Language Edges
 
-In addition to the translation metadata fields above, the Lean code-name is
-added to the Rust atom's `dependencies` array and vice versa. This creates
-bidirectional cross-language edges in the merged graph.
+In addition to the translation metadata fields above, `extract` adds
+cross-language dependency edges via transitive expansion. For each atom
+in the merged graph, every dependency that has a known translation gains
+the translated code-name as an additional dependency:
+
+- Rust atom A calls Rust atom B; B has Lean translation B' →
+  A gains a dependency on B'.
+- Lean atom X calls Lean atom Y; Y has Rust translation Y' →
+  X gains a dependency on Y'.
+
+This creates cross-language edges wherever a call site crosses the
+Rust/Lean boundary through translated functions. The edges are
+bidirectional in aggregate (Rust callers reach into the Lean graph and
+vice versa) but each individual edge follows the call direction.
 
 ### External Stubs
 
@@ -299,7 +325,7 @@ entries with:
 | `from` | string | Rust code-name |
 | `to` | string | Lean code-name |
 | `confidence` | string | Match confidence level (see below) |
-| `method` | string | Strategy that produced this mapping (see below) |
+| `method` | string or absent | Strategy that produced this mapping (see below). Always present in probe-aeneas output; may be absent in other producers. |
 
 ### Confidence Levels
 

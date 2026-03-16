@@ -67,7 +67,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 **Auto-Install**: `probe-rust` is installed via `cargo install --git`, `probe-lean` is cloned and built with `lake build`, then copied to `~/.local/bin/`.
 
-**Schema 2.0 Metadata Envelope**: Merged output uses `probe/merged-atoms` schema; translation output uses `probe/translations` schema. Both wrap payloads with tool info, source provenance, and timestamps.
+**Schema 2.0 Metadata Envelope**: Merged output uses `probe-aeneas/extract` schema; translation output uses `probe/translations` schema. Both wrap payloads with tool info, source provenance, and timestamps.
 
 **Shared Types via `probe` Crate**: Core types (`Atom`, `TranslationMapping`, `MergedAtomEnvelope`, `merge_atom_maps`, `load_atom_file`) come from the shared `probe` crate.
 

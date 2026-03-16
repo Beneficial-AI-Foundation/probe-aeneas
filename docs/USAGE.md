@@ -165,7 +165,7 @@ For the complete JSON schema specification covering all commands, see
 ### Merged Atoms
 
 The `extract` command produces a JSON file wrapped in a Schema 2.0 metadata
-envelope with `"probe/merged-atoms"` schema. The `data` field contains all
+envelope with `"probe-aeneas/extract"` schema. The `data` field contains all
 atoms from both inputs, with cross-language dependency edges added where
 translations exist.
 

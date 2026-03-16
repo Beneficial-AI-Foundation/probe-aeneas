@@ -219,7 +219,7 @@ fn run_extract_with_translations(
     all_prov.extend(lean_prov);
 
     let envelope = MergedAtomEnvelope {
-        schema: "probe/merged-atoms".to_string(),
+        schema: "probe-aeneas/extract".to_string(),
         schema_version: "2.0".to_string(),
         tool: Tool {
             name: "probe-aeneas".to_string(),

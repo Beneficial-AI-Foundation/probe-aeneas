@@ -21,7 +21,7 @@ Initial release.
 - Flexible input modes: accept pre-generated JSON files, project paths, or a mix of both.
 - Parallel extraction when both `--rust-project` and `--lean-project` are given.
 - Auto-install for `probe-rust` (via `cargo install`) and `probe-lean` (clone + `lake build`).
-- Schema 2.0 metadata envelopes for merged atoms (`probe/merged-atoms`) and translations (`probe/translations`).
+- Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
 [Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.1.0...HEAD
