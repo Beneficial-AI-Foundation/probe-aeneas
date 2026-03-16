@@ -20,21 +20,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/ProjectiveNielsPoint>`]add()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint.add"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Sub<&'b/ProjectiveNielsPoint>`]sub()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAAffineNielsPointCompletedPoint.sub"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/curve_models/&EdwardsPoint#impl<&ProjectiveNielsPoint>#[`&'a/EdwardsPoint`][`Sub<&'b/ProjectiveNielsPoint>`]sub()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithSubSharedAProjectiveNielsPointCompletedPoint.sub"
     },
     {
       "confidence": "exact",
@@ -98,12 +86,6 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/scalar_mul/variable_base/mul()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.scalar_mul.variable_base.mul_loop"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl#[FieldElement51][Zeroize]zeroize()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.ZeroizeZeroize.zeroize"
@@ -125,18 +107,6 @@
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[FieldElement51][`AddAssign<&'b/FieldElement51>`]add_assign()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[FieldElement51][`AddAssign<&'b/FieldElement51>`]add_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign_loop"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<&FieldElement51>#[FieldElement51][`AddAssign<&'b/FieldElement51>`]add_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign_loop.mutual"
     },
     {
       "confidence": "exact",
@@ -182,12 +152,6 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<FieldElement51>#[FieldElement51]square2()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.square2_loop"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<FieldElement51>#[`&'a/FieldElement51`][Neg]neg()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithNegFieldElement51.neg"
@@ -203,12 +167,6 @@
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<u32>#[FieldElement51]pow2k()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.pow2k"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/field/&FieldElement51#impl<u32>#[FieldElement51]pow2k()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.pow2k_loop"
     },
     {
       "confidence": "exact",
@@ -260,12 +218,6 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/&Scalar52#impl<Scalar52>#[Scalar52]from_montgomery()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_montgomery_loop"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/&Scalar52#impl<Scalar52>#[Scalar52]montgomery_square()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_square"
@@ -302,12 +254,6 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/impl<&[u8;/{const}]>#[Scalar52]from_bytes()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_bytes_loop"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/impl<Scalar52>#[Scalar52]montgomery_reduce()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_reduce"
@@ -332,27 +278,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/add()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.add_loop"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/add()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.add_loop.mutual"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/from_bytes_wide()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_bytes_wide"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/from_bytes_wide()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_bytes_wide_loop"
     },
     {
       "confidence": "exact",
@@ -371,18 +299,6 @@
       "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/sub()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/sub()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub_loop"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/test/sub()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub_loop.mutual"
     },
     {
       "confidence": "exact",
@@ -422,12 +338,6 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[EdwardsPoint][`AddAssign<&'b/EdwardsPoint>`]add_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithAddAssignSharedAEdwardsPoint.add_assign"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[EdwardsPoint][`PartialEq<Self>`]eq()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.edwards.CompressedEdwardsY.Insts.CoreCmpPartialEqCompressedEdwardsY.eq"
@@ -440,21 +350,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[EdwardsPoint][`SubAssign<&'b/EdwardsPoint>`]sub_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithSubAssignSharedAEdwardsPoint.sub_assign"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/EdwardsPoint>`]add()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAEdwardsPointEdwardsPoint.add"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[`&'a/EdwardsPoint`][`Add<&'b/EdwardsPoint>`]add()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.SharedAEdwardsPoint.Insts.CoreOpsArithAddEdwardsPointEdwardsPoint.add"
     },
     {
       "confidence": "exact",
@@ -464,21 +362,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&EdwardsPoint>#[`&'a/EdwardsPoint`][`Sub<&'b/EdwardsPoint>`]sub()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.SharedAEdwardsPoint.Insts.CoreOpsArithSubEdwardsPointEdwardsPoint.sub"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&Scalar>#[EdwardsPoint][`MulAssign<&'b/Scalar>`]mul_assign()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulAssignScalar.mul_assign"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<&Scalar>#[EdwardsPoint][`MulAssign<&'b/Scalar>`]mul_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign"
     },
     {
       "confidence": "exact",
@@ -509,12 +395,6 @@
       "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<EdwardsPoint>#[EdwardsPoint]mul_by_pow_2()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.edwards.EdwardsPoint.mul_by_pow_2"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/edwards/&EdwardsPoint#impl<EdwardsPoint>#[EdwardsPoint]mul_by_pow_2()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.mul_by_pow_2_loop"
     },
     {
       "confidence": "exact",
@@ -551,12 +431,6 @@
       "from": "probe:curve25519-dalek/4.1.3/edwards/&Scalar#impl<&EdwardsPoint>#[`&'a/Scalar`][`Mul<&'b/EdwardsPoint>`]mul()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulScalarEdwardsPoint.mul"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/edwards/&Scalar#impl<&EdwardsPoint>#[`&'a/Scalar`][`Mul<&'b/EdwardsPoint>`]mul()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.edwards.EdwardsPoint.Insts.CoreOpsArithMulSharedBScalarEdwardsPoint.mul"
     },
     {
       "confidence": "exact",
@@ -692,12 +566,6 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/montgomery/&MontgomeryPoint#impl<&Scalar>#[MontgomeryPoint][`MulAssign<&Scalar>`]mul_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulAssignShared0Scalar.mul_assign"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/montgomery/&MontgomeryPoint#impl<[u8;/{const}]>#[MontgomeryPoint]as_bytes()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.as_bytes"
@@ -725,12 +593,6 @@
       "from": "probe:curve25519-dalek/4.1.3/montgomery/&Scalar#impl<&MontgomeryPoint>#[`&Scalar`][`Mul<&MontgomeryPoint>`]mul()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulScalarMontgomeryPoint.mul"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/montgomery/&Scalar#impl<&MontgomeryPoint>#[`&Scalar`][`Mul<&MontgomeryPoint>`]mul()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.montgomery.MontgomeryPoint.Insts.CoreOpsArithMulSharedBScalarMontgomeryPoint.mul"
     },
     {
       "confidence": "exact",
@@ -812,12 +674,6 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[RistrettoPoint][`AddAssign<&'b/RistrettoPoint>`]add_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithAddAssignShared0RistrettoPoint.add_assign"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[RistrettoPoint][`PartialEq<Self>`]eq()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.ristretto.CompressedRistretto.Insts.CoreCmpPartialEqCompressedRistretto.eq"
@@ -830,21 +686,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[RistrettoPoint][`SubAssign<&'b/RistrettoPoint>`]sub_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithSubAssignShared0RistrettoPoint.sub_assign"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[`&'a/RistrettoPoint`][`Add<&'b/RistrettoPoint>`]add()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.Shared0RistrettoPoint.Insts.CoreOpsArithAddSharedARistrettoPointRistrettoPoint.add"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[`&'a/RistrettoPoint`][`Add<&'b/RistrettoPoint>`]add()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithAddRistrettoPointRistrettoPoint.add"
     },
     {
       "confidence": "exact",
@@ -854,21 +698,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&RistrettoPoint>#[`&'a/RistrettoPoint`][`Sub<&'b/RistrettoPoint>`]sub()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithSubRistrettoPointRistrettoPoint.sub"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&Scalar>#[RistrettoPoint][`MulAssign<&'b/Scalar>`]mul_assign()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithMulAssignScalar.mul_assign"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/ristretto/&RistrettoPoint#impl<&Scalar>#[RistrettoPoint][`MulAssign<&'b/Scalar>`]mul_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.ristretto.RistrettoPoint.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign"
     },
     {
       "confidence": "exact",
@@ -887,12 +719,6 @@
       "from": "probe:curve25519-dalek/4.1.3/ristretto/&Scalar#impl<&RistrettoPoint>#[`&'a/Scalar`][`Mul<&'b/RistrettoPoint>`]mul()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.Shared0RistrettoPoint.Insts.CoreOpsArithMulSharedAScalarRistrettoPoint.mul"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/ristretto/&Scalar#impl<&RistrettoPoint>#[`&'a/Scalar`][`Mul<&'b/RistrettoPoint>`]mul()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.SharedARistrettoPoint.Insts.CoreOpsArithMulScalarRistrettoPoint.mul"
     },
     {
       "confidence": "exact",
@@ -956,21 +782,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`AddAssign<&'b/Scalar>`]add_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithAddAssignSharedAScalar.add_assign"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`MulAssign<&'b/Scalar>`]mul_assign()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithMulAssignScalar.mul_assign"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`MulAssign<&'b/Scalar>`]mul_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithMulAssignSharedAScalar.mul_assign"
     },
     {
       "confidence": "exact",
@@ -980,21 +794,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[Scalar][`SubAssign<&'b/Scalar>`]sub_assign()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreOpsArithSubAssignSharedAScalar.sub_assign"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[`&'a/Scalar`][`Add<&'b/Scalar>`]add()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.Shared0Scalar.Insts.CoreOpsArithAddSharedAScalarScalar.add"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[`&'a/Scalar`][`Add<&'b/Scalar>`]add()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithAddScalarScalar.add"
     },
     {
       "confidence": "exact",
@@ -1004,21 +806,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[`&'a/Scalar`][`Mul<&'b/Scalar>`]mul()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithMulScalarScalar.mul"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[`&'a/Scalar`][`Sub<&'b/Scalar>`]sub()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.Shared0Scalar.Insts.CoreOpsArithSubSharedAScalarScalar.sub"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<&Scalar>#[`&'a/Scalar`][`Sub<&'b/Scalar>`]sub()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.SharedAScalar.Insts.CoreOpsArithSubScalarScalar.sub"
     },
     {
       "confidence": "exact",
@@ -1052,45 +842,15 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]as_radix_16()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_16_loop0"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]as_radix_16()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_16_loop1"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]as_radix_2w()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_2w"
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]as_radix_2w()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.as_radix_2w_loop"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]non_adjacent_form()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.scalar.Scalar.non_adjacent_form"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]non_adjacent_form()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.non_adjacent_form_loop"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/&Scalar#impl<[i8;/{const}]>#[Scalar]non_adjacent_form()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.non_adjacent_form_loop.mutual"
     },
     {
       "confidence": "exact",
@@ -1142,39 +902,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<&Self>#[Scalar][ConditionallySelectable]conditional_select()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.SubtleConditionallySelectable.conditional_select_loop"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/scalar/impl<&[Scalar]>#[Scalar]batch_invert()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.scalar.Scalar.batch_invert"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<&[Scalar]>#[Scalar]batch_invert()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop0"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<&[Scalar]>#[Scalar]batch_invert()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop0.mutual"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<&[Scalar]>#[Scalar]batch_invert()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop1"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<&[Scalar]>#[Scalar]batch_invert()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop1.mutual"
     },
     {
       "confidence": "exact",
@@ -1202,30 +932,6 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<u8>#[Scalar][`From<u8>`]from()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU16.from"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<u8>#[Scalar][`From<u8>`]from()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU32.from"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<u8>#[Scalar][`From<u8>`]from()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU64.from"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/impl<u8>#[Scalar][`From<u8>`]from()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.Scalar.Insts.CoreConvertFromU8.from"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/scalar/impl<usize>#[Scalar]to_radix_2w_size_hint()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.scalar.Scalar.to_radix_2w_size_hint"
@@ -1235,12 +941,6 @@
       "from": "probe:curve25519-dalek/4.1.3/scalar/read_le_u64_into()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.scalar.read_le_u64_into"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/scalar/read_le_u64_into()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.scalar.read_le_u64_into_loop"
     },
     {
       "confidence": "exact",
@@ -1268,21 +968,9 @@
     },
     {
       "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/window/&NafLookupTable8<T>#impl<usize>#[`NafLookupTable8<T>`]select()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.window.LookupTable.select_loop"
-    },
-    {
-      "confidence": "exact",
       "from": "probe:curve25519-dalek/4.1.3/window/impl<&EdwardsPoint>#[`NafLookupTable8<ProjectiveNielsPoint>`][`From<&'a/EdwardsPoint>`]from()",
       "method": "rust-qualified-name",
       "to": "probe:curve25519_dalek.window.LookupTableProjectiveNielsPoint.Insts.CoreConvertFromSharedAEdwardsPoint.from"
-    },
-    {
-      "confidence": "exact",
-      "from": "probe:curve25519-dalek/4.1.3/window/impl<&EdwardsPoint>#[`NafLookupTable8<ProjectiveNielsPoint>`][`From<&'a/EdwardsPoint>`]from()",
-      "method": "rust-qualified-name",
-      "to": "probe:curve25519_dalek.window.LookupTableProjectiveNielsPoint.Insts.CoreConvertFromSharedAEdwardsPoint.from_loop"
     }
   ],
   "schema": "probe/translations",
@@ -1299,7 +987,7 @@
       "schema": "probe-lean/extract"
     }
   },
-  "timestamp": "2026-03-13T20:54:00Z",
+  "timestamp": "2026-03-16T11:59:56Z",
   "tool": {
     "command": "translate",
     "name": "probe-aeneas",

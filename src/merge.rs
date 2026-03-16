@@ -135,26 +135,15 @@ fn run_translate(
     println!("\nGenerating translations...");
     let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
 
-    println!(
-        "  {} translations generated ({} unique Rust atoms, {} Lean targets)",
-        mappings.len(),
-        stats.matched_rust_unique,
-        stats.matched_lean_unique,
-    );
+    println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {
         println!("    {conf}: {count}");
     }
 
-    // from_to keeps only the primary (first) Lean target per Rust atom since
-    // the probe crate's merge_atom_maps expects HashMap<String, String>.
-    // to_from naturally handles 1:many because each Lean atom maps to exactly
-    // one Rust atom, so all reverse mappings fit in a HashMap.
     let mut from_to = HashMap::new();
     let mut to_from = HashMap::new();
     for m in &mappings {
-        from_to
-            .entry(m.from.clone())
-            .or_insert_with(|| m.to.clone());
+        from_to.insert(m.from.clone(), m.to.clone());
         to_from.insert(m.to.clone(), m.from.clone());
     }
 
@@ -177,7 +166,39 @@ fn run_merge_with_translations(
         lean_atoms.len()
     );
 
-    let (merged, stats) = merge_atom_maps(vec![rust_atoms, lean_atoms], Some(translations));
+    let (mut merged, stats) = merge_atom_maps(vec![rust_atoms, lean_atoms], Some(translations));
+
+    let (from_to, _) = translations;
+    let enrichments: Vec<_> = from_to
+        .iter()
+        .filter_map(|(rust_name, lean_name)| {
+            merged.get(lean_name).map(|lean_atom| {
+                (
+                    rust_name.clone(),
+                    lean_name.clone(),
+                    lean_atom.code_path.clone(),
+                    lean_atom.code_text.lines_start,
+                    lean_atom.code_text.lines_end,
+                )
+            })
+        })
+        .collect();
+
+    for (rust_name, lean_name, path, start, end) in enrichments {
+        if let Some(atom) = merged.get_mut(&rust_name) {
+            atom.extensions
+                .insert("translation-name".to_string(), serde_json::json!(lean_name));
+            atom.extensions
+                .insert("translation-path".to_string(), serde_json::json!(path));
+            atom.extensions.insert(
+                "translation-text".to_string(),
+                serde_json::json!({
+                    "lines-start": start,
+                    "lines-end": end,
+                }),
+            );
+        }
+    }
 
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
@@ -234,12 +255,7 @@ pub fn run_translate_only(
     println!("\nGenerating translations...");
     let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
 
-    println!(
-        "  {} translations generated ({} unique Rust atoms, {} Lean targets)",
-        mappings.len(),
-        stats.matched_rust_unique,
-        stats.matched_lean_unique,
-    );
+    println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {
         println!("    {conf}: {count}");
     }

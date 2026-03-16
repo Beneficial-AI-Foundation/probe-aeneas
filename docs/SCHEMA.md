@@ -114,13 +114,38 @@ atom format follows the shared `probe` atom schema:
 | `kind` | string | yes | Declaration kind (`"exec"` for Rust, `"def"` for Lean) |
 | `language` | string | yes | `"rust"` or `"lean"` |
 | `rust-qualified-name` | string | no | Rust-qualified path (Rust atoms only, when available) |
+| `translation-name` | string | no | Code-name of the primary Lean translation (Rust atoms only, when translation exists) |
+| `translation-path` | string | no | Relative source file path of the Lean translation |
+| `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
+
+### Translation Metadata
+
+When a Rust atom has a matching Lean translation, the merged output enriches
+the Rust atom with explicit translation metadata:
+
+```json
+{
+  "probe:curve25519-dalek/4.1.3/.../add_assign()": {
+    "display-name": "impl::add_assign",
+    "language": "rust",
+    "translation-name": "probe:curve25519_dalek...add_assign",
+    "translation-path": "Curve25519Dalek/Funs.lean",
+    "translation-text": { "lines-start": 446, "lines-end": 456 },
+    ...
+  }
+}
+```
+
+Each Rust function maps to exactly one primary Lean definition (1-to-1).
+Aeneas loop decompositions (e.g. `add_assign_loop`, `add_assign_loop.mutual`)
+are reachable via the Lean definition's own dependency graph, not listed as
+separate translations.
 
 ### Cross-Language Edges
 
-When a Rust atom has a matching Lean translation, the Lean code-name is added
-to the Rust atom's `dependencies` array. Similarly, the Rust code-name is
-added to the Lean atom's `dependencies`. This creates bidirectional
-cross-language edges in the merged graph.
+In addition to the translation metadata fields above, the Lean code-name is
+added to the Rust atom's `dependencies` array and vice versa. This creates
+bidirectional cross-language edges in the merged graph.
 
 ### External Stubs
 
@@ -209,9 +234,9 @@ entries with:
 
 ### Strategy Priority
 
-Strategies are applied in order. Once an atom is matched by an earlier
-strategy, it is excluded from later strategies. This prevents duplicate
-mappings.
+Strategies are applied in order. Once a Rust atom or Lean atom is matched by
+an earlier strategy, it is excluded from later strategies. Each Rust function
+maps to exactly one Lean definition (1-to-1).
 
 ---
 
