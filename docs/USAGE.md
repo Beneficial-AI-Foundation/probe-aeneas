@@ -35,7 +35,7 @@ Exactly one of `--lean` or `--lean-project` is required.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--functions <PATH>` | | Path to `functions.json` (Aeneas name mapping). Auto-generated when `--lean-project` is given. Required when using `--lean`. |
-| `--output <PATH>` | `-o` | Output file path. Default: `merged_atoms.json`. |
+| `--output <PATH>` | `-o` | Output file path. Default: `aeneas_{package}_{version}.json` derived from the Rust input. |
 
 ### Examples
 

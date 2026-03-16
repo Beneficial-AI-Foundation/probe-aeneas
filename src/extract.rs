@@ -22,7 +22,7 @@ pub fn run_extract(
     lean_json: Option<&Path>,
     lean_project: Option<&Path>,
     functions_json: Option<&Path>,
-    output_path: &Path,
+    output_path: Option<&Path>,
 ) -> Result<(), String> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
@@ -151,14 +151,26 @@ fn run_translate(
 }
 
 /// Merge atoms with pre-computed translations and produce the final output.
+///
+/// When `output_path` is `None`, derives `aeneas_{package}_{version}.json`
+/// from the Rust input's envelope metadata.
 fn run_extract_with_translations(
     rust_path: &Path,
     lean_path: &Path,
     translations: &TranslationMaps,
-    output_path: &Path,
+    output_path: Option<&Path>,
 ) -> Result<(), String> {
     let (rust_atoms, rust_prov) = probe::types::load_atom_file(rust_path)?;
     let (lean_atoms, lean_prov) = probe::types::load_atom_file(lean_path)?;
+
+    let output_path_buf;
+    let output_path = match output_path {
+        Some(p) => p,
+        None => {
+            output_path_buf = default_output_path(&rust_prov);
+            &output_path_buf
+        }
+    };
 
     println!(
         "\nMerging {} + {} atoms with translations...",
@@ -231,6 +243,21 @@ fn run_extract_with_translations(
     println!("  Cross-lang edges: {}", stats.translations_applied);
 
     Ok(())
+}
+
+/// Derive `aeneas_{package}_{version}.json` from Rust input provenance.
+fn default_output_path(rust_prov: &[InputProvenance]) -> PathBuf {
+    let (pkg, ver) = rust_prov
+        .first()
+        .map(|p| (p.source.package.as_str(), p.source.package_version.as_str()))
+        .unwrap_or(("unknown", "0.0.0"));
+
+    let name = if ver.is_empty() {
+        format!("aeneas_{pkg}.json")
+    } else {
+        format!("aeneas_{pkg}_{ver}.json")
+    };
+    PathBuf::from(name)
 }
 
 /// Public entry point for the `translate` subcommand (translations only, no merge).

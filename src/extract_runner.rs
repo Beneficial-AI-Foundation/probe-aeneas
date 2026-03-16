@@ -7,7 +7,7 @@ const PROBE_LEAN_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-
 /// Run `probe-rust extract` on a project and return the path to the generated JSON.
 pub fn run_probe_rust_extract(project: &Path) -> Result<PathBuf, String> {
     let bin = find_or_install_probe_rust()?;
-    let output = tempfile("probe_rust_atoms", ".json");
+    let output = tempfile("probe_rust", ".json");
 
     println!("Running probe-rust extract on {}...", project.display());
     let status = Command::new(&bin)
@@ -43,7 +43,7 @@ pub fn run_probe_rust_extract(project: &Path) -> Result<PathBuf, String> {
 /// Run `probe-lean extract` on a project and return the path to the generated JSON.
 pub fn run_probe_lean_extract(project: &Path) -> Result<PathBuf, String> {
     let bin = find_or_install_probe_lean()?;
-    let output = tempfile("probe_lean_atoms", ".json");
+    let output = tempfile("probe_lean", ".json");
 
     println!("Running probe-lean extract on {}...", project.display());
     let status = Command::new(&bin)

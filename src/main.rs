@@ -47,8 +47,9 @@ enum Commands {
         functions: Option<PathBuf>,
 
         /// Output path for the merged atoms JSON.
-        #[arg(short, long, default_value = "merged_atoms.json")]
-        output: PathBuf,
+        /// Defaults to aeneas_{package}_{version}.json based on the Rust input.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 
     /// Generate a translations file mapping Rust code-names to Lean code-names.
@@ -99,7 +100,7 @@ fn main() {
             lean.as_deref(),
             lean_project.as_deref(),
             functions.as_deref(),
-            &output,
+            output.as_deref(),
         ),
 
         Commands::Translate {

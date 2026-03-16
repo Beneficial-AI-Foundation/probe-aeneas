@@ -2,7 +2,7 @@
 
 Date: 2026-03-16
 
-This document validates that `examples/merged_rust_lean_atoms.json` accurately
+This document validates that `examples/aeneas_curve25519-dalek_4.1.3.json` accurately
 reflects the source code in:
 - **Rust**: `/home/lacra/git_repos/curve25519-dalek/curve25519-dalek` (v4.1.3)
 - **Lean**: `/home/lacra/git_repos/baif/curve25519-dalek-lean-verify` (Curve25519Dalek v0.1.0)

@@ -1,6 +1,6 @@
 # probe-aeneas
 
-Cross-language merge tool for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled
+Cross-language extract tool for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled
 projects. Bridges the gap between `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms)
 by generating translation mappings and producing a combined call graph with cross-language
 dependency edges.
@@ -11,11 +11,11 @@ dependency edges.
 # Install from source
 cargo install --git https://github.com/Beneficial-AI-Foundation/probe-aeneas
 
-# Merge Rust and Lean call graphs (fully automated)
-probe-aeneas merge \
+# Extract merged Rust + Lean call graph (fully automated)
+# Produces aeneas_{package}_{version}.json by default
+probe-aeneas extract \
   --rust-project path/to/rust/project \
-  --lean-project path/to/lean/project \
-  --output merged.json
+  --lean-project path/to/lean/project
 ```
 
 ## Installation
@@ -38,14 +38,14 @@ cargo install --path .
 
 | Command | Description |
 |---------|-------------|
-| `merge` | Full pipeline: extract atoms (if needed), generate translations, merge Rust + Lean call graphs |
+| `extract` | Full pipeline: extract atoms (if needed), generate translations, merge Rust + Lean call graphs |
 | `translate` | Generate Rust ↔ Lean translation mappings from pre-generated atom files |
 | `listfuns` | Run `lake exe listfuns` in a Lean project to produce `functions.json` |
 
-### `merge`
+### `extract`
 
 ```bash
-probe-aeneas merge [OPTIONS]
+probe-aeneas extract [OPTIONS]
 ```
 
 | Option | Description |
@@ -55,7 +55,7 @@ probe-aeneas merge [OPTIONS]
 | `--lean <PATH>` | Path to pre-generated Lean atoms JSON |
 | `--lean-project <PATH>` | Path to a Lean project directory (runs `probe-lean extract` automatically) |
 | `--functions <PATH>` | Path to `functions.json` (auto-generated when `--lean-project` is given) |
-| `-o, --output <PATH>` | Output file path (default: `merged_atoms.json`) |
+| `-o, --output <PATH>` | Output file path (default: `aeneas_{package}_{version}.json` from Rust input) |
 
 ### `translate`
 
