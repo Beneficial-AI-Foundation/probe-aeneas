@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use probe::commands::merge::merge_atom_maps;
-use probe::types::{InputProvenance, MergedAtomEnvelope, Tool};
+use probe::commands::merge::merge_atom_files;
+use probe::types::{Atom, InputProvenance, MergedAtomEnvelope, Tool};
 
 use crate::extract_runner;
 use crate::listfuns::run_listfuns;
@@ -43,6 +43,8 @@ pub fn run_extract(
     }
 
     // --- Resolve inputs (extract if needed) ---
+    // When both --lean and --lean-project are given, skip Lean extraction
+    // (use the pre-computed JSON) but keep the project dir for listfuns.
     let (rust_path, lean_path) = resolve_inputs(rust_json, rust_project, lean_json, lean_project)?;
 
     // --- Resolve functions.json ---
@@ -71,6 +73,8 @@ fn resolve_inputs(
     lean_project: Option<&Path>,
 ) -> Result<(PathBuf, PathBuf), String> {
     let need_rust_extract = rust_json.is_none();
+    // When --lean is given (pre-computed JSON), skip Lean extraction even if
+    // --lean-project is also present.
     let need_lean_extract = lean_json.is_none();
 
     if need_rust_extract && need_lean_extract {
@@ -163,6 +167,11 @@ fn run_translate(
 
 /// Merge atoms with pre-computed translations and produce the final output.
 ///
+/// The pipeline has three clearly separated phases:
+/// 1. **Merge** — generic `probe merge` operation via `merge_atom_files`.
+/// 2. **Enrich** — Aeneas-specific metadata (`translation-*`, `is-disabled`).
+/// 3. **Write** — envelope construction and output.
+///
 /// When `output_path` is `None`, derives `aeneas_{package}_{version}.json`
 /// from the Rust input's envelope metadata.
 fn run_extract_with_translations(
@@ -172,27 +181,39 @@ fn run_extract_with_translations(
     funs_rust_names: &HashSet<String>,
     output_path: Option<&Path>,
 ) -> Result<(), String> {
-    let (rust_atoms, rust_prov) = probe::types::load_atom_file(rust_path)?;
-    let (lean_atoms, lean_prov) = probe::types::load_atom_file(lean_path)?;
+    // Phase 1: Merge (generic probe operation)
+    println!("\nMerging atoms with translations...");
+    let (mut merged, provenance, stats) =
+        merge_atom_files(&[rust_path, lean_path], Some(translations))?;
 
     let output_path_buf;
     let output_path = match output_path {
         Some(p) => p,
         None => {
-            output_path_buf = default_output_path(&rust_prov);
+            output_path_buf = default_output_path(&provenance);
             &output_path_buf
         }
     };
 
-    println!(
-        "\nMerging {} + {} atoms with translations...",
-        rust_atoms.len(),
-        lean_atoms.len()
-    );
+    // Phase 2: Enrich (Aeneas-specific)
+    enrich_with_aeneas_metadata(&mut merged, &translations.0, funs_rust_names);
 
-    let (mut merged, stats) = merge_atom_maps(vec![rust_atoms, lean_atoms], Some(translations));
+    // Phase 3: Write envelope
+    write_aeneas_envelope(merged, provenance, output_path, &stats)
+}
 
-    let (from_to, _) = translations;
+/// Add Aeneas-specific metadata to merged atoms.
+///
+/// Two enrichment passes:
+/// 1. For each Rust atom with a Lean translation, set `translation-name`,
+///    `translation-path`, and `translation-text` from the Lean atom.
+/// 2. For every Rust atom, set `is-disabled` based on whether its
+///    `rust-qualified-name` appears in `functions.json`.
+fn enrich_with_aeneas_metadata(
+    merged: &mut std::collections::BTreeMap<String, Atom>,
+    from_to: &HashMap<String, String>,
+    funs_rust_names: &HashSet<String>,
+) {
     let enrichments: Vec<_> = from_to
         .iter()
         .filter_map(|(rust_name, lean_name)| {
@@ -235,12 +256,16 @@ fn run_extract_with_translations(
                 .insert("is-disabled".to_string(), serde_json::json!(!in_functions));
         }
     }
+}
 
+/// Construct and write the Aeneas extract envelope.
+fn write_aeneas_envelope(
+    merged: std::collections::BTreeMap<String, Atom>,
+    provenance: Vec<InputProvenance>,
+    output_path: &Path,
+    stats: &probe::commands::merge::MergeStats,
+) -> Result<(), String> {
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-
-    let mut all_prov: Vec<InputProvenance> = Vec::new();
-    all_prov.extend(rust_prov);
-    all_prov.extend(lean_prov);
 
     let envelope = MergedAtomEnvelope {
         schema: "probe-aeneas/extract".to_string(),
@@ -250,7 +275,7 @@ fn run_extract_with_translations(
             version: env!("CARGO_PKG_VERSION").to_string(),
             command: "extract".to_string(),
         },
-        inputs: all_prov,
+        inputs: provenance,
         timestamp,
         data: merged,
     };

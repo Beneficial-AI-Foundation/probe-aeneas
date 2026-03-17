@@ -34,11 +34,14 @@ enum Commands {
         rust_project: Option<PathBuf>,
 
         /// Path to pre-generated Lean atoms JSON (from probe-lean extract).
-        #[arg(long, group = "lean_input")]
+        /// Can be combined with --lean-project to use pre-computed atoms
+        /// while auto-generating functions.json from the project directory.
+        #[arg(long)]
         lean: Option<PathBuf>,
 
-        /// Path to a Lean project directory (runs probe-lean extract automatically).
-        #[arg(long, group = "lean_input")]
+        /// Path to a Lean project directory (runs probe-lean extract automatically,
+        /// or provides functions.json generation when combined with --lean).
+        #[arg(long)]
         lean_project: Option<PathBuf>,
 
         /// Path to functions.json (Aeneas name mapping).
