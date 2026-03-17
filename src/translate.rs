@@ -83,10 +83,22 @@ pub fn generate_translations(
     (mappings, stats)
 }
 
+/// Build a set of normalized Rust qualified names from `functions.json` entries.
+///
+/// Used to determine which Rust atoms Aeneas processed (`is-disabled: false`).
+pub fn build_functions_rust_names(functions: &[FunctionRecord]) -> HashSet<String> {
+    functions
+        .iter()
+        .filter_map(|f| f.rust_name.as_deref())
+        .filter(|rn| !rn.is_empty())
+        .map(normalize_rust_name)
+        .collect()
+}
+
 /// Normalize a Rust qualified name for fuzzy matching.
 ///
 /// Strips lifetime parameters, reference markers, brace wrappers, and generics.
-fn normalize_rust_name(name: &str) -> String {
+pub(crate) fn normalize_rust_name(name: &str) -> String {
     let re_ref = Regex::new(r"&'?\w*\s*").unwrap();
     let re_brace = Regex::new(r"\{([^}]+)\}").unwrap();
     let re_generic = Regex::new(r"<[^>]*>").unwrap();
@@ -635,5 +647,18 @@ mod tests {
             "same Lean atom should not be claimed by two Rust atoms"
         );
         assert_eq!(mappings[0].from, "probe:crate/1.0/foo()");
+    }
+
+    #[test]
+    fn test_build_functions_rust_names() {
+        let funcs = vec![
+            make_func("a.b.foo", Some("my_crate::foo"), "src/lib.rs", "L1-L10"),
+            make_func("a.b.bar", Some("my_crate::bar"), "src/lib.rs", "L20-L30"),
+            make_func("a.b.baz", None, "src/lib.rs", "L40-L50"),
+        ];
+        let names = build_functions_rust_names(&funcs);
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&normalize_rust_name("my_crate::foo")));
+        assert!(names.contains(&normalize_rust_name("my_crate::bar")));
     }
 }

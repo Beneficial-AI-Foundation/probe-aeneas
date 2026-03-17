@@ -61,7 +61,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 2. `file+display-name` -- same source file path + matching base method name (unambiguous only)
 3. `file+line-overlap` -- same source file + overlapping line ranges (best overlap wins)
 
-**Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation.
+**Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `is-disabled` (`false` when the function's `rust-qualified-name` appears in `functions.json`, `true` otherwise).
 
 **Parallel Extraction**: When both `--rust-project` and `--lean-project` are given, `probe-rust extract` and `probe-lean extract` run in parallel via scoped threads.
 

@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.0
-Date: 2026-03-16
+Version: 2.1
+Date: 2026-03-17
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -117,6 +117,7 @@ extension fields passed through verbatim.
     "kind": "exec",
     "language": "rust",
     "rust-qualified-name": "curve25519_dalek::scalar::Scalar::from_bytes_mod_order",
+    "is-disabled": false,
     "translation-name": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
     "translation-path": "Curve25519Dalek/Funs.lean",
     "translation-text": { "lines-start": 7089, "lines-end": 7098 }
@@ -187,6 +188,7 @@ translation partner.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
+| `is-disabled` | bool | yes | `false` if the function's `rust-qualified-name` appears as a `rust_name` in `functions.json`; `true` otherwise. Indicates whether Aeneas processed this function. |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
@@ -220,6 +222,7 @@ the Rust atom with explicit translation metadata:
   "probe:curve25519-dalek/4.1.3/.../add_assign()": {
     "display-name": "impl::add_assign",
     "language": "rust",
+    "is-disabled": false,
     "translation-name": "probe:curve25519_dalek...add_assign",
     "translation-path": "Curve25519Dalek/Funs.lean",
     "translation-text": { "lines-start": 446, "lines-end": 456 },

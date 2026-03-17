@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+- `is-disabled` field on all Rust atoms in merged output. `false` when the function's `rust-qualified-name` appears as a `rust_name` in `functions.json` (i.e. Aeneas processed it); `true` otherwise. Schema version bumped to 2.1.
+
 ## [0.1.0] - 2026-03-13
 
 Initial release.

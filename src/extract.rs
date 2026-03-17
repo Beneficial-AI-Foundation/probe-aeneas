@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use probe::commands::merge::merge_atom_maps;
@@ -7,7 +7,8 @@ use probe::types::{InputProvenance, MergedAtomEnvelope, Tool};
 use crate::extract_runner;
 use crate::listfuns::run_listfuns;
 use crate::translate::{
-    build_translations_json, generate_translations, load_atoms, load_functions,
+    build_functions_rust_names, build_translations_json, generate_translations, load_atoms,
+    load_functions, normalize_rust_name,
 };
 
 type TranslationMaps = (HashMap<String, String>, HashMap<String, String>);
@@ -48,10 +49,17 @@ pub fn run_extract(
     let functions_path = resolve_functions(functions_json, lean_project)?;
 
     // --- Generate translations ---
-    let translations_result = run_translate(&rust_path, &lean_path, &functions_path)?;
+    let (translations_result, funs_rust_names) =
+        run_translate(&rust_path, &lean_path, &functions_path)?;
 
     // --- Merge atom maps ---
-    run_extract_with_translations(&rust_path, &lean_path, &translations_result, output_path)
+    run_extract_with_translations(
+        &rust_path,
+        &lean_path,
+        &translations_result,
+        &funs_rust_names,
+        output_path,
+    )
 }
 
 /// Resolve Rust and Lean inputs, running extractors in parallel when both are
@@ -114,12 +122,13 @@ fn resolve_functions(
     Ok(functions_path)
 }
 
-/// Run the translate step, returning bidirectional maps.
+/// Run the translate step, returning bidirectional maps and the set of
+/// normalized Rust names found in `functions.json`.
 fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
     functions_path: &Path,
-) -> Result<TranslationMaps, String> {
+) -> Result<(TranslationMaps, HashSet<String>), String> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)?;
     println!("  {} atoms", rust_data.len());
@@ -131,6 +140,8 @@ fn run_translate(
     println!("Loading functions from {}...", functions_path.display());
     let functions = load_functions(functions_path)?;
     println!("  {} entries", functions.len());
+
+    let funs_rust_names = build_functions_rust_names(&functions);
 
     println!("\nGenerating translations...");
     let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
@@ -147,7 +158,7 @@ fn run_translate(
         to_from.insert(m.to.clone(), m.from.clone());
     }
 
-    Ok((from_to, to_from))
+    Ok(((from_to, to_from), funs_rust_names))
 }
 
 /// Merge atoms with pre-computed translations and produce the final output.
@@ -158,6 +169,7 @@ fn run_extract_with_translations(
     rust_path: &Path,
     lean_path: &Path,
     translations: &TranslationMaps,
+    funs_rust_names: &HashSet<String>,
     output_path: Option<&Path>,
 ) -> Result<(), String> {
     let (rust_atoms, rust_prov) = probe::types::load_atom_file(rust_path)?;
@@ -209,6 +221,18 @@ fn run_extract_with_translations(
                     "lines-end": end,
                 }),
             );
+        }
+    }
+
+    for atom in merged.values_mut() {
+        if atom.language == "rust" {
+            let in_functions = atom
+                .extensions
+                .get("rust-qualified-name")
+                .and_then(|v| v.as_str())
+                .is_some_and(|rqn| funs_rust_names.contains(&normalize_rust_name(rqn)));
+            atom.extensions
+                .insert("is-disabled".to_string(), serde_json::json!(!in_functions));
         }
     }
 
