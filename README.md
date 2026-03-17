@@ -18,6 +18,9 @@ probe-aeneas extract \
   --lean-project path/to/lean/project
 ```
 
+> **Note:** The `extract` command requires both the Rust and Lean toolchains.
+> See [Prerequisites](#prerequisites) below.
+
 ## Installation
 
 ### From source (recommended)
@@ -81,21 +84,31 @@ For the full command reference with all options, examples, and input modes, see 
 3. **Merge** -- combines Rust and Lean atom maps, adding cross-language dependency edges where translations exist.
 4. **Schema 2.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
+## Prerequisites
+
+probe-aeneas itself is a pure Rust binary, but the `extract` pipeline depends on
+two language toolchains to build and run the extractors:
+
+| Toolchain | Required for | Install guide |
+|-----------|-------------|---------------|
+| **Rust** (`cargo`) | Building probe-aeneas and `probe-rust` | [rustup.rs](https://rustup.rs/) |
+| **Lean 4** (`elan`, `lake`) | Building `probe-lean` and running `listfuns` | [elan](https://github.com/leanprover/elan#installation), [probe-lean README](https://github.com/Beneficial-AI-Foundation/probe-lean#readme) |
+
+The extractor tools (`probe-rust`, `probe-lean`) are auto-installed when you use
+`--rust-project` / `--lean-project` (see below), but the underlying language
+toolchains must already be present.
+
 ## Auto-Install
 
 When `--rust-project` or `--lean-project` is used, probe-aeneas automatically
-finds or installs the required tools:
+finds or installs the required extractor tools:
 
 - **probe-rust**: checked on PATH, then `~/.cargo/bin/`. If not found, installed via
   `cargo install --git https://github.com/Beneficial-AI-Foundation/probe-rust.git`.
+  Requires `cargo`.
 - **probe-lean**: checked on PATH, then `~/.local/bin/`. If not found, cloned and built
   with `lake build`, then copied to `~/.local/bin/probe-lean`.
-
-## Prerequisites
-
-- **Rust toolchain** (`cargo`) for building/installing `probe-rust`
-- **Lean 4 toolchain** (`elan`, `lake`) for building/installing `probe-lean` and running `listfuns`
-- `probe-rust` and `probe-lean` are auto-installed when using `--rust-project` / `--lean-project`
+  Requires `elan`/`lake`.
 
 ## License
 
