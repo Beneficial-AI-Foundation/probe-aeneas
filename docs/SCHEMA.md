@@ -212,6 +212,36 @@ verbatim via the atom's extension map:
 | `is-extraction-artifact` | bool | yes | Whether the atom is an Aeneas extraction artifact |
 | `rust-source` | string or null | no | Rust source reference from Aeneas docstring |
 
+### `is-disabled` -- Aeneas Scope Indicator
+
+Every Rust atom in the merged output carries an `is-disabled` boolean that
+records whether the function was processed by Aeneas during transpilation.
+
+**Semantics:**
+- `is-disabled: false` -- Aeneas transpiled this Rust function into Lean.
+  The function's `rust-qualified-name` appears as a `rust_name` entry in the
+  project's `functions.json` (produced by `lake exe listfuns`).
+- `is-disabled: true` -- Aeneas did **not** process this function. It exists
+  in the Rust crate but has no corresponding Lean transpilation. This
+  typically means the function is out of scope for formal verification.
+
+**How it is computed:** During the `extract` merge step, probe-aeneas loads
+all `rust_name` values from `functions.json` and normalizes them (stripping
+leading `::` and collapsing whitespace). For each Rust atom, if its
+`rust-qualified-name` (after the same normalization) is found in that set,
+`is-disabled` is `false`; otherwise `true`.
+
+**Relationship to translation fields:** A function with `is-disabled: false`
+*may* still lack `translation-name`/`translation-path`/`translation-text` if
+the matching strategies could not resolve which specific Lean definition
+corresponds to it. Conversely, `is-disabled: true` functions will never have
+translation metadata, since they were never transpiled.
+
+**Consumer guidance:** Downstream tools can use `is-disabled` to partition the
+Rust call graph into "in scope for verification" (`false`) and "out of scope"
+(`true`). This is useful for computing verification coverage, filtering
+dependency trees, or highlighting functions that still need transpilation.
+
 ### Translation Metadata
 
 When a Rust atom has a matching Lean translation, the merged output enriches
