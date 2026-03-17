@@ -40,6 +40,7 @@ src/
 ├── listfuns.rs        # Runs `lake exe listfuns` in a Lean project
 └── types.rs           # FunctionRecord, FunctionsFile, LineRange for functions.json parsing
 docs/
+├── architecture.md    # How probe-aeneas relates to probe merge
 ├── SCHEMA.md          # JSON schema specification for all output formats
 ├── USAGE.md           # Full command reference with examples
 └── testing.md         # Manual testing notes
@@ -69,7 +70,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 **Schema 2.0 Metadata Envelope**: Merged output uses `probe-aeneas/extract` schema; translation output uses `probe/translations` schema. Both wrap payloads with tool info, source provenance, and timestamps.
 
-**Shared Types via `probe` Crate**: Core types (`Atom`, `TranslationMapping`, `MergedAtomEnvelope`, `merge_atom_maps`, `load_atom_file`) come from the shared `probe` crate.
+**Relationship to `probe merge`**: probe-aeneas's `extract` command is an instantiation of the generic `probe merge` engine for the Aeneas Rust-to-Lean case. It generates translations (Aeneas-specific), calls `merge_atom_maps` from `probe::commands::merge` for the generic combine + cross-language-edge step, then enriches the result with Aeneas-specific metadata (`translation-*`, `is-disabled`). See [docs/architecture.md](docs/architecture.md) for the full picture. Shared types (`Atom`, `TranslationMapping`, `MergedAtomEnvelope`, `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
 
 ### Key Types
 

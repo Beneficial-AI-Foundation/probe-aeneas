@@ -210,6 +210,8 @@ verbatim via the atom's extension map:
 | `is-ignored` | bool | yes | Whether the atom is explicitly ignored |
 | `is-hidden` | bool | yes | Whether the atom is hidden from default views |
 | `is-extraction-artifact` | bool | yes | Whether the atom is an Aeneas extraction artifact |
+| `is-primary-spec` | bool | no | Whether this atom is the primary spec for a function (present on spec theorems) |
+| `primary-spec` | string | no | Code-name of the primary spec theorem for this definition |
 | `rust-source` | string or null | no | Rust source reference from Aeneas docstring |
 
 ### `is-disabled` -- Aeneas Scope Indicator
@@ -435,7 +437,12 @@ similar Schema 2.0 envelope with `"lean"` language atoms.
 
 ### With probe (shared crate)
 
-The `probe` crate provides shared types (`Atom`, `TranslationMapping`,
-`MergedAtomEnvelope`, `InputProvenance`) and the `merge_atom_maps` function.
-probe-aeneas depends on these for consistent atom handling across the
-ecosystem.
+probe-aeneas is an instantiation of the generic `probe merge` engine for
+the Aeneas Rust-to-Lean case. The `extract` command generates
+Aeneas-specific translations, calls `merge_atom_maps` from
+`probe::commands::merge` for the combine + cross-language-edge step, then
+enriches the result with Aeneas metadata (`translation-*`, `is-disabled`).
+Shared types (`Atom`, `TranslationMapping`, `MergedAtomEnvelope`,
+`InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
+See [architecture.md](architecture.md) for the full architectural
+description.

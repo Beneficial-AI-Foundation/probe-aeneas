@@ -64,123 +64,40 @@ doesn't reflect what the code can actually produce.
 
 ---
 
-## 2. Lean atom example: wrong dependency ordering (minor)
+## 2. Lean atom example: wrong dependency ordering (DONE)
 
-**Location:** SCHEMA.md lines 133-136 (Lean atom example).
-
-**What the doc shows:**
-
-```json
-"dependencies": [
-  "probe:curve25519_dalek.scalar.Scalar.reduce",
-  "probe:curve25519-dalek/4.1.3/scalar/Scalar#from_bytes_mod_order()"
-],
-```
-
-**What the code produces:**
-
-`dependencies` is `BTreeSet<String>`, which serializes in lexicographic
-order. Since `-` (ASCII 45) < `_` (ASCII 95), the name starting with
-`probe:curve25519-dalek/...` must come **before**
-`probe:curve25519_dalek...`.
-
-**Fix:**
-
-Swap the two entries so they appear in correct sorted order.
+**Status:** Applied. Dependencies in the Lean atom example now appear in
+correct lexicographic order (`probe:curve25519-dalek/...` before
+`probe:curve25519_dalek...`).
 
 ---
 
-## 3. `TranslationMapping.method` optionality not documented (minor)
+## 3. `TranslationMapping.method` optionality not documented (DONE)
 
-**Location:** SCHEMA.md line 302 (TranslationMapping table).
-
-**What the doc says:**
-
-| Field | Type |
-|-------|------|
-| `method` | string |
-
-**What the shared type declares (`probe/src/types.rs` line 287-288):**
-
-```rust
-#[serde(skip_serializing_if = "Option::is_none")]
-pub method: Option<String>,
-```
-
-probe-aeneas always sets `method` to `Some(...)`, so output always
-includes the field. But the shared type permits it to be absent. Other
-consumers of `TranslationMapping` may omit it.
-
-**Fix:**
-
-Change type to `string or null` (or add a note: "Always present in
-probe-aeneas output; may be absent in other producers").
+**Status:** Applied. SCHEMA.md now documents `method` as `string or
+absent` with note: "Always present in probe-aeneas output; may be absent
+in other producers".
 
 ---
 
-## 4. Adopt tool-specific schema name `probe-aeneas/extract` (code + doc change)
+## 4. Adopt tool-specific schema name `probe-aeneas/extract` (DONE)
 
-**Location:** `src/extract.rs` line 222; SCHEMA.md section 1.
+**Status:** Applied. Schema is now `"probe-aeneas/extract"`.
 
-**Current state:**
+**Rationale:** probe-aeneas's `extract` command is an instantiation of
+`probe merge` (it calls `merge_atom_maps` for the generic
+combine + cross-language-edge step), but the output is semantically
+richer than a plain merge: it includes Aeneas-specific `translation-*`
+metadata and `is-disabled` flags added in a post-merge enrichment phase.
+The distinct schema name lets downstream consumers distinguish the two
+and apply appropriate validation.
 
-probe-aeneas produces `"schema": "probe/merged-atoms"` — the same generic
-schema identifier used by `probe merge`:
-
-| Producer | `tool.name` | `tool.command` | `schema` |
-|----------|-------------|----------------|----------|
-| `probe-aeneas extract` | `"probe-aeneas"` | `"extract"` | `"probe/merged-atoms"` |
-| `probe merge` | `"probe"` | `"merge"` | `"probe/merged-atoms"` |
-
-**Why this should change:**
-
-probe-aeneas `extract` has diverged from `probe merge`. It is no longer
-just a merge — it performs translation matching, adds cross-language
-dependency edges, and enriches Rust atoms with `translation-*` metadata.
-The output is semantically richer than what `probe merge` produces.
-
-Other tools in the ecosystem already use tool-specific schema names:
-
-| Tool | Schema |
-|------|--------|
-| probe-rust | `"probe-rust/extract"` |
-| probe-lean | `"probe-lean/extract"` |
-
-**Decision:** rename to `"probe-aeneas/extract"`.
-
-**Changes required:**
-
-1. `src/extract.rs` line 222: change `"probe/merged-atoms"` →
-   `"probe-aeneas/extract"`.
-2. `docs/SCHEMA.md`: update the schema identifier, section heading,
-   and all references.
-3. `probe` crate — `detect_category` in `probe/src/types.rs`
-   (lines 148-162): add `"probe-aeneas/extract"` as a recognized
-   atoms-category schema so that downstream `probe merge` and other
-   consumers can still load these files.
-4. Update CLAUDE.md and CHANGELOG.md references.
+See `docs/architecture.md` for the full description of how probe-aeneas
+relates to probe merge.
 
 ---
 
-## 5. `specs` field description slightly misleading (minor)
+## 5. `specs` field description slightly misleading (DONE)
 
-**Location:** SCHEMA.md line 191 (Lean-specific fields table).
-
-**What the doc says:**
-
-> `specs` | array of strings | no | Code-names of spec theorems (present
-> when `specified` is true)
-
-**What actual probe-lean output shows:**
-
-Atoms exist with `"specified": true` but no `specs` field at all (e.g.
-`probe:tacticExpand_With_` in
-`examples/lean_Curve25519Dalek_0.1.0.json` line 13). This is a
-passthrough from probe-lean, but since SCHEMA.md documents these fields
-it should be accurate.
-
-**Fix:**
-
-Change parenthetical to "may be present when `specified` is true" or
-drop the conditional note entirely, since the "no" in the Required column
-already communicates optionality.
+**Status:** Applied. SCHEMA.md now reads "may be present when
+`specified` is true".
