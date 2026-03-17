@@ -1,25 +1,22 @@
 # probe-aeneas
 
-Cross-language extract tool for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled
-projects. Bridges the gap between `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms)
-by generating translation mappings and producing a combined call graph with cross-language
-dependency edges.
+Cross-language extract tool for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects.
 
-## Quick Start
+`probe-aeneas` bridges `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms) by generating translation mappings and producing a combined call graph with cross-language dependency edges. Output follows the Schema 2.0 envelope format; see [docs/SCHEMA.md](docs/SCHEMA.md) for the full specification.
 
-```bash
-# Install from source
-cargo install --git https://github.com/Beneficial-AI-Foundation/probe-aeneas
+## Prerequisites
 
-# Extract merged Rust + Lean call graph (fully automated)
-# Produces aeneas_{package}_{version}.json by default
-probe-aeneas extract \
-  --rust-project path/to/rust/project \
-  --lean-project path/to/lean/project
-```
+probe-aeneas itself is a pure Rust binary, but the `extract` pipeline depends on
+two language toolchains to build and run the extractors:
 
-> **Note:** The `extract` command requires both the Rust and Lean toolchains.
-> See [Prerequisites](#prerequisites) below.
+| Toolchain | Required for | Install guide |
+|-----------|-------------|---------------|
+| **Rust** (`cargo`) | Building probe-aeneas and `probe-rust` | [rustup.rs](https://rustup.rs/) |
+| **Lean 4** (`elan`, `lake`) | Building `probe-lean` and running `listfuns` | [elan](https://github.com/leanprover/elan#installation), [probe-lean README](https://github.com/Beneficial-AI-Foundation/probe-lean#readme) |
+
+The extractor tools (`probe-rust`, `probe-lean`) are auto-installed when you use
+`--rust-project` / `--lean-project`, but the underlying language toolchains must
+already be present.
 
 ## Installation
 
@@ -36,6 +33,23 @@ git clone https://github.com/Beneficial-AI-Foundation/probe-aeneas
 cd probe-aeneas
 cargo install --path .
 ```
+
+## Quick Start
+
+```bash
+# Extract merged Rust + Lean call graph (fully automated)
+probe-aeneas extract \
+  --rust-project path/to/rust/project \
+  --lean-project path/to/lean/project
+
+# Or use pre-generated JSON files
+probe-aeneas extract \
+  --rust rust_atoms.json \
+  --lean lean_atoms.json \
+  --functions functions.json
+```
+
+Output lands in `aeneas_{package}_{version}.json` by default.
 
 ## Commands
 
@@ -60,19 +74,39 @@ probe-aeneas extract [OPTIONS]
 | `--functions <PATH>` | Path to `functions.json` (auto-generated when `--lean-project` is given) |
 | `-o, --output <PATH>` | Output file path (default: `aeneas_{package}_{version}.json` from Rust input) |
 
-### `translate`
-
-```bash
-probe-aeneas translate --rust <PATH> --lean <PATH> --functions <PATH> [-o <PATH>]
-```
-
-### `listfuns`
-
-```bash
-probe-aeneas listfuns --lean-project <PATH> [-o <PATH>]
-```
-
 For the full command reference with all options, examples, and input modes, see **[docs/USAGE.md](docs/USAGE.md)**. For the complete JSON schema specification, see **[docs/SCHEMA.md](docs/SCHEMA.md)**.
+
+## Example Output
+
+Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` describes a function from either language, with cross-language dependency edges:
+
+```json
+{
+  "schema": "probe-aeneas/extract",
+  "schema-version": "2.0",
+  "tool": { "name": "probe-aeneas", "version": "0.1.0", "command": "extract" },
+  "inputs": [
+    { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
+    { "schema": "probe-lean/extract", "package": "Curve25519Dalek", "package-version": "0.1.0" }
+  ],
+  "timestamp": "2026-03-17T12:00:00Z",
+  "data": {
+    "probe:curve25519-dalek/4.1.3/scalar/Scalar#add()": {
+      "display-name": "Scalar::add",
+      "dependencies": ["probe:Curve25519Dalek.Scalar.add"],
+      "code-module": "scalar",
+      "code-path": "src/scalar.rs",
+      "code-text": { "lines-start": 42, "lines-end": 67 },
+      "kind": "exec",
+      "language": "rust",
+      "translation-name": "probe:Curve25519Dalek.Scalar.add",
+      "translation-path": "Curve25519Dalek/Scalar.lean",
+      "translation-text": { "lines-start": 10, "lines-end": 25 },
+      "is-disabled": false
+    }
+  }
+}
+```
 
 ## How It Works
 
@@ -82,33 +116,8 @@ For the full command reference with all options, examples, and input modes, see 
    2. `file+display-name` -- same source file + matching base method name
    3. `file+line-overlap` -- same source file + overlapping line ranges
 3. **Merge** -- combines Rust and Lean atom maps, adding cross-language dependency edges where translations exist.
-4. **Schema 2.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
-
-## Prerequisites
-
-probe-aeneas itself is a pure Rust binary, but the `extract` pipeline depends on
-two language toolchains to build and run the extractors:
-
-| Toolchain | Required for | Install guide |
-|-----------|-------------|---------------|
-| **Rust** (`cargo`) | Building probe-aeneas and `probe-rust` | [rustup.rs](https://rustup.rs/) |
-| **Lean 4** (`elan`, `lake`) | Building `probe-lean` and running `listfuns` | [elan](https://github.com/leanprover/elan#installation), [probe-lean README](https://github.com/Beneficial-AI-Foundation/probe-lean#readme) |
-
-The extractor tools (`probe-rust`, `probe-lean`) are auto-installed when you use
-`--rust-project` / `--lean-project` (see below), but the underlying language
-toolchains must already be present.
-
-## Auto-Install
-
-When `--rust-project` or `--lean-project` is used, probe-aeneas automatically
-finds or installs the required extractor tools:
-
-- **probe-rust**: checked on PATH, then `~/.cargo/bin/`. If not found, installed via
-  `cargo install --git https://github.com/Beneficial-AI-Foundation/probe-rust.git`.
-  Requires `cargo`.
-- **probe-lean**: checked on PATH, then `~/.local/bin/`. If not found, cloned and built
-  with `lake build`, then copied to `~/.local/bin/probe-lean`.
-  Requires `elan`/`lake`.
+4. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `is-disabled` to Rust atoms.
+5. **Schema 2.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
 ## License
 
