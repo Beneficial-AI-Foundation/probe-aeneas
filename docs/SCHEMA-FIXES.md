@@ -143,7 +143,7 @@ Other tools in the ecosystem already use tool-specific schema names:
 
 | Tool | Schema |
 |------|--------|
-| probe-rust | `"probe-rust/atoms"` |
+| probe-rust | `"probe-rust/extract"` |
 | probe-lean | `"probe-lean/extract"` |
 
 **Decision:** rename to `"probe-aeneas/extract"`.

@@ -46,7 +46,7 @@ sections below), but share this structure:
   },
   "inputs": [
     {
-      "schema": "probe-rust/atoms",
+      "schema": "probe-rust/extract",
       "source": {
         "repo": "https://github.com/dalek-cryptography/curve25519-dalek.git",
         "commit": "5312a0311ec40df95be953eacfa8a11b9a34bc54",
@@ -81,7 +81,7 @@ sections below), but share this structure:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema` | string | Schema of the input file (e.g. `"probe-rust/atoms"`, `"probe-lean/extract"`) |
+| `schema` | string | Schema of the input file (e.g. `"probe-rust/extract"`, `"probe-lean/extract"`) |
 | `source` | Source | Source metadata propagated from the input envelope |
 
 ### Source
@@ -312,7 +312,7 @@ entries with:
   "timestamp": "2026-03-16T12:00:00Z",
   "sources": {
     "from": {
-      "schema": "probe-rust/atoms",
+      "schema": "probe-rust/extract",
       "package": "curve25519-dalek",
       "package-version": "4.1.3"
     },
@@ -338,7 +338,7 @@ entries with:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema` | string | Schema of the input (e.g. `"probe-rust/atoms"`) |
+| `schema` | string | Schema of the input (e.g. `"probe-rust/extract"`) |
 | `package` | string | Package name |
 | `package-version` | string | Package version |
 
@@ -424,7 +424,7 @@ major version.
 
 ### With probe-rust
 
-probe-aeneas consumes `probe-rust/atoms` (Schema 2.0) files as input.
+probe-aeneas consumes `probe-rust/extract` (Schema 2.0) files as input.
 The `--with-charon` flag on `probe-rust extract` is recommended for best
 translation accuracy (enables strategy 1: `rust-qualified-name`).
 

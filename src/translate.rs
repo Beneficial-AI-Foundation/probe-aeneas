@@ -312,7 +312,7 @@ pub fn build_translations_json(
         "timestamp": timestamp,
         "sources": {
             "from": {
-                "schema": rust_envelope.get("schema").and_then(|v| v.as_str()).unwrap_or("probe-rust/atoms"),
+                "schema": rust_envelope.get("schema").and_then(|v| v.as_str()).unwrap_or("probe-rust/extract"),
                 "package": rust_source.get("package").and_then(|v| v.as_str()).unwrap_or(""),
                 "package-version": rust_source.get("package-version").and_then(|v| v.as_str()).unwrap_or(""),
             },

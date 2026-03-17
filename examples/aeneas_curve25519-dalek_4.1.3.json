@@ -8,7 +8,7 @@
   },
   "inputs": [
     {
-      "schema": "probe-rust/atoms",
+      "schema": "probe-rust/extract",
       "source": {
         "repo": "https://github.com/dalek-cryptography/curve25519-dalek.git",
         "commit": "5312a0311ec40df95be953eacfa8a11b9a34bc54",

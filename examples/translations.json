@@ -979,7 +979,7 @@
     "from": {
       "package": "curve25519-dalek",
       "package-version": "4.1.3",
-      "schema": "probe-rust/atoms"
+      "schema": "probe-rust/extract"
     },
     "to": {
       "package": "Curve25519Dalek",
