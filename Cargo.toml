@@ -8,6 +8,10 @@ repository = "https://github.com/Beneficial-AI-Foundation/probe-aeneas"
 keywords = ["aeneas", "lean", "rust", "call-graph", "cross-language"]
 categories = ["development-tools", "command-line-utilities"]
 
+[lib]
+name = "probe_aeneas"
+path = "src/lib.rs"
+
 [[bin]]
 name = "probe-aeneas"
 path = "src/main.rs"

@@ -113,43 +113,58 @@ fn micro_fixture_structural_check() {
     );
 }
 
-/// Run `probe-aeneas extract` on test projects and validate the output.
+/// Run the merge pipeline via the library API using pre-generated example JSON files.
 ///
-/// Requires `probe-aeneas`, `probe-rust`, and `probe-lean` to be installed on PATH.
+/// No external tools needed — uses pre-computed Rust atoms, Lean atoms, and functions.json.
 #[test]
-#[ignore]
-fn live_extract_structural_check() {
-    use std::process::Command;
-
+fn library_extract_with_pregenerated_json() {
     let dir = tempfile::tempdir().unwrap();
     let output_path = dir.path().join("merged.json");
 
-    let rust_fixture =
-        Path::new("../probe/probe-extract-check/tests/fixtures/aeneas_micro/rust_src");
-    let lean_fixture =
-        Path::new("../probe/probe-extract-check/tests/fixtures/aeneas_micro/lean_src");
+    let rust_json = Path::new("examples/rust_curve25519-dalek_4.1.3.json");
+    let lean_json = Path::new("examples/lean_Curve25519Dalek_0.1.0.json");
+    let functions_json = Path::new("examples/functions.json");
 
-    if !rust_fixture.exists() || !lean_fixture.exists() {
-        panic!("aeneas_micro fixture not found");
-    }
+    assert!(rust_json.exists(), "rust example JSON not found");
+    assert!(lean_json.exists(), "lean example JSON not found");
+    assert!(functions_json.exists(), "functions.json not found");
 
-    let status = Command::new("probe-aeneas")
-        .args(["extract", "--rust-project"])
-        .arg(rust_fixture)
-        .arg("--lean-project")
-        .arg(lean_fixture)
-        .arg("--output")
-        .arg(&output_path)
-        .status()
-        .expect("failed to run probe-aeneas");
-    assert!(status.success(), "probe-aeneas extract failed");
+    probe_aeneas::extract::run_extract(
+        Some(rust_json),
+        None,
+        Some(lean_json),
+        None,
+        Some(functions_json),
+        Some(&output_path),
+        None,
+    )
+    .expect("probe-aeneas extract failed");
 
-    // The merged output uses MergedEnvelope, so do basic JSON validation.
     let content = std::fs::read_to_string(&output_path).unwrap();
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+    assert_eq!(json["schema"], "probe-aeneas/extract");
     assert!(json["data"].is_object());
+
+    let data = json["data"].as_object().unwrap();
     assert!(
-        !json["data"].as_object().unwrap().is_empty(),
-        "expected non-empty data from live extract"
+        !data.is_empty(),
+        "expected non-empty data from library extract"
+    );
+
+    // Verify the merge produced atoms from both languages.
+    let has_rust = data.values().any(|v| v["language"] == "rust");
+    let has_lean = data.values().any(|v| v["language"] == "lean");
+    assert!(has_rust, "expected Rust atoms in merged output");
+    assert!(has_lean, "expected Lean atoms in merged output");
+
+    // Verify translation metadata on Rust atoms.
+    let rust_with_translation = data
+        .values()
+        .filter(|v| v["language"] == "rust" && v.get("translation-name").is_some())
+        .count();
+    assert!(
+        rust_with_translation > 0,
+        "expected some Rust atoms with translation-name"
     );
 }

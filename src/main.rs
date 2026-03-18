@@ -1,11 +1,5 @@
-mod aeneas_config;
-mod extract;
-mod extract_runner;
-mod listfuns;
-mod translate;
-mod types;
-
 use clap::{Parser, Subcommand};
+use probe_aeneas::{extract, listfuns};
 use std::path::PathBuf;
 
 #[derive(Parser)]
