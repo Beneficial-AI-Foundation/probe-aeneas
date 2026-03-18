@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.1
-Date: 2026-03-17
+Version: 2.2
+Date: 2026-03-18
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -130,41 +130,53 @@ Lean translation `probe:curve25519_dalek.scalar.Scalar.reduce`. The
 cross-language edge to the Lean `reduce` is added automatically by the
 merge step (see [Cross-Language Edges](#cross-language-edges) below).
 
-**Lean atom example** (with probe-lean extension fields):
+**Lean atom example** (def with specs, cross-language edges, and translation metadata):
 
 ```json
 {
   "probe:curve25519_dalek.scalar.Scalar.reduce": {
     "display-name": "reduce",
     "dependencies": [
-      "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()",
-      "probe:curve25519_dalek.scalar.Scalar.reduce_inner"
+      "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/impl<Scalar52>#[Scalar52]montgomery_reduce()",
+      "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_reduce",
+      "probe:curve25519_dalek.scalar.Scalar",
+      "probe:curve25519_dalek.scalar.Scalar.unpack",
+      "..."
     ],
-    "type-dependencies": [],
+    "type-dependencies": [
+      "probe:curve25519_dalek.scalar.Scalar"
+    ],
     "term-dependencies": [
-      "probe:curve25519_dalek.scalar.Scalar.reduce_inner"
+      "probe:curve25519_dalek.scalar.Scalar",
+      "probe:curve25519_dalek.scalar.Scalar.unpack",
+      "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_reduce",
+      "..."
     ],
     "code-module": "Curve25519Dalek.Funs",
     "code-path": "Curve25519Dalek/Funs.lean",
-    "code-text": { "lines-start": 5012, "lines-end": 5030 },
+    "code-text": { "lines-start": 7079, "lines-end": 7087 },
     "kind": "def",
     "language": "lean",
     "name": "probe:curve25519_dalek.scalar.Scalar.reduce",
     "verification-status": "verified",
-    "specified": true,
-    "specs": ["probe:reduce_spec"],
-    "is-relevant": true,
+    "specs": [
+      "probe:curve25519_dalek.scalar.Scalar.reduce_spec",
+      "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order_spec",
+      "probe:curve25519_dalek.scalar.Scalar.is_canonical_spec"
+    ],
+    "primary-spec": "probe:curve25519_dalek.scalar.Scalar.reduce_spec",
+    "is-relevant": false,
     "is-ignored": false,
     "is-hidden": false,
     "is-extraction-artifact": false,
-    "rust-source": null
+    "rust-source": "curve25519-dalek/src/scalar.rs"
   }
 }
 ```
 
-Here the Lean `reduce` calls Lean `reduce_inner`, and its dependency on
-Rust `Scalar#reduce()` is a cross-language edge back to the Rust
-translation partner.
+Here the Lean `reduce` depends on Lean definitions like `montgomery_reduce`
+and `Scalar.unpack`, plus cross-language edges back to the corresponding
+Rust atoms (added automatically by the merge step).
 
 ### Atom Field Reference
 
@@ -180,8 +192,18 @@ translation partner.
 | `kind` | string | yes | Declaration kind (see below) |
 | `language` | string | yes | `"rust"` or `"lean"` |
 
-**`kind` values:** `"exec"` (Rust functions), `"def"` (Lean definitions),
-`"theorem"` (Lean theorems/specs).
+**`kind` values:**
+
+| Value | Language | Description |
+|-------|----------|-------------|
+| `"exec"` | Rust | Functions and methods |
+| `"def"` | Lean | Definitions (transpiled functions, helper defs) |
+| `"theorem"` | Lean | Theorems and specs |
+| `"abbrev"` | Lean | Abbreviations (type aliases, short defs) |
+| `"structure"` | Lean | Structure declarations |
+| `"opaque"` | Lean | Opaque definitions |
+| `"axiom"` | Lean | Axioms (e.g. external function stubs) |
+| `"inductive"` | Lean | Inductive type declarations |
 
 #### Rust-specific fields
 
@@ -202,16 +224,15 @@ verbatim via the atom's extension map:
 |-------|------|----------|-------------|
 | `name` | string | yes | Full code-name (same as the map key) |
 | `verification-status` | string | yes | `"verified"`, `"unverified"`, or `"failed"` |
-| `specified` | bool | yes | Whether the definition has associated specs |
-| `specs` | array of strings | no | Code-names of spec theorems (may be present when `specified` is true) |
-| `type-dependencies` | array of strings | yes | Sorted code-names of dependencies used in the type signature |
-| `term-dependencies` | array of strings | yes | Sorted code-names of dependencies used in the definition body |
+| `type-dependencies` | array of strings | yes | Code-names of dependencies used in the type signature |
+| `term-dependencies` | array of strings | yes | Code-names of dependencies used in the definition body |
 | `is-relevant` | bool | yes | Whether the atom is part of the project's own code |
 | `is-ignored` | bool | yes | Whether the atom is explicitly ignored |
 | `is-hidden` | bool | yes | Whether the atom is hidden from default views |
 | `is-extraction-artifact` | bool | yes | Whether the atom is an Aeneas extraction artifact |
-| `is-primary-spec` | bool | no | Whether this atom is the primary spec for a function (present on spec theorems) |
+| `specs` | array of strings | no | Code-names of spec theorems (present on defs/abbrevs that have associated specs) |
 | `primary-spec` | string | no | Code-name of the primary spec theorem for this definition |
+| `is-primary-spec` | bool | no | Whether this atom is the primary spec for a function (present on spec theorems) |
 | `rust-source` | string or null | no | Rust source reference from Aeneas docstring |
 
 ### `is-disabled` -- Aeneas Scope Indicator
