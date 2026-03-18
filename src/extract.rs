@@ -249,13 +249,15 @@ fn enrich_with_aeneas_metadata(
                 .insert("translation-name".to_string(), serde_json::json!(lean_name));
             atom.extensions
                 .insert("translation-path".to_string(), serde_json::json!(path));
-            atom.extensions.insert(
-                "translation-text".to_string(),
-                serde_json::json!({
-                    "lines-start": start,
-                    "lines-end": end,
-                }),
-            );
+            if start > 0 && end > 0 {
+                atom.extensions.insert(
+                    "translation-text".to_string(),
+                    serde_json::json!({
+                        "lines-start": start,
+                        "lines-end": end,
+                    }),
+                );
+            }
         }
     }
 

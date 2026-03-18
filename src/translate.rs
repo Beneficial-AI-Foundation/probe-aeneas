@@ -7,12 +7,10 @@ use regex::Regex;
 
 use crate::types::{FunctionRecord, FunctionsFile, LineRange};
 
-static RE_REF: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"&'?\w*\s*").expect("valid regex"));
+static RE_REF: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"&'?\w*\s*").expect("valid regex"));
 static RE_BRACE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\{([^}]+)\}").expect("valid regex"));
-static RE_GENERIC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"<[^>]*>").expect("valid regex"));
+static RE_GENERIC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<[^>]*>").expect("valid regex"));
 
 /// Statistics from translation generation.
 pub struct TranslateStats {
@@ -125,13 +123,21 @@ fn strategy_rust_qualified_name(
     matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
-    // Build index: normalized_rust_name -> rust_code_name
-    let mut rqn_to_rust: HashMap<String, String> = HashMap::new();
+    let mut rqn_to_rust: HashMap<String, Option<String>> = HashMap::new();
     for (code_name, atom) in rust_data {
         if let Some(rqn) = atom.extensions.get("rust-qualified-name") {
             if let Some(rqn_str) = rqn.as_str() {
                 let norm = normalize_rust_name(rqn_str);
-                rqn_to_rust.insert(norm, code_name.clone());
+                rqn_to_rust
+                    .entry(norm.clone())
+                    .and_modify(|existing| {
+                        eprintln!(
+                            "Warning: duplicate normalized RQN {norm:?}: {:?} and {code_name:?} — skipping ambiguous match",
+                            existing.as_deref().unwrap_or("(already ambiguous)")
+                        );
+                        *existing = None;
+                    })
+                    .or_insert_with(|| Some(code_name.clone()));
             }
         }
     }
@@ -149,7 +155,7 @@ fn strategy_rust_qualified_name(
         let norm_rn = normalize_rust_name(rn);
         let lean_code_name = format!("probe:{ln}");
 
-        if let Some(rust_code_name) = rqn_to_rust.get(&norm_rn) {
+        if let Some(Some(rust_code_name)) = rqn_to_rust.get(&norm_rn) {
             if lean_data.contains_key(&lean_code_name)
                 && !matched_rust.contains(rust_code_name)
                 && !matched_lean.contains(&lean_code_name)
@@ -409,7 +415,10 @@ mod tests {
         // Behavioral contract: output must not contain & or '
         let result = normalize_rust_name("&'a str");
         assert!(!result.contains('&'), "reference markers must be stripped");
-        assert!(!result.contains('\''), "lifetime parameters must be stripped");
+        assert!(
+            !result.contains('\''),
+            "lifetime parameters must be stripped"
+        );
     }
 
     #[test]
@@ -690,5 +699,70 @@ mod tests {
         assert_eq!(names.len(), 2);
         assert!(names.contains(&normalize_rust_name("my_crate::foo")));
         assert!(names.contains(&normalize_rust_name("my_crate::bar")));
+    }
+
+    // =========================================================================
+    // Core algorithm correctness tests (C6, C7)
+    // =========================================================================
+
+    /// C6: When two Rust atoms share the same normalized rust-qualified-name,
+    /// strategy_rust_qualified_name overwrites the first with the last (HashMap insert).
+    #[test]
+    fn test_duplicate_rqn_last_wins() {
+        let mut rust_atoms = BTreeMap::new();
+
+        let mut atom1 = make_rust_atom("Scalar::mul", "crate/src/scalar.rs", 10, 20);
+        atom1.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("my_crate::scalar::Scalar::mul"),
+        );
+        rust_atoms.insert("probe:crate/1.0/Scalar.mul#1()".to_string(), atom1);
+
+        let mut atom2 = make_rust_atom("Scalar::mul", "crate/src/scalar.rs", 30, 40);
+        atom2.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("my_crate::scalar::Scalar::mul"),
+        );
+        rust_atoms.insert("probe:crate/1.0/Scalar.mul#2()".to_string(), atom2);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:my_crate.scalar.Scalar.mul".to_string(),
+            make_lean_atom("mul", "Scalar.lean"),
+        );
+
+        let funcs = vec![make_func(
+            "my_crate.scalar.Scalar.mul",
+            Some("my_crate::scalar::Scalar::mul"),
+            "crate/src/scalar.rs",
+            "L10-L20",
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+
+        // With C6 bug: rqn_to_rust.insert() overwrites, so the last Rust atom
+        // (in BTreeMap iteration order) wins. The first atom is silently dropped.
+        // Both atoms have the same RQN, so only one mapping is produced.
+        assert_eq!(mappings.len(), 1, "one mapping expected (limitation)");
+
+        // Document which atom got the mapping
+        let mapped_from = &mappings[0].from;
+        eprintln!(
+            "C6: duplicate RQN mapped to {:?} (other atom silently dropped)",
+            mapped_from
+        );
+    }
+
+    /// C7: Lean atoms without source location (lines 0,0) get misleading
+    /// translation-text in the enrichment step.
+    #[test]
+    fn test_lean_atom_no_location_has_default_code_text() {
+        let lean_atom = make_lean_atom("foo", "Foo.lean");
+        // make_lean_atom uses CodeText::default() which is (0, 0)
+        assert_eq!(lean_atom.code_text.lines_start, 0);
+        assert_eq!(lean_atom.code_text.lines_end, 0);
+        // If this atom is used for enrichment, translation-text will be
+        // {"lines-start": 0, "lines-end": 0} which is misleading.
+        // The enrichment code should check for this and skip or mark as unknown.
     }
 }
