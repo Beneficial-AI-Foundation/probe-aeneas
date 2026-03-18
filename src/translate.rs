@@ -7,6 +7,16 @@ use regex::Regex;
 
 use crate::types::{FunctionRecord, FunctionsFile, LineRange};
 
+/// Normalize a source path for matching: strip leading package-name component
+/// so `"curve25519-dalek/src/foo.rs"` and `"src/foo.rs"` both become `"src/foo.rs"`.
+fn normalize_source_path(p: &str) -> &str {
+    if let Some(idx) = p.find("/src/") {
+        &p[idx + 1..]
+    } else {
+        p
+    }
+}
+
 static RE_REF: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"&'?\w*\s*").expect("valid regex"));
 static RE_BRACE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\{([^}]+)\}").expect("valid regex"));
@@ -35,12 +45,19 @@ pub fn generate_translations(
     let mut file_to_funcs: HashMap<String, Vec<&FunctionRecord>> = HashMap::new();
 
     for func in functions {
+        if func.is_hidden || func.is_extraction_artifact {
+            continue;
+        }
         if let Some(ref src) = func.source {
-            file_to_funcs.entry(src.clone()).or_default().push(func);
+            let norm_src = normalize_source_path(src).to_string();
+            file_to_funcs
+                .entry(norm_src.clone())
+                .or_default()
+                .push(func);
             let base = func.lean_name.rsplit('.').next().unwrap_or("");
             if !base.is_empty() {
                 file_name_to_funcs
-                    .entry((src.clone(), base.to_string()))
+                    .entry((norm_src, base.to_string()))
                     .or_default()
                     .push(func);
             }
@@ -123,21 +140,12 @@ fn strategy_rust_qualified_name(
     matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
-    let mut rqn_to_rust: HashMap<String, Option<String>> = HashMap::new();
+    let mut rqn_to_rust: HashMap<String, Vec<String>> = HashMap::new();
     for (code_name, atom) in rust_data {
         if let Some(rqn) = atom.extensions.get("rust-qualified-name") {
             if let Some(rqn_str) = rqn.as_str() {
                 let norm = normalize_rust_name(rqn_str);
-                rqn_to_rust
-                    .entry(norm.clone())
-                    .and_modify(|existing| {
-                        eprintln!(
-                            "Warning: duplicate normalized RQN {norm:?}: {:?} and {code_name:?} — skipping ambiguous match",
-                            existing.as_deref().unwrap_or("(already ambiguous)")
-                        );
-                        *existing = None;
-                    })
-                    .or_insert_with(|| Some(code_name.clone()));
+                rqn_to_rust.entry(norm).or_default().push(code_name.clone());
             }
         }
     }
@@ -155,22 +163,94 @@ fn strategy_rust_qualified_name(
         let norm_rn = normalize_rust_name(rn);
         let lean_code_name = format!("probe:{ln}");
 
-        if let Some(Some(rust_code_name)) = rqn_to_rust.get(&norm_rn) {
-            if lean_data.contains_key(&lean_code_name)
-                && !matched_rust.contains(rust_code_name)
-                && !matched_lean.contains(&lean_code_name)
-            {
-                mappings.push(TranslationMapping {
-                    from: rust_code_name.clone(),
-                    to: lean_code_name.clone(),
-                    confidence: "exact".to_string(),
-                    method: Some("rust-qualified-name".to_string()),
-                });
-                matched_rust.insert(rust_code_name.clone());
-                matched_lean.insert(lean_code_name);
+        let candidates = match rqn_to_rust.get(&norm_rn) {
+            Some(c) if !c.is_empty() => c,
+            _ => continue,
+        };
+
+        let rust_code_name = if candidates.len() == 1 {
+            &candidates[0]
+        } else {
+            match disambiguate_by_file_and_lines(candidates, func, rust_data) {
+                Some(name) => name,
+                None => continue,
             }
+        };
+
+        if lean_data.contains_key(&lean_code_name)
+            && !matched_rust.contains(rust_code_name)
+            && !matched_lean.contains(&lean_code_name)
+        {
+            let confidence = if candidates.len() == 1 {
+                "exact"
+            } else {
+                "exact-disambiguated"
+            };
+            mappings.push(TranslationMapping {
+                from: rust_code_name.clone(),
+                to: lean_code_name.clone(),
+                confidence: confidence.to_string(),
+                method: Some("rust-qualified-name".to_string()),
+            });
+            matched_rust.insert(rust_code_name.clone());
+            matched_lean.insert(lean_code_name);
         }
     }
+}
+
+/// When multiple Rust atoms share the same normalized RQN, use the
+/// functions.json entry's `source` file and `lines` to pick the right one.
+fn disambiguate_by_file_and_lines<'a>(
+    candidates: &'a [String],
+    func: &FunctionRecord,
+    rust_data: &'a BTreeMap<String, Atom>,
+) -> Option<&'a String> {
+    let func_source = func.source.as_deref()?;
+    let norm_func_source = normalize_source_path(func_source);
+    let func_range = func.lines.as_deref().and_then(LineRange::parse);
+
+    let mut file_matches: Vec<&String> = candidates
+        .iter()
+        .filter(|code_name| {
+            rust_data.get(*code_name).is_some_and(|atom| {
+                let norm_atom = normalize_source_path(&atom.code_path);
+                norm_atom == norm_func_source
+            })
+        })
+        .collect();
+
+    if file_matches.len() == 1 {
+        return Some(file_matches[0]);
+    }
+
+    if let Some(fr) = func_range {
+        if file_matches.is_empty() {
+            file_matches = candidates.iter().collect();
+        }
+        let mut best: Option<&String> = None;
+        let mut best_overlap: i64 = i64::MIN;
+        for code_name in &file_matches {
+            if let Some(atom) = rust_data.get(*code_name) {
+                let atom_range = LineRange {
+                    start: atom.code_text.lines_start,
+                    end: atom.code_text.lines_end,
+                };
+                if atom_range.start == 0 {
+                    continue;
+                }
+                let overlap = atom_range.overlap_amount(&fr);
+                if overlap > best_overlap {
+                    best_overlap = overlap;
+                    best = Some(code_name);
+                }
+            }
+        }
+        if best_overlap > 0 {
+            return best;
+        }
+    }
+
+    None
 }
 
 fn strategy_file_display_name(
@@ -191,7 +271,8 @@ fn strategy_file_display_name(
             continue;
         }
 
-        let key = (atom.code_path.clone(), base_name.to_string());
+        let norm_path = normalize_source_path(&atom.code_path).to_string();
+        let key = (norm_path, base_name.to_string());
         let candidates = match file_name_to_funcs.get(&key) {
             Some(c) if c.len() == 1 => c,
             _ => continue,
@@ -235,7 +316,8 @@ fn strategy_file_line_overlap(
             end: v_end,
         };
 
-        let candidates = match file_to_funcs.get(&atom.code_path) {
+        let norm_path = normalize_source_path(&atom.code_path);
+        let candidates = match file_to_funcs.get(norm_path) {
             Some(c) => c,
             None => continue,
         };
@@ -386,6 +468,8 @@ mod tests {
             rust_name: rust_name.map(|s| s.to_string()),
             source: Some(source.to_string()),
             lines: Some(lines.to_string()),
+            is_hidden: false,
+            is_extraction_artifact: false,
         }
     }
 

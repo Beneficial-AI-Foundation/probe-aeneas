@@ -10,6 +10,10 @@ pub struct FunctionRecord {
     pub source: Option<String>,
     #[serde(default)]
     pub lines: Option<String>,
+    #[serde(default)]
+    pub is_hidden: bool,
+    #[serde(default)]
+    pub is_extraction_artifact: bool,
 }
 
 /// Top-level structure of `functions.json`.
