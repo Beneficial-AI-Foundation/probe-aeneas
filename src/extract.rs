@@ -289,19 +289,13 @@ fn enrich_lean_atom_flags(
 ) {
     let mut stats = AeneasEnrichStats::default();
 
-    for atom in merged.values_mut() {
+    for (key, atom) in merged.iter_mut() {
         if atom.language != "lean" {
             continue;
         }
 
-        let name = atom
-            .extensions
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
         let display_name = &atom.display_name;
-        let name_no_prefix = name.strip_prefix("probe:").unwrap_or(&name);
+        let name_no_prefix = key.strip_prefix("probe:").unwrap_or(key);
 
         let attrs: Vec<String> = atom
             .extensions

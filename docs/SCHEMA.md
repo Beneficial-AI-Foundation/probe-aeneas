@@ -157,7 +157,6 @@ merge step (see [Cross-Language Edges](#cross-language-edges) below).
     "code-text": { "lines-start": 7079, "lines-end": 7087 },
     "kind": "def",
     "language": "lean",
-    "name": "probe:curve25519_dalek.scalar.Scalar.reduce",
     "verification-status": "verified",
     "specs": [
       "probe:curve25519_dalek.scalar.Scalar.reduce_spec",
@@ -165,7 +164,8 @@ merge step (see [Cross-Language Edges](#cross-language-edges) below).
       "probe:curve25519_dalek.scalar.Scalar.is_canonical_spec"
     ],
     "primary-spec": "probe:curve25519_dalek.scalar.Scalar.reduce_spec",
-    "is-relevant": false,
+    "is-in-package": true,
+    "is-relevant": true,
     "is-ignored": false,
     "is-hidden": false,
     "is-extraction-artifact": false,
@@ -224,7 +224,6 @@ the enrichment pass:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | yes | Full code-name (same as the map key) |
 | `verification-status` | string | yes | `"verified"`, `"unverified"`, or `"failed"` |
 | `type-dependencies` | array of strings | yes | Code-names of dependencies used in the type signature |
 | `term-dependencies` | array of strings | yes | Code-names of dependencies used in the definition body |
