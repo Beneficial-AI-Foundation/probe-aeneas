@@ -446,23 +446,11 @@ dependencies = [
  "clap",
  "dirs",
  "probe",
- "probe-extract-check",
  "regex",
  "serde",
  "serde_json",
  "tempfile",
  "which",
-]
-
-[[package]]
-name = "probe-extract-check"
-version = "0.1.0"
-dependencies = [
- "clap",
- "probe",
- "regex",
- "serde",
- "serde_json",
 ]
 
 [[package]]

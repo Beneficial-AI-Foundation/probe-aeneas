@@ -1,23 +1,24 @@
-//! Integration tests that validate probe-aeneas extract output using probe-extract-check.
+//! Integration tests that validate probe-aeneas extract output.
 //!
 //! The real aeneas example uses MergedEnvelope (with `inputs` instead of `source`),
 //! so we validate it using serde_json::Value for basic structural checks.
-//! For full AtomEnvelope-based checks, we use the probe-extract-check micro fixtures.
 
 use std::path::Path;
 
 /// Validate the real merged aeneas example has correct top-level structure.
 #[test]
 fn example_merged_json_has_valid_structure() {
-    let content =
-        std::fs::read_to_string("examples/aeneas_curve25519-dalek_4.1.3.json").unwrap();
+    let content = std::fs::read_to_string("examples/aeneas_curve25519-dalek_4.1.3.json").unwrap();
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
 
     // Merged envelope fields.
     assert_eq!(json["schema"], "probe-aeneas/extract");
     assert_eq!(json["schema-version"], "2.0");
     assert!(json["tool"]["name"].is_string());
-    assert!(json["inputs"].is_array(), "merged envelope should have 'inputs' array");
+    assert!(
+        json["inputs"].is_array(),
+        "merged envelope should have 'inputs' array"
+    );
     assert!(json["timestamp"].is_string());
     assert!(json["data"].is_object());
 }
@@ -25,8 +26,7 @@ fn example_merged_json_has_valid_structure() {
 /// Validate that all atoms in the merged example have required fields.
 #[test]
 fn example_merged_json_atoms_have_required_fields() {
-    let content =
-        std::fs::read_to_string("examples/aeneas_curve25519-dalek_4.1.3.json").unwrap();
+    let content = std::fs::read_to_string("examples/aeneas_curve25519-dalek_4.1.3.json").unwrap();
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
     let data = json["data"].as_object().unwrap();
 
@@ -44,22 +44,15 @@ fn example_merged_json_atoms_have_required_fields() {
             atom["display-name"].is_string(),
             "atom {key} missing display-name"
         );
-        assert!(
-            atom["kind"].is_string(),
-            "atom {key} missing kind"
-        );
-        assert!(
-            atom["language"].is_string(),
-            "atom {key} missing language"
-        );
+        assert!(atom["kind"].is_string(), "atom {key} missing kind");
+        assert!(atom["language"].is_string(), "atom {key} missing language");
     }
 }
 
 /// Validate that Rust atoms in the merged example have translation metadata.
 #[test]
 fn example_merged_json_rust_atoms_have_translations() {
-    let content =
-        std::fs::read_to_string("examples/aeneas_curve25519-dalek_4.1.3.json").unwrap();
+    let content = std::fs::read_to_string("examples/aeneas_curve25519-dalek_4.1.3.json").unwrap();
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
     let data = json["data"].as_object().unwrap();
 
@@ -68,7 +61,10 @@ fn example_merged_json_rust_atoms_have_translations() {
         .filter(|(_, v)| v["language"] == "rust")
         .collect();
 
-    assert!(!rust_atoms.is_empty(), "expected Rust atoms in merged output");
+    assert!(
+        !rust_atoms.is_empty(),
+        "expected Rust atoms in merged output"
+    );
 
     // All Rust atoms should have is-disabled field.
     for (key, atom) in &rust_atoms {
@@ -86,30 +82,6 @@ fn example_merged_json_rust_atoms_have_translations() {
     assert!(
         !with_translation.is_empty(),
         "expected at least some Rust atoms with translation-name"
-    );
-}
-
-/// Validate the aeneas_micro fixture from probe-extract-check parses as AtomEnvelope.
-#[test]
-fn micro_fixture_structural_check() {
-    let fixture_json =
-        Path::new("../probe/probe-extract-check/tests/fixtures/aeneas_micro/expected.json");
-    if !fixture_json.exists() {
-        // Skip if fixture not available (different checkout).
-        eprintln!("skipping: aeneas_micro fixture not found");
-        return;
-    }
-
-    let envelope = probe_extract_check::load_extract_json(fixture_json).unwrap();
-    let report = probe_extract_check::check_all(&envelope, None);
-
-    for d in report.errors() {
-        eprintln!("{d}");
-    }
-    assert!(
-        report.is_ok(),
-        "structural check found {} error(s)",
-        report.error_count()
     );
 }
 

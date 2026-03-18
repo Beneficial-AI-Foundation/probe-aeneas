@@ -275,7 +275,8 @@ fn enrich_with_aeneas_metadata(
 }
 
 /// Standard Aeneas extraction artifact suffixes.
-const AENEAS_ARTIFACT_SUFFIXES: &[&str] = &["_body", "_loop", "_loop0", "_loop1", "_loop2", "_loop3"];
+const AENEAS_ARTIFACT_SUFFIXES: &[&str] =
+    &["_body", "_loop", "_loop0", "_loop1", "_loop2", "_loop3"];
 
 /// Aeneas-specific enrichment pass for Lean atoms.
 ///

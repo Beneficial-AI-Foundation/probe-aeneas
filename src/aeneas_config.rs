@@ -30,10 +30,7 @@ pub struct AeneasConfig {
 impl AeneasConfig {
     /// Load config from an explicit path, or try `.verilib/aeneas.json`
     /// relative to the Lean project directory. Missing files are not errors.
-    pub fn load(
-        explicit_path: Option<&Path>,
-        lean_project: Option<&Path>,
-    ) -> Result<Self, String> {
+    pub fn load(explicit_path: Option<&Path>, lean_project: Option<&Path>) -> Result<Self, String> {
         let path = explicit_path
             .map(|p| p.to_path_buf())
             .or_else(|| lean_project.map(|lp| lp.join(".verilib").join("aeneas.json")));
