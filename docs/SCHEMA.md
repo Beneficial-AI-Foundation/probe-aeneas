@@ -211,14 +211,16 @@ Rust atoms (added automatically by the merge step).
 |-------|------|----------|-------------|
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
 | `is-disabled` | bool | yes | `false` if the function's `rust-qualified-name` appears as a `rust_name` in `functions.json`; `true` otherwise. Indicates whether Aeneas processed this function. |
+| `is-relevant` | bool | yes | Inverse of `is-disabled`. `true` when Aeneas transpiled this function. |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
 
 #### Lean-specific fields
 
-These fields originate from `probe-lean extract` and are passed through
-verbatim via the atom's extension map:
+These fields include data from `probe-lean extract` (passed through via the
+atom's extension map) and additional fields computed by probe-aeneas during
+the enrichment pass:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -226,10 +228,13 @@ verbatim via the atom's extension map:
 | `verification-status` | string | yes | `"verified"`, `"unverified"`, or `"failed"` |
 | `type-dependencies` | array of strings | yes | Code-names of dependencies used in the type signature |
 | `term-dependencies` | array of strings | yes | Code-names of dependencies used in the definition body |
-| `is-relevant` | bool | yes | Whether the atom is part of the project's own code |
-| `is-ignored` | bool | yes | Whether the atom is explicitly ignored |
+| `is-in-package` | bool | yes | Whether the declaration belongs to the Lean package (from probe-lean) |
+| `is-relevant` | bool | yes | Whether the atom is relevant for verification tracking |
+| `is-ignored` | bool | yes | Whether the atom is explicitly ignored from progress metrics |
 | `is-hidden` | bool | yes | Whether the atom is hidden from default views |
 | `is-extraction-artifact` | bool | yes | Whether the atom is an Aeneas extraction artifact |
+| `is-externally-verified` | bool | no | Whether the atom is verified externally (e.g. in Verus). Present only when `true`. |
+| `attributes` | array of strings | no | Lean tag attributes detected on this declaration (from probe-lean). Absent when empty. |
 | `specs` | array of strings | no | Code-names of spec theorems (present on defs/abbrevs that have associated specs) |
 | `primary-spec` | string | no | Code-name of the primary spec theorem for this definition |
 | `is-primary-spec` | bool | no | Whether this atom is the primary spec for a function (present on spec theorems) |
@@ -264,6 +269,46 @@ translation metadata, since they were never transpiled.
 Rust call graph into "in scope for verification" (`false`) and "out of scope"
 (`true`). This is useful for computing verification coverage, filtering
 dependency trees, or highlighting functions that still need transpilation.
+
+### Computed Fields: Auto vs Manual
+
+probe-aeneas computes several Lean atom fields using Aeneas-specific
+heuristics applied to the generic facts provided by probe-lean. This section
+documents the computation method, coverage, and when manual configuration is
+needed for each field.
+
+| Field | Method | Computation Details |
+|-------|--------|---------------------|
+| `is-extraction-artifact` | **AUTO** | `true` when the display name ends with an Aeneas-standard suffix: `_body`, `_loop`, `_loop0`–`_loop3`. These suffixes are universal Aeneas conventions, identical across all Aeneas projects. No config needed. |
+| `is-hidden` | **HYBRID** | **Auto (~92.5%):** `true` when `attributes` contains `"rust_trait_impl"`, OR the name contains `.Insts.` (trait instance pattern), OR the name ends with `.mutual` (loop mutual recursion). **Manual (~7.5%):** project-specific entries via `aeneas.json` config (inner constants, project-specific helpers). |
+| `is-relevant` | **AUTO** | For Lean atoms without `rust-source`: inherits `is-in-package` from probe-lean. For Lean atoms with `rust-source`: `true` when the source path contains the Rust crate name, does not start with `/`, and does not contain `/cargo/registry/`. This subsumes `excluded-namespace-prefixes` — external Rust dependencies that Aeneas transpiled will have `rust-source` paths from other crates. For Rust atoms: `is-relevant` = `!is-disabled`. |
+| `is-ignored` | **MANUAL** | Always requires explicit configuration in `aeneas.json`. This is a human editorial decision about what to exclude from verification progress percentages. probe-aeneas never auto-sets this to `true`. |
+| `is-externally-verified` | **AUTO** | `true` when `attributes` (from probe-lean) contains `"externally_verified"`. Applied to spec theorems where the proof uses `sorry` but is verified externally (e.g. in Verus). |
+
+#### Aeneas Config File
+
+An optional configuration file for the manual tail of `is-hidden` and all of
+`is-ignored`. Specified via `--aeneas-config` CLI flag or auto-discovered at
+`.verilib/aeneas.json` in the Lean project directory.
+
+```json
+{
+  "is-hidden": [
+    "curve25519_dalek.field.FieldElement51.coset4",
+    "curve25519_dalek.edwards.EdwardsPoint.inner"
+  ],
+  "is-ignored": [
+    "curve25519_dalek.traits.Identity.identity"
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `is-hidden` | array of strings | Lean declaration names (without `probe:` prefix) to mark as hidden |
+| `is-ignored` | array of strings | Lean declaration names (without `probe:` prefix) to mark as ignored |
+
+Both fields are optional. Omitted lists default to empty.
 
 ### Translation Metadata
 

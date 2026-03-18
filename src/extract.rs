@@ -1,9 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use probe::commands::merge::merge_atom_files;
 use probe::types::{Atom, InputProvenance, MergedAtomEnvelope, Tool};
 
+use crate::aeneas_config::AeneasConfig;
 use crate::extract_runner;
 use crate::listfuns::run_listfuns;
 use crate::translate::{
@@ -24,6 +25,7 @@ pub fn run_extract(
     lean_project: Option<&Path>,
     functions_json: Option<&Path>,
     output_path: Option<&Path>,
+    aeneas_config: Option<&Path>,
 ) -> Result<(), String> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
@@ -50,6 +52,9 @@ pub fn run_extract(
     // --- Resolve functions.json ---
     let functions_path = resolve_functions(functions_json, lean_project)?;
 
+    // --- Load Aeneas config (optional) ---
+    let config = AeneasConfig::load(aeneas_config, lean_project)?;
+
     // --- Generate translations ---
     let (translations_result, funs_rust_names) =
         run_translate(&rust_path, &lean_path, &functions_path)?;
@@ -61,6 +66,7 @@ pub fn run_extract(
         &translations_result,
         &funs_rust_names,
         output_path,
+        &config,
     )
 }
 
@@ -180,6 +186,7 @@ fn run_extract_with_translations(
     translations: &TranslationMaps,
     funs_rust_names: &HashSet<String>,
     output_path: Option<&Path>,
+    config: &AeneasConfig,
 ) -> Result<(), String> {
     // Phase 1: Merge (generic probe operation)
     println!("\nMerging atoms with translations...");
@@ -195,8 +202,15 @@ fn run_extract_with_translations(
         }
     };
 
+    let rust_crate_name = provenance
+        .iter()
+        .find(|p| p.source.language == "rust")
+        .map(|p| p.source.package.as_str())
+        .unwrap_or("");
+
     // Phase 2: Enrich (Aeneas-specific)
     enrich_with_aeneas_metadata(&mut merged, &translations.0, funs_rust_names);
+    enrich_lean_atom_flags(&mut merged, rust_crate_name, config);
 
     // Phase 3: Write envelope
     write_aeneas_envelope(merged, provenance, output_path, &stats)
@@ -254,8 +268,136 @@ fn enrich_with_aeneas_metadata(
                 .is_some_and(|rqn| funs_rust_names.contains(&normalize_rust_name(rqn)));
             atom.extensions
                 .insert("is-disabled".to_string(), serde_json::json!(!in_functions));
+            atom.extensions
+                .insert("is-relevant".to_string(), serde_json::json!(in_functions));
         }
     }
+}
+
+/// Standard Aeneas extraction artifact suffixes.
+const AENEAS_ARTIFACT_SUFFIXES: &[&str] = &["_body", "_loop", "_loop0", "_loop1", "_loop2", "_loop3"];
+
+/// Aeneas-specific enrichment pass for Lean atoms.
+///
+/// Computes `is-hidden`, `is-extraction-artifact`, `is-relevant` (refined),
+/// `is-externally-verified`, and applies optional config overrides for
+/// `is-hidden` (project tail) and `is-ignored` (always manual).
+fn enrich_lean_atom_flags(
+    merged: &mut BTreeMap<String, Atom>,
+    rust_crate_name: &str,
+    config: &AeneasConfig,
+) {
+    let mut stats = AeneasEnrichStats::default();
+
+    for atom in merged.values_mut() {
+        if atom.language != "lean" {
+            continue;
+        }
+
+        let name = atom
+            .extensions
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let display_name = &atom.display_name;
+        let name_no_prefix = name.strip_prefix("probe:").unwrap_or(&name);
+
+        let attrs: Vec<String> = atom
+            .extensions
+            .get("attributes")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // --- is-extraction-artifact ---
+        let is_artifact = AENEAS_ARTIFACT_SUFFIXES
+            .iter()
+            .any(|sfx| display_name.ends_with(sfx));
+        if is_artifact {
+            stats.artifacts += 1;
+        }
+        atom.extensions.insert(
+            "is-extraction-artifact".to_string(),
+            serde_json::json!(is_artifact),
+        );
+
+        // --- is-hidden ---
+        let has_trait_attr = attrs.iter().any(|a| a == "rust_trait_impl");
+        let has_insts_pattern = name_no_prefix.contains(".Insts.");
+        let is_mutual_loop = name_no_prefix.ends_with(".mutual");
+        let in_config_hidden = config.hidden.contains(name_no_prefix);
+        let is_hidden = has_trait_attr || has_insts_pattern || is_mutual_loop || in_config_hidden;
+        if is_hidden {
+            stats.hidden += 1;
+        }
+        atom.extensions
+            .insert("is-hidden".to_string(), serde_json::json!(is_hidden));
+
+        // --- is-ignored (manual only, from config) ---
+        let is_ignored = config.ignored.contains(name_no_prefix);
+        if is_ignored {
+            stats.ignored += 1;
+        }
+        atom.extensions
+            .insert("is-ignored".to_string(), serde_json::json!(is_ignored));
+
+        // --- is-relevant (refined for Aeneas) ---
+        let rust_source = atom
+            .extensions
+            .get("rust-source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let is_relevant = if rust_source.is_empty() || rust_source == "null" {
+            atom.extensions
+                .get("is-in-package")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true)
+        } else if !rust_crate_name.is_empty() {
+            rust_source.contains(rust_crate_name)
+                && !rust_source.starts_with('/')
+                && !rust_source.contains("/cargo/registry/")
+        } else {
+            true
+        };
+        if is_relevant {
+            stats.relevant += 1;
+        }
+        atom.extensions
+            .insert("is-relevant".to_string(), serde_json::json!(is_relevant));
+
+        // --- is-externally-verified ---
+        let is_ext_verified = attrs.iter().any(|a| a == "externally_verified");
+        if is_ext_verified {
+            stats.externally_verified += 1;
+            atom.extensions.insert(
+                "is-externally-verified".to_string(),
+                serde_json::json!(true),
+            );
+        }
+    }
+
+    println!("\nAeneas enrichment (Lean atoms):");
+    println!("  Extraction artifacts: {}", stats.artifacts);
+    println!("  Hidden:              {}", stats.hidden);
+    println!("  Ignored:             {}", stats.ignored);
+    println!("  Relevant:            {}", stats.relevant);
+    if stats.externally_verified > 0 {
+        println!("  Externally verified: {}", stats.externally_verified);
+    }
+}
+
+#[derive(Default)]
+struct AeneasEnrichStats {
+    artifacts: usize,
+    hidden: usize,
+    ignored: usize,
+    relevant: usize,
+    externally_verified: usize,
 }
 
 /// Construct and write the Aeneas extract envelope.

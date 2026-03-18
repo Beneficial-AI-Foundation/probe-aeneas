@@ -1,3 +1,4 @@
+mod aeneas_config;
 mod extract;
 mod extract_runner;
 mod listfuns;
@@ -53,6 +54,11 @@ enum Commands {
         /// Defaults to aeneas_{package}_{version}.json based on the Rust input.
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Path to Aeneas config JSON for manual overrides (is-hidden, is-ignored).
+        /// Defaults to .verilib/aeneas.json in the Lean project directory.
+        #[arg(long)]
+        aeneas_config: Option<PathBuf>,
     },
 
     /// Generate a translations file mapping Rust code-names to Lean code-names.
@@ -97,6 +103,7 @@ fn main() {
             lean_project,
             functions,
             output,
+            aeneas_config,
         } => extract::run_extract(
             rust.as_deref(),
             rust_project.as_deref(),
@@ -104,6 +111,7 @@ fn main() {
             lean_project.as_deref(),
             functions.as_deref(),
             output.as_deref(),
+            aeneas_config.as_deref(),
         ),
 
         Commands::Translate {
