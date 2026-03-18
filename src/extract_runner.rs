@@ -191,5 +191,6 @@ fn tempfile(prefix: &str, suffix: &str) -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    std::env::temp_dir().join(format!("{prefix}_{ts}{suffix}"))
+    let pid = std::process::id();
+    std::env::temp_dir().join(format!("{prefix}_{ts}_{pid}{suffix}"))
 }

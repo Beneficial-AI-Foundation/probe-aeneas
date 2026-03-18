@@ -28,7 +28,7 @@
       }
     }
   ],
-  "timestamp": "2026-03-18T13:33:57Z",
+  "timestamp": "2026-03-18T15:36:37Z",
   "data": {
     "probe:Aeneas.Std.Array.make.congr_simp": {
       "display-name": "congr_simp",
@@ -49,7 +49,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Aeneas.Std.I32.ofInt.congr_simp": {
       "display-name": "congr_simp",
@@ -70,7 +70,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Aeneas.Std.Isize.ofInt.congr_simp": {
       "display-name": "congr_simp",
@@ -91,7 +91,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Aeneas.Std.U128.ofNat.congr_simp": {
       "display-name": "congr_simp",
@@ -112,7 +112,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Aeneas.Std.U64.ofNat.congr_simp": {
       "display-name": "congr_simp",
@@ -133,7 +133,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Aeneas.Std.U64.shiftRight_51": {
       "display-name": "shiftRight_51",
@@ -175,7 +175,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Aeneas.Std.UScalar.ofNatCore.hcongr_3": {
       "display-name": "hcongr_3",
@@ -196,7 +196,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Array.getElem_eq_getElem!": {
       "display-name": "getElem_eq_getElem!",
@@ -1719,7 +1719,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:BitVec.setWidth.hcongr_3": {
       "display-name": "hcongr_3",
@@ -1740,7 +1740,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Edwards.CurveField": {
       "display-name": "CurveField",
@@ -2361,7 +2361,7 @@
       "type-dependencies": [
         "probe:Edwards.EdwardsCurve"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Edwards.EdwardsCurve.d": {
       "display-name": "d",
@@ -2722,7 +2722,7 @@
         "probe:Edwards.EdwardsCurve",
         "probe:Edwards.Point"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Edwards.Point.ext": {
       "display-name": "ext",
@@ -2836,7 +2836,7 @@
         "probe:Edwards.EdwardsCurve.d",
         "probe:Edwards.Point"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Edwards.Point.on_curve": {
       "display-name": "on_curve",
@@ -3153,7 +3153,7 @@
         "probe:Edwards.Ed25519",
         "probe:Edwards.instAddPointCurveFieldEd25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:Edwards.add_closure": {
       "display-name": "add_closure",
@@ -3876,7 +3876,7 @@
         "probe:Edwards.Point.x",
         "probe:Edwards.Point.y"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:Edwards.d_not_square": {
       "display-name": "d_not_square",
@@ -10469,7 +10469,7 @@
         "probe:Montgomery.instFactPrimeP",
         "probe:Montgomery.Curve25519.A"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:Montgomery.id_4": {
       "display-name": "id_4",
@@ -11180,7 +11180,7 @@
         "probe:Montgomery.Point",
         "probe:Montgomery.mk_point"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Montgomery.mk_point_T": {
       "display-name": "mk_point_T",
@@ -11550,7 +11550,7 @@
         "probe:Montgomery.Curve25519.roots_B",
         "probe:Montgomery.Curve25519.A"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:Montgomery.montgomery_addX_slope_div_roots_B_eq_zero": {
       "display-name": "montgomery_addX_slope_div_roots_B_eq_zero",
@@ -11998,7 +11998,7 @@
         "probe:Montgomery.instFactPrimeP",
         "probe:Montgomery.Curve25519.A"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:Montgomery.non_u_affine_toPoint_spec": {
       "display-name": "non_u_affine_toPoint_spec",
@@ -12861,7 +12861,7 @@
         "probe:Montgomery.instFactPrimeP",
         "probe:Montgomery.instDecidableEqCurveField"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:Montgomery.uDBL": {
       "display-name": "uDBL",
@@ -13935,7 +13935,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Analysis.AnalysisResult"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Analysis.AnalysisResult.error": {
       "display-name": "error",
@@ -14139,7 +14139,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Analysis.SpecParts"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Analysis.SpecParts.docstring": {
       "display-name": "docstring",
@@ -14241,7 +14241,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Analysis.StatementLineResult"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Analysis.StatementLineResult.isEnd": {
       "display-name": "isEnd",
@@ -15196,7 +15196,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.ListFuns.RawFunctionData"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.ListFuns.RawFunctionData.docInfo": {
       "display-name": "docInfo",
@@ -15946,7 +15946,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Types.DocstringInfo"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Types.DocstringInfo.lineEnd": {
       "display-name": "lineEnd",
@@ -16102,7 +16102,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Types.FunctionInput"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Types.FunctionInput.lean_name": {
       "display-name": "lean_name",
@@ -16177,7 +16177,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Types.FunctionListInput"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Types.FunctionListInput.functions": {
       "display-name": "functions",
@@ -16254,7 +16254,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Types.FunctionListOutput"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Types.FunctionListOutput.functions": {
       "display-name": "functions",
@@ -16331,7 +16331,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Types.FunctionOutput"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Types.FunctionOutput.dependencies": {
       "display-name": "dependencies",
@@ -16811,7 +16811,7 @@
       "type-dependencies": [
         "probe:Utils.Lib.Types.FunctionRecord"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:Utils.Lib.Types.FunctionRecord.dependencies": {
       "display-name": "dependencies",
@@ -31743,7 +31743,7 @@
         "probe:curve25519_dalek.edwards.EdwardsPoint.toPoint",
         "probe:Edwards.instSMulNatPointCurveFieldEd25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.Shared0EdwardsPoint.Insts.CoreOpsArithNegEdwardsPoint": {
       "display-name": "CoreOpsArithNegEdwardsPoint",
@@ -32938,7 +32938,7 @@
       "type-dependencies": [
         "probe:p"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithMulSharedAFieldElement51FieldElement51.m_spec": {
       "display-name": "m_spec",
@@ -32965,7 +32965,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.u64.field.MulShared0FieldElement51SharedAFieldElement51FieldElement51.mul.m"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithMulSharedAFieldElement51FieldElement51.mul": {
       "display-name": "mul",
@@ -33070,7 +33070,7 @@
         "probe:p",
         "probe:Field51_as_Nat"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithNegFieldElement51": {
       "display-name": "CoreOpsArithNegFieldElement51",
@@ -33753,7 +33753,7 @@
         "probe:curve25519_dalek.ristretto.RistrettoPoint.toPoint",
         "probe:Edwards.instSMulNatPointCurveFieldEd25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.Shared0RistrettoPoint.Insts.CoreOpsArithNegRistrettoPoint": {
       "display-name": "CoreOpsArithNegRistrettoPoint",
@@ -34635,7 +34635,7 @@
         "probe:U8x32_as_Nat",
         "probe:curve25519_dalek.scalar.Scalar.bytes"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.Shared1MontgomeryPoint.Insts.CoreOpsArithMulShared0ScalarMontgomeryPoint.aux_lt254_mul": {
       "display-name": "aux_lt254_mul",
@@ -34839,7 +34839,7 @@
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51",
         "probe:curve25519_dalek.montgomery.ProjectivePoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.Shared1MontgomeryPoint.Insts.CoreOpsArithMulShared0ScalarMontgomeryPoint.mul_loop_spec": {
       "display-name": "mul_loop_spec",
@@ -34922,7 +34922,7 @@
         "probe:Montgomery.MontgomeryCurveCurve25519",
         "probe:Montgomery.instDecidableEqCurveField"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.Shared1MontgomeryPoint.Insts.CoreOpsArithMulShared0ScalarMontgomeryPoint.mul_spec": {
       "display-name": "mul_spec",
@@ -34983,7 +34983,7 @@
         "probe:Montgomery.MontgomeryCurveCurve25519",
         "probe:Montgomery.instDecidableEqCurveField"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.Shared1Scalar.Insts.CoreOpsArithMulShared0MontgomeryPointMontgomeryPoint": {
       "display-name": "CoreOpsArithMulShared0MontgomeryPointMontgomeryPoint",
@@ -36612,7 +36612,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.BackendKind"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.BackendKind.read_discriminant": {
       "display-name": "read_discriminant",
@@ -36667,7 +36667,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.BackendKind"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.get_selected_backend": {
       "display-name": "get_selected_backend",
@@ -37790,7 +37790,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.curve_models.AffineNielsPoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.curve_models.AffineNielsPoint.xy2d": {
       "display-name": "xy2d",
@@ -39284,7 +39284,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.curve_models.CompletedPoint.instDecidableIsValid": {
       "display-name": "instDecidableIsValid",
@@ -40925,7 +40925,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint.instDecidableIsValid": {
       "display-name": "instDecidableIsValid",
@@ -41164,7 +41164,7 @@
         "probe:instFactPrimeP",
         "probe:Edwards.Ed25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint.toPoint'.congr_simp": {
       "display-name": "congr_simp",
@@ -41212,7 +41212,7 @@
         "probe:Edwards.Ed25519",
         "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint.toPoint'"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint.toPoint_of_isValid": {
       "display-name": "toPoint_of_isValid",
@@ -41907,7 +41907,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.curve_models.ProjectivePoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.curve_models.ProjectivePoint.double": {
       "display-name": "double",
@@ -44702,7 +44702,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.Insts.CoreOpsArithAddAssignSharedAFieldElement51.add_assign_loop_spec": {
       "display-name": "add_assign_loop_spec",
@@ -45541,7 +45541,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.ZERO": {
       "display-name": "ZERO",
@@ -47248,7 +47248,7 @@
         "probe:U8x32_as_Nat",
         "probe:Field51_as_Nat"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.to_bytes_spec'": {
       "display-name": "to_bytes_spec'",
@@ -47280,7 +47280,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.to_bytes"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.u64.field.FieldElement51.u64_and_mask51_bitList_spec": {
       "display-name": "u64_and_mask51_bitList_spec",
@@ -48096,7 +48096,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.add_loop_spec": {
       "display-name": "add_loop_spec",
@@ -48412,7 +48412,7 @@
         "probe:curve25519_dalek.subtle.Choice",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.conditional_add_l_loop_spec": {
       "display-name": "conditional_add_l_loop_spec",
@@ -48606,7 +48606,7 @@
         "probe:Scalar52_as_Nat",
         "probe:U8x32_as_Nat"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_bytes_wide": {
       "display-name": "from_bytes_wide",
@@ -48716,7 +48716,7 @@
         "probe:U8x64_as_Nat",
         "probe:L"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.from_montgomery": {
       "display-name": "from_montgomery",
@@ -49141,7 +49141,7 @@
         "probe:L",
         "probe:Scalar52_wide_as_Nat"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_square": {
       "display-name": "montgomery_square",
@@ -49409,7 +49409,7 @@
         "probe:L",
         "probe:Scalar52_as_Nat"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.set_getElem!_eq": {
       "display-name": "set_getElem!_eq",
@@ -49722,7 +49722,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.sub_loop_spec": {
       "display-name": "sub_loop_spec",
@@ -49891,7 +49891,7 @@
         "probe:U8x32_as_Nat",
         "probe:Scalar52_as_Nat"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.zero_array": {
       "display-name": "zero_array",
@@ -50241,7 +50241,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.core.ops.arith.Add"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.core.ops.arith.AddAssign": {
       "display-name": "AddAssign",
@@ -50316,7 +50316,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.core.ops.arith.AddAssign"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.core.ops.arith.Mul": {
       "display-name": "Mul",
@@ -50364,7 +50364,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.core.ops.arith.Mul"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.core.ops.arith.Mul.mul": {
       "display-name": "mul",
@@ -50439,7 +50439,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.core.ops.arith.MulAssign"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.core.ops.arith.MulAssign.mul_assign": {
       "display-name": "mul_assign",
@@ -50514,7 +50514,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.core.ops.arith.Neg"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.core.ops.arith.Neg.neg": {
       "display-name": "neg",
@@ -50589,7 +50589,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.core.ops.arith.Sub"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.core.ops.arith.Sub.sub": {
       "display-name": "sub",
@@ -50664,7 +50664,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.core.ops.arith.SubAssign"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.core.ops.arith.SubAssign.sub_assign": {
       "display-name": "sub_assign",
@@ -51848,7 +51848,7 @@
         "probe:curve25519_dalek.edwards.EdwardsPoint.T",
         "probe:curve25519_dalek.edwards.EdwardsPoint.IsValid"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.CompressedEdwardsY.from_slice": {
       "display-name": "from_slice",
@@ -52084,7 +52084,7 @@
         "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithAddSharedAFieldElement51FieldElement51.add",
         "probe:curve25519_dalek.field.FieldElement51.sqrt_ratio_i"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.CompressedEdwardsY.step_2_spec": {
       "display-name": "step_2_spec",
@@ -52145,7 +52145,7 @@
         "probe:curve25519_dalek.Shared0FieldElement51.Insts.CoreOpsArithMulSharedAFieldElement51FieldElement51.mul",
         "probe:curve25519_dalek.edwards.EdwardsPoint.T"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.CompressedEdwardsY.toPoint": {
       "display-name": "toPoint",
@@ -55350,7 +55350,7 @@
         "probe:curve25519_dalek.edwards.CompressedEdwardsY",
         "probe:curve25519_dalek.edwards.EdwardsPoint.compress"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.EdwardsPoint.ctorIdx": {
       "display-name": "ctorIdx",
@@ -55377,7 +55377,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.edwards.EdwardsPoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.edwards.EdwardsPoint.double": {
       "display-name": "double",
@@ -55476,7 +55476,7 @@
         "probe:curve25519_dalek.edwards.EdwardsPoint.toPoint",
         "probe:Edwards.instAddPointCurveFieldEd25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.EdwardsPoint.instDecidableIsValid": {
       "display-name": "instDecidableIsValid",
@@ -55706,7 +55706,7 @@
         "probe:curve25519_dalek.edwards.EdwardsPoint.toPoint",
         "probe:Edwards.instZeroPointCurveFieldEd25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.EdwardsPoint.is_torsion_free": {
       "display-name": "is_torsion_free",
@@ -55963,7 +55963,7 @@
         "probe:curve25519_dalek.scalar.Scalar.bytes",
         "probe:Edwards.basepoint"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.EdwardsPoint.mul_by_cofactor": {
       "display-name": "mul_by_cofactor",
@@ -56197,7 +56197,7 @@
         "probe:curve25519_dalek.edwards.EdwardsPoint.toPoint",
         "probe:Edwards.instSMulNatPointCurveFieldEd25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.EdwardsPoint.mul_clamped": {
       "display-name": "mul_clamped",
@@ -56418,7 +56418,7 @@
         "probe:Edwards.Ed25519",
         "probe:curve25519_dalek.edwards.EdwardsPoint.toPoint'"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.edwards.EdwardsPoint.toPoint_of_isValid": {
       "display-name": "toPoint_of_isValid",
@@ -56777,7 +56777,7 @@
         "probe:Montgomery.instDecidableEqCurveField",
         "probe:Montgomery.MontgomeryPoint.mkPoint"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.affine.AffinePoint": {
       "display-name": "AffinePoint",
@@ -57851,7 +57851,7 @@
         "probe:curve25519_dalek.edwards.CompressedEdwardsY",
         "probe:curve25519_dalek.edwards.affine.AffinePoint.compress"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.edwards.affine.AffinePoint.ctorIdx": {
       "display-name": "ctorIdx",
@@ -57878,7 +57878,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.edwards.affine.AffinePoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.edwards.affine.AffinePoint.instDecidableIsValid": {
       "display-name": "instDecidableIsValid",
@@ -58693,7 +58693,7 @@
         "probe:Field51_as_Nat",
         "probe:p"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.field.FieldElement51.invsqrt": {
       "display-name": "invsqrt",
@@ -59390,7 +59390,7 @@
         "probe:Field51_as_Nat",
         "probe:p"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.field.FieldElement51.pow_add_one": {
       "display-name": "pow_add_one",
@@ -59572,7 +59572,7 @@
         "probe:Field51_as_Nat",
         "probe:p"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.field.FieldElement51.prime_25519": {
       "display-name": "prime_25519",
@@ -59829,7 +59829,7 @@
         "probe:curve25519_dalek.field.FieldElement51.SQRT_M1_val",
         "probe:curve25519_dalek.subtle.Choice.val"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.field.FieldElement51.to_bytes_zero_of_Field51_as_Nat_zero": {
       "display-name": "to_bytes_zero_of_Field51_as_Nat_zero",
@@ -61388,7 +61388,7 @@
         "probe:instFactPrimeP",
         "probe:Edwards.Ed25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.decompress_helper": {
       "display-name": "decompress_helper",
@@ -61409,7 +61409,7 @@
       "rust-source": null,
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.elligator_D": {
       "display-name": "elligator_D",
@@ -61815,7 +61815,7 @@
         "probe:Edwards.Ed25519",
         "probe:curve25519_dalek.ristretto.IsEven"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.elligator_ristretto_flavor_x": {
       "display-name": "elligator_ristretto_flavor_x",
@@ -62122,7 +62122,7 @@
         "probe:curve25519_dalek.math.inv_sqrt_checked",
         "probe:curve25519_dalek.math.sqrt_checked"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.inv_sqrt_checked_spec": {
       "display-name": "inv_sqrt_checked_spec",
@@ -62155,7 +62155,7 @@
         "probe:curve25519_dalek.math.inv_sqrt_checked",
         "probe:instFactPrimeP"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.inv_sqrt_checked_sq_mul": {
       "display-name": "inv_sqrt_checked_sq_mul",
@@ -62188,7 +62188,7 @@
         "probe:instFactPrimeP",
         "probe:curve25519_dalek.math.inv_sqrt_checked"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.inv_sqrt_checked_zero": {
       "display-name": "inv_sqrt_checked_zero",
@@ -62575,7 +62575,7 @@
       "type-dependencies": [
         "probe:p"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.sqrt_checked_iff_isSquare": {
       "display-name": "sqrt_checked_iff_isSquare",
@@ -62605,7 +62605,7 @@
         "probe:p",
         "probe:curve25519_dalek.math.sqrt_checked"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.sqrt_checked_spec": {
       "display-name": "sqrt_checked_spec",
@@ -62638,7 +62638,7 @@
         "probe:curve25519_dalek.math.sqrt_checked",
         "probe:instFactPrimeP"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.math.sqrt_m1": {
       "display-name": "sqrt_m1",
@@ -64172,7 +64172,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.montgomery.MontgomeryPoint"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.montgomery.MontgomeryPoint.as_bytes": {
       "display-name": "as_bytes",
@@ -64464,7 +64464,7 @@
         "probe:Montgomery.fromEdwards",
         "probe:Edwards.basepoint"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_clamped": {
       "display-name": "mul_clamped",
@@ -64685,7 +64685,7 @@
         "probe:curve25519_dalek.montgomery.MontgomeryPoint",
         "probe:curve25519_dalek.montgomery.MontgomeryPoint.to_bytes"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.montgomery.MontgomeryPoint.to_edwards": {
       "display-name": "to_edwards",
@@ -65760,7 +65760,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.montgomery.ProjectivePoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.montgomery.ProjectivePoint.isValid_iff": {
       "display-name": "isValid_iff",
@@ -66260,7 +66260,7 @@
         "probe:curve25519_dalek.subtle.Choice.val",
         "probe:U8x32_as_Nat"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.montgomery.instDecidableIsValid": {
       "display-name": "instDecidableIsValid",
@@ -67366,7 +67366,7 @@
         "probe:curve25519_dalek.ristretto.decompress_pure",
         "probe:curve25519_dalek.ristretto.RistrettoPoint.toPoint"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.ristretto.CompressedRistretto.from_slice": {
       "display-name": "from_slice",
@@ -67639,7 +67639,7 @@
         "probe:curve25519_dalek.ristretto.CompressedRistretto",
         "probe:curve25519_dalek.ristretto.CompressedRistretto.to_bytes"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.ristretto.EdwardsPoint_IsSquare_iff_IsEven": {
       "display-name": "EdwardsPoint_IsSquare_iff_IsEven",
@@ -67919,7 +67919,7 @@
         "probe:curve25519_dalek.ristretto.IsEven",
         "probe:Edwards.instAddPointCurveFieldEd25519"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.ristretto.RistrettoPoint": {
       "display-name": "RistrettoPoint",
@@ -70848,7 +70848,7 @@
         "probe:curve25519_dalek.math.is_negative",
         "probe:curve25519_dalek.ristretto.decompress_step1"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.ristretto.decompress.step_2": {
       "display-name": "step_2",
@@ -73914,7 +73914,7 @@
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.subtle.Choice"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.scalar.Scalar.Insts.SubtleConditionallySelectable.conditional_swap": {
       "display-name": "conditional_swap",
@@ -74643,7 +74643,7 @@
       "rust-source": "curve25519-dalek/src/scalar.rs",
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.scalar.Scalar.batch_invert": {
       "display-name": "batch_invert",
@@ -74776,7 +74776,7 @@
         "probe:curve25519_dalek.scalar.Scalar",
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.scalar.Scalar.batch_invert_loop1": {
       "display-name": "batch_invert_loop1",
@@ -74847,7 +74847,7 @@
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52",
         "probe:curve25519_dalek.scalar.Scalar"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.scalar.Scalar.bytes": {
       "display-name": "bytes",
@@ -74967,7 +74967,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.scalar.Scalar"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order": {
       "display-name": "from_bytes_mod_order",
@@ -75556,7 +75556,7 @@
       "rust-source": "curve25519-dalek/src/scalar.rs",
       "term-dependencies": [],
       "type-dependencies": [],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.scalar.Scalar.reduce": {
       "display-name": "reduce",
@@ -75746,7 +75746,7 @@
         "probe:curve25519_dalek.scalar.Scalar.to_bytes",
         "probe:curve25519_dalek.scalar.Scalar.bytes"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.scalar.Scalar.to_radix_2w_size_hint": {
       "display-name": "to_radix_2w_size_hint",
@@ -75988,7 +75988,7 @@
         "probe:L",
         "probe:curve25519_dalek.scalar.Scalar52.invert"
       ],
-      "verification-status": "verified"
+      "verification-status": "unverified"
     },
     "probe:curve25519_dalek.scalar.Scalar52.isMont_loop": {
       "display-name": "isMont_loop",
@@ -76224,7 +76224,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.scalar.Scalar52.montgomery_invert_spec": {
       "display-name": "montgomery_invert_spec",
@@ -77129,7 +77129,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.subtle.Choice"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.subtle.Choice.mk.congr_simp": {
       "display-name": "congr_simp",
@@ -77156,7 +77156,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.subtle.Choice"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.subtle.Choice.ne_zero_iff_eq_one": {
       "display-name": "ne_zero_iff_eq_one",
@@ -77677,7 +77677,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.subtle.ConditionallySelectable"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.subtle.ConstantTimeEq": {
       "display-name": "ConstantTimeEq",
@@ -77754,7 +77754,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.subtle.ConstantTimeEq"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.subtle.CtOption": {
       "display-name": "CtOption",
@@ -77806,7 +77806,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.subtle.CtOption"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.subtle.CtOption.is_some": {
       "display-name": "is_some",
@@ -77992,7 +77992,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.traits.Identity"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.traits.Identity.identity": {
       "display-name": "identity",
@@ -78105,7 +78105,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.traits.ValidityCheck"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.traits.ValidityCheck.is_valid": {
       "display-name": "is_valid",
@@ -78269,7 +78269,7 @@
         "probe:curve25519_dalek.subtle.ConditionallySelectable",
         "probe:curve25519_dalek.window.LookupTable"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.window.LookupTableProjectiveNielsPoint.Insts.CoreConvertFromSharedAEdwardsPoint.from": {
       "display-name": "from",
@@ -78379,7 +78379,7 @@
         "probe:curve25519_dalek.edwards.EdwardsPoint",
         "probe:curve25519_dalek.backend.serial.curve_models.ProjectiveNielsPoint"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.zeroize.DefaultIsZeroes": {
       "display-name": "DefaultIsZeroes",
@@ -78481,7 +78481,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.zeroize.DefaultIsZeroes"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.zeroize.Zeroize": {
       "display-name": "Zeroize",
@@ -78589,7 +78589,7 @@
       "type-dependencies": [
         "probe:curve25519_dalek.zeroize.Zeroize"
       ],
-      "verification-status": "unverified"
+      "verification-status": "verified"
     },
     "probe:curve25519_dalek.zeroize.Zeroize.zeroize": {
       "display-name": "zeroize",
