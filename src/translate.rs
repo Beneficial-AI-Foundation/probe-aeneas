@@ -1,10 +1,18 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use probe::types::{Atom, TranslationMapping};
 use regex::Regex;
 
 use crate::types::{FunctionRecord, FunctionsFile, LineRange};
+
+static RE_REF: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"&'?\w*\s*").expect("valid regex"));
+static RE_BRACE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{([^}]+)\}").expect("valid regex"));
+static RE_GENERIC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"<[^>]*>").expect("valid regex"));
 
 /// Statistics from translation generation.
 pub struct TranslateStats {
@@ -99,13 +107,9 @@ pub fn build_functions_rust_names(functions: &[FunctionRecord]) -> HashSet<Strin
 ///
 /// Strips lifetime parameters, reference markers, brace wrappers, and generics.
 pub(crate) fn normalize_rust_name(name: &str) -> String {
-    let re_ref = Regex::new(r"&'?\w*\s*").unwrap();
-    let re_brace = Regex::new(r"\{([^}]+)\}").unwrap();
-    let re_generic = Regex::new(r"<[^>]*>").unwrap();
-
-    let s = re_ref.replace_all(name, "");
-    let s = re_brace.replace_all(&s, "$1");
-    let s = re_generic.replace_all(&s, "");
+    let s = RE_REF.replace_all(name, "");
+    let s = RE_BRACE.replace_all(&s, "$1");
+    let s = RE_GENERIC.replace_all(&s, "");
     s.replace(' ', "")
 }
 
@@ -285,6 +289,10 @@ pub fn load_atoms(path: &Path) -> Result<BTreeMap<String, Atom>, String> {
 }
 
 /// Build a full translations JSON value ready to write to disk.
+///
+/// Expects single-probe envelopes with a top-level `"source"` key containing
+/// package metadata. Does not support merged envelopes, which use `"inputs"`
+/// instead of `"source"`.
 pub fn build_translations_json(
     mappings: &[TranslationMapping],
     rust_envelope: &serde_json::Value,
@@ -389,6 +397,27 @@ mod tests {
     }
 
     #[test]
+    fn test_normalize_rust_name_deterministic_strips_generics() {
+        // Behavioral contract: output must not contain < or >
+        let result = normalize_rust_name("Vec<u8>");
+        assert!(!result.contains('<'), "generics must be stripped");
+        assert!(!result.contains('>'), "generics must be stripped");
+    }
+
+    #[test]
+    fn test_normalize_rust_name_strips_refs_and_lifetimes() {
+        // Behavioral contract: output must not contain & or '
+        let result = normalize_rust_name("&'a str");
+        assert!(!result.contains('&'), "reference markers must be stripped");
+        assert!(!result.contains('\''), "lifetime parameters must be stripped");
+    }
+
+    #[test]
+    fn test_normalize_rust_name_identity_for_simple_names() {
+        assert_eq!(normalize_rust_name("foo"), "foo");
+    }
+
+    #[test]
     fn test_line_range_parse() {
         let r = LineRange::parse("L292-L325").unwrap();
         assert_eq!(r.start, 292);
@@ -399,6 +428,7 @@ mod tests {
     fn test_line_range_parse_invalid() {
         assert!(LineRange::parse("292-325").is_none());
         assert!(LineRange::parse("").is_none());
+        assert!(LineRange::parse("L325-L292").is_none()); // start > end
     }
 
     #[test]

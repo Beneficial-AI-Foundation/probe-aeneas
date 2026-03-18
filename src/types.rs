@@ -34,6 +34,9 @@ impl LineRange {
         let end_str = end_part.strip_prefix('L')?;
         let start = start_str.parse().ok()?;
         let end = end_str.parse().ok()?;
+        if start > end {
+            return None;
+        }
         Some(LineRange { start, end })
     }
 
@@ -45,5 +48,22 @@ impl LineRange {
         let end = std::cmp::min(self.end, other.end) as i64;
         let start = std::cmp::max(self.start, other.start) as i64;
         end - start
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn line_range_rejects_inverted_range() {
+        assert!(LineRange::parse("L100-L50").is_none());
+    }
+
+    #[test]
+    fn line_range_accepts_valid_range() {
+        let r = LineRange::parse("L50-L100").expect("valid range");
+        assert_eq!(r.start, 50);
+        assert_eq!(r.end, 100);
     }
 }

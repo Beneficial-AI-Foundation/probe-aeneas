@@ -13,9 +13,13 @@ pub fn run_probe_rust_extract(project: &Path) -> Result<PathBuf, String> {
     let status = Command::new(&bin)
         .args([
             "extract",
-            project.to_str().unwrap_or("."),
+            project
+                .to_str()
+                .ok_or_else(|| "Project path is not valid UTF-8".to_string())?,
             "-o",
-            output.to_str().unwrap_or("."),
+            output
+                .to_str()
+                .ok_or_else(|| "Output path is not valid UTF-8".to_string())?,
             "--auto-install",
             "--with-charon",
         ])
@@ -49,9 +53,13 @@ pub fn run_probe_lean_extract(project: &Path) -> Result<PathBuf, String> {
     let status = Command::new(&bin)
         .args([
             "extract",
-            project.to_str().unwrap_or("."),
+            project
+                .to_str()
+                .ok_or_else(|| "Project path is not valid UTF-8".to_string())?,
             "-o",
-            output.to_str().unwrap_or("."),
+            output
+                .to_str()
+                .ok_or_else(|| "Output path is not valid UTF-8".to_string())?,
         ])
         .status()
         .map_err(|e| format!("Failed to run probe-lean: {e}"))?;
