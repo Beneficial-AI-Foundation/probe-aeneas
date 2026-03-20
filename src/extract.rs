@@ -6,6 +6,7 @@ use probe::types::{Atom, InputProvenance, MergedAtomEnvelope, Tool};
 
 use crate::aeneas_config::AeneasConfig;
 use crate::extract_runner;
+use crate::gen_functions::generate_functions_json;
 use crate::listfuns::run_listfuns;
 use crate::translate::{
     build_functions_rust_names, build_translations_json, generate_translations, load_atoms,
@@ -18,6 +19,11 @@ type TranslationMaps = (HashMap<String, String>, HashMap<String, String>);
 ///
 /// Accepts either pre-generated JSON paths or project paths for Rust and Lean.
 /// When project paths are given, the corresponding extractors are run automatically.
+///
+/// When `use_lake` is true, `lake exe listfuns` is used to generate
+/// `functions.json` (requires the Lean project to define a `listfuns`
+/// executable). Otherwise, Aeneas-generated `.lean` files are parsed directly.
+#[allow(clippy::too_many_arguments)]
 pub fn run_extract(
     rust_json: Option<&Path>,
     rust_project: Option<&Path>,
@@ -26,6 +32,7 @@ pub fn run_extract(
     functions_json: Option<&Path>,
     output_path: Option<&Path>,
     aeneas_config: Option<&Path>,
+    use_lake: bool,
 ) -> Result<(), String> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
@@ -50,7 +57,7 @@ pub fn run_extract(
     let (rust_path, lean_path) = resolve_inputs(rust_json, rust_project, lean_json, lean_project)?;
 
     // --- Resolve functions.json ---
-    let functions_path = resolve_functions(functions_json, lean_project)?;
+    let functions_path = resolve_functions(functions_json, lean_project, use_lake)?;
 
     // --- Load Aeneas config (optional) ---
     let config = AeneasConfig::load(aeneas_config, lean_project)?;
@@ -116,10 +123,12 @@ fn resolve_inputs(
     }
 }
 
-/// Resolve functions.json: use provided path or auto-generate via listfuns.
+/// Resolve functions.json: use provided path, generate from Lean source, or
+/// fall back to `lake exe listfuns`.
 fn resolve_functions(
     functions_json: Option<&Path>,
     lean_project: Option<&Path>,
+    use_lake: bool,
 ) -> Result<PathBuf, String> {
     if let Some(path) = functions_json {
         return Ok(path.to_path_buf());
@@ -128,7 +137,12 @@ fn resolve_functions(
     let lean_proj =
         lean_project.ok_or("Cannot auto-generate functions.json without --lean-project")?;
     let functions_path = lean_proj.join("functions.json");
-    run_listfuns(lean_proj, &functions_path)?;
+
+    if use_lake {
+        run_listfuns(lean_proj, &functions_path)?;
+    } else {
+        generate_functions_json(lean_proj, &functions_path)?;
+    }
     Ok(functions_path)
 }
 

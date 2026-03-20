@@ -109,6 +109,7 @@ fn library_extract_with_pregenerated_json() {
         Some(functions_json),
         Some(&output_path),
         None,
+        false,
     )
     .expect("probe-aeneas extract failed");
 

@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use probe_aeneas::{extract, listfuns};
+use probe_aeneas::{extract, gen_functions, listfuns};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -53,6 +53,12 @@ enum Commands {
         /// Defaults to .verilib/aeneas.json in the Lean project directory.
         #[arg(long)]
         aeneas_config: Option<PathBuf>,
+
+        /// Use `lake exe listfuns` to generate functions.json instead of
+        /// parsing Aeneas-generated Lean files directly. Requires the Lean
+        /// project to define a `listfuns` executable.
+        #[arg(long)]
+        lake: bool,
     },
 
     /// Generate a translations file mapping Rust code-names to Lean code-names.
@@ -74,7 +80,11 @@ enum Commands {
         output: PathBuf,
     },
 
-    /// Generate functions.json by running `lake exe listfuns` in a Lean project.
+    /// Generate functions.json from a Lean project.
+    ///
+    /// By default, parses Aeneas-generated `.lean` files directly.
+    /// Use --lake to run `lake exe listfuns` instead (requires the Lean project
+    /// to define a `listfuns` executable).
     Listfuns {
         /// Path to the Lean project directory.
         #[arg(long)]
@@ -83,6 +93,10 @@ enum Commands {
         /// Output path for functions.json.
         #[arg(short, long, default_value = "functions.json")]
         output: PathBuf,
+
+        /// Use `lake exe listfuns` instead of parsing Lean files directly.
+        #[arg(long)]
+        lake: bool,
     },
 }
 
@@ -98,6 +112,7 @@ fn main() {
             functions,
             output,
             aeneas_config,
+            lake,
         } => extract::run_extract(
             rust.as_deref(),
             rust_project.as_deref(),
@@ -106,6 +121,7 @@ fn main() {
             functions.as_deref(),
             output.as_deref(),
             aeneas_config.as_deref(),
+            lake,
         ),
 
         Commands::Translate {
@@ -118,7 +134,14 @@ fn main() {
         Commands::Listfuns {
             lean_project,
             output,
-        } => listfuns::run_listfuns(&lean_project, &output),
+            lake,
+        } => {
+            if lake {
+                listfuns::run_listfuns(&lean_project, &output)
+            } else {
+                gen_functions::generate_functions_json(&lean_project, &output)
+            }
+        }
     };
 
     if let Err(e) = result {
