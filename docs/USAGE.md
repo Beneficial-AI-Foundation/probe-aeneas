@@ -102,7 +102,11 @@ probe-aeneas translate \
 
 ### `listfuns`
 
-Generate `functions.json` by running `lake exe listfuns` in a Lean project.
+Generate `functions.json` from a Lean project. By default, parses
+Aeneas-generated `.lean` files directly and enriches with verification data
+from `probe-lean extract`. Use `--no-enrich` for a basic function list without
+verification data. Use `--lake` to delegate to the project's own
+`lake exe listfuns` executable.
 
 ```
 probe-aeneas listfuns [OPTIONS]
@@ -114,12 +118,46 @@ probe-aeneas listfuns [OPTIONS]
 |------|-------|-------------|
 | `--lean-project <PATH>` | | Path to the Lean project directory. Required. |
 | `--output <PATH>` | `-o` | Output file path. Default: `functions.json`. |
+| `--lake` | | Use `lake exe listfuns` instead of parsing Lean files directly. |
+| `--no-enrich` | | Skip enrichment (no probe-lean call, basic function list only). |
+| `--atoms <PATH>` | | Path to pre-computed atoms JSON (from `probe-lean extract`). Skips the internal probe-lean invocation. |
+| `--module <PREFIX>` | | Module prefix filter passed to `probe-lean extract` via `-m`. |
+| `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`). Defaults to `.verilib/aeneas.json`. |
 
 ### Examples
+
+**Enriched output (default):**
 
 ```bash
 probe-aeneas listfuns \
   --lean-project path/to/lean/project \
+  --output functions.json
+```
+
+**With pre-computed atoms (skip probe-lean invocation):**
+
+```bash
+probe-aeneas listfuns \
+  --lean-project path/to/lean/project \
+  --atoms path/to/lean_atoms.json \
+  --output functions.json
+```
+
+**Basic function list without verification data:**
+
+```bash
+probe-aeneas listfuns \
+  --lean-project path/to/lean/project \
+  --no-enrich \
+  --output functions.json
+```
+
+**Delegate to lake exe listfuns:**
+
+```bash
+probe-aeneas listfuns \
+  --lean-project path/to/lean/project \
+  --lake \
   --output functions.json
 ```
 

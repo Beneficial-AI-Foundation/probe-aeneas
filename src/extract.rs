@@ -291,7 +291,6 @@ fn enrich_with_aeneas_metadata(
     }
 }
 
-
 /// Construct and write the Aeneas extract envelope.
 fn write_aeneas_envelope(
     merged: std::collections::BTreeMap<String, Atom>,

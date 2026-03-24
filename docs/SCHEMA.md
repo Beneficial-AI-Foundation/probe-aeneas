@@ -446,11 +446,20 @@ maps to exactly one Lean definition (1-to-1).
 ## 3. `listfuns` -- Function Listing
 
 **Produced by:** `listfuns`
-**Envelope:** None (pass-through from `lake exe listfuns`)
+**Envelope:** None
 
-The `listfuns` command delegates entirely to `lake exe listfuns` in the Lean
-project. The output format is defined by the Lean project's `listfuns`
-executable, not by probe-aeneas. Typical structure:
+The `listfuns` command has three modes:
+
+1. **Enriched (default):** Parses Aeneas-generated `.lean` files, runs
+   `probe-lean extract` internally, and produces an enriched function list
+   with verification data, dependencies, and classification flags.
+2. **Basic (`--no-enrich`):** Parses Aeneas-generated `.lean` files and
+   produces a minimal function list without verification data.
+3. **Lake (`--lake`):** Delegates entirely to `lake exe listfuns` in the
+   Lean project. The output format is defined by the project's `listfuns`
+   executable.
+
+### Enriched Output (default)
 
 ```json
 {
@@ -459,13 +468,26 @@ executable, not by probe-aeneas. Typical structure:
       "lean_name": "Curve25519Dalek.Field.FieldElement51.reduce",
       "rust_name": "curve25519_dalek::field::FieldElement51::reduce",
       "source": "curve25519-dalek/src/backend/serial/u64/field.rs",
-      "lines": "L292-L325"
+      "lines": "L292-L325",
+      "dependencies": ["Curve25519Dalek.Field.FieldElement51.mul", "..."],
+      "nested_children": [],
+      "is_relevant": true,
+      "is_extraction_artifact": false,
+      "is_hidden": false,
+      "is_ignored": false,
+      "specified": true,
+      "verified": true,
+      "fully_verified": true,
+      "externally_verified": false,
+      "spec_file": "Curve25519Dalek/Specs.lean",
+      "spec_docstring": null,
+      "spec_statement": null
     }
   ]
 }
 ```
 
-### FunctionRecord
+### Enriched FunctionRecord
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -473,6 +495,47 @@ executable, not by probe-aeneas. Typical structure:
 | `rust_name` | string | no | Corresponding Rust qualified name (from Charon LLBC) |
 | `source` | string | no | Relative path to the Rust source file |
 | `lines` | string | no | Line range in `"L<start>-L<end>"` format |
+| `dependencies` | array of strings | yes | Lean dependency names (probe prefix stripped) |
+| `nested_children` | array of strings | yes | Always `[]` (reserved for future use) |
+| `is_relevant` | bool | yes | Whether the function belongs to the target crate |
+| `is_extraction_artifact` | bool | yes | Whether the function is an Aeneas extraction artifact |
+| `is_hidden` | bool | yes | Whether the function is hidden from default views |
+| `is_ignored` | bool | yes | Whether the function is ignored from progress metrics |
+| `specified` | bool | yes | Whether a spec theorem exists for this function |
+| `verified` | bool | yes | Whether the spec theorem has `verification-status: verified` |
+| `fully_verified` | bool | yes | Whether the function and all transitive Funs.lean dependencies are verified |
+| `externally_verified` | bool | yes | Whether the function is verified externally (e.g. in Verus) |
+| `spec_file` | string | no | Path to the file containing the spec theorem |
+| `spec_docstring` | string | no | Spec theorem docstring (reserved, currently `null`) |
+| `spec_statement` | string | no | Spec theorem statement text (reserved, currently `null`) |
+
+### Basic Output (`--no-enrich`)
+
+```json
+{
+  "functions": [
+    {
+      "lean_name": "Curve25519Dalek.Field.FieldElement51.reduce",
+      "rust_name": "curve25519_dalek::field::FieldElement51::reduce",
+      "source": "curve25519-dalek/src/backend/serial/u64/field.rs",
+      "lines": "L292-L325",
+      "is_hidden": false,
+      "is_extraction_artifact": false
+    }
+  ]
+}
+```
+
+### Basic FunctionRecord
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `lean_name` | string | yes | Fully qualified Lean name |
+| `rust_name` | string | no | Corresponding Rust qualified name (from Charon LLBC) |
+| `source` | string | no | Relative path to the Rust source file |
+| `lines` | string | no | Line range in `"L<start>-L<end>"` format |
+| `is_hidden` | bool | yes | Whether the function is hidden (name-pattern heuristic only) |
+| `is_extraction_artifact` | bool | yes | Whether the function is an Aeneas extraction artifact |
 
 ---
 

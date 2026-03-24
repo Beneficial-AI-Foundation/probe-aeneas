@@ -57,7 +57,10 @@ pub fn run_enriched_listfuns(
     aeneas_config_path: Option<&Path>,
 ) -> Result<(), String> {
     let records = gen_functions::parse_aeneas_project(lean_project)?;
-    println!("Parsed {} function entries from Aeneas files", records.len());
+    println!(
+        "Parsed {} function entries from Aeneas files",
+        records.len()
+    );
 
     let atoms = load_atoms(lean_project, atoms_path, module_prefix)?;
     println!("Loaded {} atoms from probe-lean", atoms.len());
@@ -95,20 +98,7 @@ fn load_atoms(
         None => extract_runner::run_probe_lean_extract_with_opts(lean_project, module_prefix)?,
     };
 
-    let content = std::fs::read_to_string(&json_path)
-        .map_err(|e| format!("Failed to read atoms JSON {}: {e}", json_path.display()))?;
-
-    let envelope: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse atoms JSON: {e}"))?;
-
-    let data = envelope
-        .get("data")
-        .ok_or_else(|| "Atoms JSON missing 'data' field".to_string())?;
-
-    let atoms: BTreeMap<String, Atom> = serde_json::from_value(data.clone())
-        .map_err(|e| format!("Failed to deserialize atoms data: {e}"))?;
-
-    Ok(atoms)
+    crate::translate::load_atoms(&json_path)
 }
 
 /// Heuristically detect the Rust crate name from function records' source paths.
@@ -130,4 +120,63 @@ fn detect_crate_name(records: &[crate::types::FunctionRecord]) -> String {
         }
     }
     String::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::FunctionRecord;
+
+    fn rec(source: Option<&str>) -> FunctionRecord {
+        FunctionRecord {
+            lean_name: "test".to_string(),
+            rust_name: None,
+            source: source.map(String::from),
+            lines: None,
+            is_hidden: false,
+            is_extraction_artifact: false,
+        }
+    }
+
+    #[test]
+    fn detect_crate_from_crate_prefixed_path() {
+        let records = vec![rec(Some("curve25519-dalek/src/scalar.rs"))];
+        assert_eq!(detect_crate_name(&records), "curve25519-dalek");
+    }
+
+    #[test]
+    fn detect_crate_from_src_path() {
+        let records = vec![rec(Some("src/backend/serial/u64/field.rs"))];
+        assert_eq!(detect_crate_name(&records), "backend");
+    }
+
+    #[test]
+    fn detect_crate_skips_absolute_paths() {
+        let records = vec![
+            rec(Some("/rustc/library/core/src/borrow.rs")),
+            rec(Some("mycrate/src/lib.rs")),
+        ];
+        assert_eq!(detect_crate_name(&records), "mycrate");
+    }
+
+    #[test]
+    fn detect_crate_skips_cargo_registry() {
+        let records = vec![
+            rec(Some("foo/cargo/registry/src/dep/lib.rs")),
+            rec(Some("mycrate/src/lib.rs")),
+        ];
+        assert_eq!(detect_crate_name(&records), "mycrate");
+    }
+
+    #[test]
+    fn detect_crate_empty_when_no_sources() {
+        let records = vec![rec(None), rec(None)];
+        assert_eq!(detect_crate_name(&records), "");
+    }
+
+    #[test]
+    fn detect_crate_empty_for_empty_records() {
+        let records: Vec<FunctionRecord> = vec![];
+        assert_eq!(detect_crate_name(&records), "");
+    }
 }

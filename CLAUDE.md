@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 probe-aeneas is a Rust CLI tool that bridges Rust and Lean call graphs for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects. It has three subcommands:
 - **extract**: Full pipeline -- extract atoms (if needed), generate translation mappings, and merge Rust + Lean call graphs into a unified atom file with cross-language edges.
 - **translate**: Generate translation mappings between Rust and Lean code-names using `functions.json` as the bridge.
-- **listfuns**: Run `lake exe listfuns` in a Lean project to produce `functions.json`.
+- **listfuns**: Generate enriched `functions.json` with verification data (default), or delegate to `lake exe listfuns`, or produce a basic function list.
 
 ## Build and Test Commands
 
@@ -35,9 +35,11 @@ cargo fmt && cargo clippy --all-targets && cargo test
 src/
 ├── main.rs            # CLI entry point with subcommand routing (clap)
 ├── extract.rs         # Extract pipeline: input resolution, translation, merge orchestration
+├── enrich.rs          # Shared enrichment: heuristic classifiers, atom helpers, enrichment pipeline
 ├── translate.rs       # Translation logic: three matching strategies, JSON I/O, unit tests
 ├── extract_runner.rs  # Runs probe-rust and probe-lean extractors, auto-install logic
-├── listfuns.rs        # Runs `lake exe listfuns` in a Lean project
+├── listfuns.rs        # Enriched listfuns pipeline, or delegates to `lake exe listfuns`
+├── gen_functions.rs   # Parses Aeneas-generated .lean files into function records
 └── types.rs           # FunctionRecord, FunctionsFile, LineRange for functions.json parsing
 docs/
 ├── architecture.md    # How probe-aeneas relates to probe merge

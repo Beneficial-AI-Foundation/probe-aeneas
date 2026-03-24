@@ -10,8 +10,7 @@ use crate::types::FunctionRecord;
 pub const PROBE_PREFIX: &str = "probe:";
 
 /// Standard Aeneas extraction artifact suffixes (underscore-joined).
-pub const ARTIFACT_SUFFIXES: &[&str] =
-    &["_body", "_loop", "_loop0", "_loop1", "_loop2", "_loop3"];
+pub const ARTIFACT_SUFFIXES: &[&str] = &["_body", "_loop", "_loop0", "_loop1", "_loop2", "_loop3"];
 
 /// Aeneas artifact suffixes matching dot-separated last component.
 pub const ARTIFACT_DOT_SUFFIXES: &[&str] = &[".body"];
@@ -240,7 +239,9 @@ pub fn enrich_function_records(
             .map(|a| is_externally_verified(&atom_attrs(a)))
             .unwrap_or(false);
 
-        let spec_file = spec_atom.map(|a| a.code_path.clone()).filter(|p| !p.is_empty());
+        let spec_file = spec_atom
+            .map(|a| a.code_path.clone())
+            .filter(|p| !p.is_empty());
 
         let (spec_docstring, spec_statement) = extract_spec_text(spec_atom);
 
@@ -249,8 +250,7 @@ pub fn enrich_function_records(
             .map(|d| strip_prefix(d).to_string())
             .collect();
 
-        let fully_verified =
-            compute_fully_verified(&rec.lean_name, atoms, &mut fv_cache);
+        let fully_verified = compute_fully_verified(&rec.lean_name, atoms, &mut fv_cache);
 
         results.push(EnrichedFunctionOutput {
             lean_name: rec.lean_name.clone(),
@@ -293,11 +293,7 @@ fn find_primary_spec<'a>(
     let key = format!("{PROBE_PREFIX}{lean_name}");
 
     if let Some(atom) = atoms.get(&key) {
-        if let Some(ps) = atom
-            .extensions
-            .get("primary-spec")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(ps) = atom.extensions.get("primary-spec").and_then(|v| v.as_str()) {
             let ps_key = if ps.starts_with(PROBE_PREFIX) {
                 ps.to_string()
             } else {
@@ -375,10 +371,8 @@ pub fn compute_fully_verified(
             continue;
         };
         let code_path = &dep_atom.code_path;
-        if code_path.ends_with("Funs.lean") {
-            if !compute_fully_verified(dep_name, atoms, cache) {
-                return false;
-            }
+        if code_path.ends_with("Funs.lean") && !compute_fully_verified(dep_name, atoms, cache) {
+            return false;
         }
     }
 
@@ -507,12 +501,18 @@ fn compute_enrichment_stats(functions: &[EnrichedFunctionOutput]) -> FunctionEnr
         fully_verified: visible.iter().filter(|f| f.fully_verified).count(),
         externally_verified: visible.iter().filter(|f| f.externally_verified).count(),
         hidden: functions.iter().filter(|f| f.is_hidden).count(),
-        artifacts: functions.iter().filter(|f| f.is_extraction_artifact).count(),
+        artifacts: functions
+            .iter()
+            .filter(|f| f.is_extraction_artifact)
+            .count(),
     }
 }
 
 fn print_enrichment_stats(stats: &FunctionEnrichStats) {
-    println!("\nEnriched {} functions ({} visible)", stats.total, stats.visible);
+    println!(
+        "\nEnriched {} functions ({} visible)",
+        stats.total, stats.visible
+    );
     println!(
         "  verified={}  specified={}  externally_verified={}  fully_verified={}",
         stats.verified, stats.specified, stats.externally_verified, stats.fully_verified,
@@ -521,4 +521,306 @@ fn print_enrichment_stats(stats: &FunctionEnrichStats) {
         "  hidden={}  extraction_artifacts={}",
         stats.hidden, stats.artifacts,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use probe::types::CodeText;
+
+    use super::*;
+
+    fn test_atom() -> Atom {
+        Atom {
+            display_name: String::new(),
+            dependencies: BTreeSet::new(),
+            code_module: String::new(),
+            code_path: String::new(),
+            code_text: CodeText::default(),
+            kind: String::new(),
+            language: String::new(),
+            extensions: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn artifact_suffixes_detected() {
+        assert!(is_extraction_artifact("foo_body"));
+        assert!(is_extraction_artifact("bar_loop"));
+        assert!(is_extraction_artifact("baz_loop0"));
+        assert!(is_extraction_artifact("baz_loop3"));
+        assert!(is_extraction_artifact("qux_loop.body"));
+        assert!(!is_extraction_artifact("foo"));
+        assert!(!is_extraction_artifact("loop_helper"));
+        assert!(!is_extraction_artifact("body_parser"));
+    }
+
+    #[test]
+    fn hidden_by_name_patterns() {
+        assert!(is_hidden_by_name("Foo.Insts.Bar"));
+        assert!(is_hidden_by_name("foo.mutual"));
+        assert!(is_hidden_by_name("foo.closure.anon"));
+        assert!(is_hidden_by_name("Foo.Blanket.Bar"));
+        assert!(is_hidden_by_name("DOC_HIDDEN_CONST"));
+        assert!(!is_hidden_by_name("foo.bar.baz"));
+        assert!(!is_hidden_by_name("Scalar.reduce"));
+    }
+
+    #[test]
+    fn hidden_with_attrs_and_config() {
+        let config = AeneasConfig::default();
+
+        let trait_attrs = vec!["rust_trait_impl".to_string()];
+        assert!(is_hidden("normal.name", &trait_attrs, &config));
+
+        assert!(!is_hidden("normal.name", &[], &config));
+
+        let mut config_with_hidden = AeneasConfig::default();
+        config_with_hidden
+            .hidden
+            .insert("manually_hidden".to_string());
+        assert!(is_hidden("manually_hidden", &[], &config_with_hidden));
+    }
+
+    #[test]
+    fn is_relevant_logic() {
+        assert!(is_relevant("", "mycrate"));
+        assert!(is_relevant("null", "mycrate"));
+        assert!(is_relevant("anything", ""));
+        assert!(is_relevant("mycrate/src/lib.rs", "mycrate"));
+        assert!(!is_relevant("/absolute/path/mycrate/src/lib.rs", "mycrate"));
+        assert!(!is_relevant(
+            "registry/cargo/registry/mycrate/src/lib.rs",
+            "mycrate"
+        ));
+        assert!(!is_relevant("othercrate/src/lib.rs", "mycrate"));
+    }
+
+    #[test]
+    fn externally_verified_check() {
+        let attrs = vec!["externally_verified".to_string()];
+        assert!(is_externally_verified(&attrs));
+        assert!(!is_externally_verified(&[]));
+        assert!(!is_externally_verified(&["other".to_string()]));
+    }
+
+    #[test]
+    fn structure_and_type_alias_checks() {
+        assert!(is_structure("structure"));
+        assert!(!is_structure("def"));
+
+        assert!(is_type_alias("def", &["reducible".to_string()]));
+        assert!(!is_type_alias("def", &[]));
+        assert!(!is_type_alias("theorem", &["reducible".to_string()]));
+    }
+
+    #[test]
+    fn strip_prefix_removes_probe_prefix() {
+        assert_eq!(strip_prefix("probe:Foo.bar"), "Foo.bar");
+        assert_eq!(strip_prefix("Foo.bar"), "Foo.bar");
+        assert_eq!(strip_prefix("probe:"), "");
+    }
+
+    #[test]
+    fn atom_attrs_extracts_strings() {
+        let mut atom = test_atom();
+        atom.extensions.insert(
+            "attributes".to_string(),
+            serde_json::json!(["rust_trait_impl", "reducible"]),
+        );
+        let attrs = atom_attrs(&atom);
+        assert_eq!(attrs, vec!["rust_trait_impl", "reducible"]);
+    }
+
+    #[test]
+    fn atom_attrs_empty_when_missing() {
+        let atom = test_atom();
+        assert!(atom_attrs(&atom).is_empty());
+    }
+
+    #[test]
+    fn find_primary_spec_by_extension() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("MyFunc_spec"));
+        atoms.insert("probe:MyFunc".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.code_path = "Specs.lean".to_string();
+        atoms.insert("probe:MyFunc_spec".to_string(), spec_atom);
+
+        let (key, atom) = find_primary_spec("MyFunc", &atoms);
+        assert_eq!(key, Some("probe:MyFunc_spec".to_string()));
+        assert!(atom.is_some());
+    }
+
+    #[test]
+    fn find_primary_spec_by_name_convention() {
+        let mut atoms = BTreeMap::new();
+
+        let func_atom = test_atom();
+        atoms.insert("probe:MyFunc".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.code_path = "Specs.lean".to_string();
+        atoms.insert("probe:MyFunc_spec".to_string(), spec_atom);
+
+        let (key, atom) = find_primary_spec("MyFunc", &atoms);
+        assert_eq!(key, Some("probe:MyFunc_spec".to_string()));
+        assert!(atom.is_some());
+    }
+
+    #[test]
+    fn find_primary_spec_none_when_missing() {
+        let atoms = BTreeMap::new();
+        let (key, atom) = find_primary_spec("NoSuchFunc", &atoms);
+        assert!(key.is_none());
+        assert!(atom.is_none());
+    }
+
+    #[test]
+    fn compute_fully_verified_simple_case() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom
+            .extensions
+            .insert("dependencies".to_string(), serde_json::json!([]));
+        func_atom
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("Foo_spec"));
+        atoms.insert("probe:Foo".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("verified"),
+        );
+        atoms.insert("probe:Foo_spec".to_string(), spec_atom);
+
+        let mut cache = HashMap::new();
+        assert!(compute_fully_verified("Foo", &atoms, &mut cache));
+    }
+
+    #[test]
+    fn compute_fully_verified_unverified_returns_false() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom
+            .extensions
+            .insert("dependencies".to_string(), serde_json::json!([]));
+        func_atom
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("Foo_spec"));
+        atoms.insert("probe:Foo".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("unverified"),
+        );
+        atoms.insert("probe:Foo_spec".to_string(), spec_atom);
+
+        let mut cache = HashMap::new();
+        assert!(!compute_fully_verified("Foo", &atoms, &mut cache));
+    }
+
+    #[test]
+    fn compute_fully_verified_no_spec_returns_false() {
+        let mut atoms = BTreeMap::new();
+        let func_atom = test_atom();
+        atoms.insert("probe:Foo".to_string(), func_atom);
+
+        let mut cache = HashMap::new();
+        assert!(!compute_fully_verified("Foo", &atoms, &mut cache));
+    }
+
+    #[test]
+    fn compute_fully_verified_transitive_dep_in_funs() {
+        let mut atoms = BTreeMap::new();
+
+        let mut parent = test_atom();
+        parent.extensions.insert(
+            "dependencies".to_string(),
+            serde_json::json!(["probe:Child"]),
+        );
+        parent
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("Parent_spec"));
+        atoms.insert("probe:Parent".to_string(), parent);
+
+        let mut parent_spec = test_atom();
+        parent_spec.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("verified"),
+        );
+        atoms.insert("probe:Parent_spec".to_string(), parent_spec);
+
+        let mut child = test_atom();
+        child.code_path = "Project/Funs.lean".to_string();
+        child
+            .extensions
+            .insert("dependencies".to_string(), serde_json::json!([]));
+        child
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("Child_spec"));
+        atoms.insert("probe:Child".to_string(), child);
+
+        let mut child_spec = test_atom();
+        child_spec.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("verified"),
+        );
+        atoms.insert("probe:Child_spec".to_string(), child_spec);
+
+        let mut cache = HashMap::new();
+        assert!(compute_fully_verified("Parent", &atoms, &mut cache));
+    }
+
+    #[test]
+    fn compute_fully_verified_transitive_dep_unverified() {
+        let mut atoms = BTreeMap::new();
+
+        let mut parent = test_atom();
+        parent.extensions.insert(
+            "dependencies".to_string(),
+            serde_json::json!(["probe:Child"]),
+        );
+        parent
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("Parent_spec"));
+        atoms.insert("probe:Parent".to_string(), parent);
+
+        let mut parent_spec = test_atom();
+        parent_spec.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("verified"),
+        );
+        atoms.insert("probe:Parent_spec".to_string(), parent_spec);
+
+        let mut child = test_atom();
+        child.code_path = "Project/Funs.lean".to_string();
+        child
+            .extensions
+            .insert("dependencies".to_string(), serde_json::json!([]));
+        child
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("Child_spec"));
+        atoms.insert("probe:Child".to_string(), child);
+
+        let mut child_spec = test_atom();
+        child_spec.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("unverified"),
+        );
+        atoms.insert("probe:Child_spec".to_string(), child_spec);
+
+        let mut cache = HashMap::new();
+        assert!(!compute_fully_verified("Parent", &atoms, &mut cache));
+    }
 }
