@@ -82,9 +82,10 @@ enum Commands {
 
     /// Generate functions.json from a Lean project.
     ///
-    /// By default, parses Aeneas-generated `.lean` files directly.
-    /// Use --lake to run `lake exe listfuns` instead (requires the Lean project
-    /// to define a `listfuns` executable).
+    /// By default, parses Aeneas-generated `.lean` files directly and enriches
+    /// with verification data from probe-lean. Use --no-enrich for a basic
+    /// function list without verification data. Use --lake to delegate to the
+    /// project's own `lake exe listfuns` executable.
     Listfuns {
         /// Path to the Lean project directory.
         #[arg(long)]
@@ -97,6 +98,25 @@ enum Commands {
         /// Use `lake exe listfuns` instead of parsing Lean files directly.
         #[arg(long)]
         lake: bool,
+
+        /// Skip enrichment (no probe-lean call, basic function list only).
+        #[arg(long)]
+        no_enrich: bool,
+
+        /// Path to pre-computed atoms JSON (from probe-lean extract).
+        /// Skips the internal probe-lean invocation when provided.
+        #[arg(long)]
+        atoms: Option<PathBuf>,
+
+        /// Module prefix filter passed to probe-lean extract via -m.
+        /// Optional optimization to limit atom extraction scope.
+        #[arg(long, name = "module")]
+        module_prefix: Option<String>,
+
+        /// Path to Aeneas config JSON for manual overrides (is-hidden).
+        /// Defaults to .verilib/aeneas.json in the Lean project directory.
+        #[arg(long)]
+        aeneas_config: Option<PathBuf>,
     },
 }
 
@@ -135,11 +155,23 @@ fn main() {
             lean_project,
             output,
             lake,
+            no_enrich,
+            atoms,
+            module_prefix,
+            aeneas_config,
         } => {
             if lake {
                 listfuns::run_listfuns(&lean_project, &output)
-            } else {
+            } else if no_enrich {
                 gen_functions::generate_functions_json(&lean_project, &output)
+            } else {
+                listfuns::run_enriched_listfuns(
+                    &lean_project,
+                    &output,
+                    atoms.as_deref(),
+                    module_prefix.as_deref(),
+                    aeneas_config.as_deref(),
+                )
             }
         }
     };

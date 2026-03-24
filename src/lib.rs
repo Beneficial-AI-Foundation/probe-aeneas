@@ -1,4 +1,5 @@
 pub mod aeneas_config;
+pub mod enrich;
 pub mod extract;
 pub mod extract_runner;
 pub mod gen_functions;

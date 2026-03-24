@@ -46,21 +46,35 @@ pub fn run_probe_rust_extract(project: &Path) -> Result<PathBuf, String> {
 
 /// Run `probe-lean extract` on a project and return the path to the generated JSON.
 pub fn run_probe_lean_extract(project: &Path) -> Result<PathBuf, String> {
+    run_probe_lean_extract_with_opts(project, None)
+}
+
+/// Run `probe-lean extract` with optional module prefix filter.
+pub fn run_probe_lean_extract_with_opts(
+    project: &Path,
+    module_prefix: Option<&str>,
+) -> Result<PathBuf, String> {
     let bin = find_or_install_probe_lean()?;
     let output = tempfile("probe_lean", ".json");
 
+    let project_str = project
+        .to_str()
+        .ok_or_else(|| "Project path is not valid UTF-8".to_string())?;
+    let output_str = output
+        .to_str()
+        .ok_or_else(|| "Output path is not valid UTF-8".to_string())?;
+
+    let mut args = vec!["extract", project_str, "-o", output_str];
+    let module_flag;
+    if let Some(m) = module_prefix {
+        module_flag = m.to_string();
+        args.push("-m");
+        args.push(&module_flag);
+    }
+
     println!("Running probe-lean extract on {}...", project.display());
     let status = Command::new(&bin)
-        .args([
-            "extract",
-            project
-                .to_str()
-                .ok_or_else(|| "Project path is not valid UTF-8".to_string())?,
-            "-o",
-            output
-                .to_str()
-                .ok_or_else(|| "Output path is not valid UTF-8".to_string())?,
-        ])
+        .args(&args)
         .status()
         .map_err(|e| format!("Failed to run probe-lean: {e}"))?;
 
