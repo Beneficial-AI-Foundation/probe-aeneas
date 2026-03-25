@@ -25,21 +25,49 @@ pub fn is_extraction_artifact(name: &str) -> bool {
         || ARTIFACT_DOT_SUFFIXES.iter().any(|sfx| name.ends_with(sfx))
 }
 
+/// Trait implementation fragments that represent boilerplate (auto-derived,
+/// marker, or trivial). Only `.Insts.` functions matching one of these are
+/// hidden by default; meaningful trait impls (arithmetic, crypto, conversion)
+/// stay visible.
+const BOILERPLATE_INSTS_FRAGMENTS: &[&str] = &[
+    "CoreCloneClone",
+    "CoreMarkerCopy",
+    "CoreMarkerStructuralPartialEq",
+    "CoreDefaultDefault",
+    "ZeroizeZeroize",
+    "ZeroizeDefaultIsZeroes",
+];
+
+/// Check if an `.Insts.` function is a boilerplate trait implementation.
+///
+/// Extracts the trait name (the segment immediately after `.Insts.`) and
+/// checks it against [`BOILERPLATE_INSTS_FRAGMENTS`]. Returns `false` for
+/// names without `.Insts.` or for meaningful trait impls like arithmetic
+/// operators, crypto traits, or conversions.
+pub fn is_boilerplate_insts(name: &str) -> bool {
+    let Some(insts_pos) = name.find(".Insts.") else {
+        return false;
+    };
+    let after_insts = &name[insts_pos + ".Insts.".len()..];
+    let trait_part = after_insts.split('.').next().unwrap_or("");
+    BOILERPLATE_INSTS_FRAGMENTS.contains(&trait_part)
+}
+
 /// Check if a name should be hidden based on naming patterns and attributes.
 ///
-/// Returns `true` for trait instance wrappers (`.Insts.`), mutual loop defs
-/// (`.mutual`), closures (`.closure`), blanket impls (`.Blanket.`),
-/// DOC_HIDDEN constants, and names in the config's hidden set.
+/// Returns `true` for boilerplate trait instance wrappers (Clone, Copy,
+/// Default, Zeroize via `.Insts.`), mutual loop defs (`.mutual`), closures
+/// (`.closure`), blanket impls (`.Blanket.`), DOC_HIDDEN constants,
+/// `rust_trait_impl` attribute, and names in the config's hidden set.
 pub fn is_hidden(name: &str, attrs: &[String], config: &AeneasConfig) -> bool {
     let has_trait_attr = attrs.iter().any(|a| a == "rust_trait_impl");
-    let has_insts_pattern = name.contains(".Insts.");
     let is_mutual_loop = name.ends_with(".mutual");
     let has_closure = name.contains(".closure");
     let has_blanket = name.contains(".Blanket.");
     let has_doc_hidden = name.contains("DOC_HIDDEN");
     let in_config = config.hidden.contains(name);
     has_trait_attr
-        || has_insts_pattern
+        || is_boilerplate_insts(name)
         || is_mutual_loop
         || has_closure
         || has_blanket
@@ -51,7 +79,7 @@ pub fn is_hidden(name: &str, attrs: &[String], config: &AeneasConfig) -> bool {
 ///
 /// Used by `gen_functions` during initial parsing before atoms are available.
 pub fn is_hidden_by_name(name: &str) -> bool {
-    name.contains(".Insts.")
+    is_boilerplate_insts(name)
         || name.ends_with(".mutual")
         || name.contains(".closure")
         || name.contains(".Blanket.")
@@ -207,7 +235,7 @@ pub fn enrich_function_records(
             None => (vec![], vec![], String::new(), String::new()),
         };
 
-        let func_is_hidden = is_hidden(&rec.lean_name, &attrs, config)
+        let mut func_is_hidden = is_hidden(&rec.lean_name, &attrs, config)
             || is_structure(&kind)
             || is_type_alias(&kind, &attrs)
             || (!rust_source.is_empty() && !is_relevant(&rust_source, rust_crate_name));
@@ -227,6 +255,11 @@ pub fn enrich_function_records(
 
         let (primary_spec_key, spec_atom) = find_primary_spec(&rec.lean_name, atoms);
         let specified = primary_spec_key.is_some();
+
+        // Layer B: never hide a function that has a primary spec.
+        if func_is_hidden && specified {
+            func_is_hidden = false;
+        }
         let verified = spec_atom
             .and_then(|a| {
                 a.extensions
@@ -557,12 +590,68 @@ mod tests {
     }
 
     #[test]
+    fn boilerplate_insts_detected() {
+        assert!(is_boilerplate_insts("Scalar.Insts.CoreCloneClone"));
+        assert!(is_boilerplate_insts("Scalar.Insts.CoreCloneClone.clone"));
+        assert!(is_boilerplate_insts("Foo.Insts.CoreMarkerCopy"));
+        assert!(is_boilerplate_insts("Foo.Insts.CoreDefaultDefault"));
+        assert!(is_boilerplate_insts("Foo.Insts.CoreDefaultDefault.default"));
+        assert!(is_boilerplate_insts("Foo.Insts.ZeroizeZeroize"));
+        assert!(is_boilerplate_insts("Foo.Insts.ZeroizeZeroize.zeroize"));
+        assert!(is_boilerplate_insts("Foo.Insts.ZeroizeDefaultIsZeroes"));
+        assert!(is_boilerplate_insts(
+            "Foo.Insts.CoreMarkerStructuralPartialEq"
+        ));
+    }
+
+    #[test]
+    fn meaningful_insts_not_boilerplate() {
+        assert!(!is_boilerplate_insts(
+            "Scalar.Insts.CoreOpsArithAddScalarScalar"
+        ));
+        assert!(!is_boilerplate_insts(
+            "Scalar.Insts.CoreOpsArithMulScalarScalar.mul"
+        ));
+        assert!(!is_boilerplate_insts(
+            "EdwardsPoint.Insts.SubtleConditionallySelectable"
+        ));
+        assert!(!is_boilerplate_insts(
+            "Scalar.Insts.SubtleConstantTimeEq.ct_eq"
+        ));
+        assert!(!is_boilerplate_insts(
+            "Scalar.Insts.CoreConvertFromU64.from"
+        ));
+        assert!(!is_boilerplate_insts(
+            "EdwardsPoint.Insts.CoreCmpPartialEqEdwardsPoint.eq"
+        ));
+        assert!(!is_boilerplate_insts("EdwardsPoint.Insts.CoreCmpEq"));
+        assert!(!is_boilerplate_insts(
+            "RistrettoPoint.Insts.Curve25519_dalekTraitsIdentity.identity"
+        ));
+        assert!(!is_boilerplate_insts("no.Insts.segment"));
+    }
+
+    #[test]
+    fn boilerplate_insts_no_match_without_insts() {
+        assert!(!is_boilerplate_insts("CoreCloneClone"));
+        assert!(!is_boilerplate_insts("foo.bar.CoreDefaultDefault"));
+        assert!(!is_boilerplate_insts(""));
+    }
+
+    #[test]
     fn hidden_by_name_patterns() {
-        assert!(is_hidden_by_name("Foo.Insts.Bar"));
+        // Boilerplate .Insts. → hidden
+        assert!(is_hidden_by_name("Foo.Insts.CoreCloneClone"));
+        assert!(is_hidden_by_name("Foo.Insts.CoreDefaultDefault.default"));
+        // Meaningful .Insts. → NOT hidden by name alone
+        assert!(!is_hidden_by_name("Foo.Insts.CoreOpsArithAddXY"));
+        assert!(!is_hidden_by_name("Foo.Insts.SubtleConditionallySelectable"));
+        // Other patterns still hidden
         assert!(is_hidden_by_name("foo.mutual"));
         assert!(is_hidden_by_name("foo.closure.anon"));
         assert!(is_hidden_by_name("Foo.Blanket.Bar"));
         assert!(is_hidden_by_name("DOC_HIDDEN_CONST"));
+        // Normal names not hidden
         assert!(!is_hidden_by_name("foo.bar.baz"));
         assert!(!is_hidden_by_name("Scalar.reduce"));
     }
@@ -581,6 +670,26 @@ mod tests {
             .hidden
             .insert("manually_hidden".to_string());
         assert!(is_hidden("manually_hidden", &[], &config_with_hidden));
+    }
+
+    #[test]
+    fn hidden_meaningful_insts_not_hidden() {
+        let config = AeneasConfig::default();
+        assert!(!is_hidden(
+            "Scalar.Insts.CoreOpsArithAddScalarScalar",
+            &[],
+            &config
+        ));
+        assert!(!is_hidden(
+            "EdwardsPoint.Insts.SubtleConditionallySelectable.conditional_select",
+            &[],
+            &config
+        ));
+        assert!(is_hidden(
+            "Scalar.Insts.CoreCloneClone.clone",
+            &[],
+            &config
+        ));
     }
 
     #[test]
@@ -822,5 +931,84 @@ mod tests {
 
         let mut cache = HashMap::new();
         assert!(!compute_fully_verified("Parent", &atoms, &mut cache));
+    }
+
+    #[test]
+    fn spec_override_unhides_specified_function() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom.extensions.insert(
+            "attributes".to_string(),
+            serde_json::json!(["rust_trait_impl"]),
+        );
+        func_atom
+            .extensions
+            .insert("dependencies".to_string(), serde_json::json!([]));
+        func_atom.extensions.insert(
+            "primary-spec".to_string(),
+            serde_json::json!("TraitFunc_spec"),
+        );
+        func_atom
+            .extensions
+            .insert("is-in-package".to_string(), serde_json::json!(true));
+        atoms.insert("probe:TraitFunc".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.code_path = "Specs/TraitFunc.lean".to_string();
+        spec_atom.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("verified"),
+        );
+        atoms.insert("probe:TraitFunc_spec".to_string(), spec_atom);
+
+        let records = vec![FunctionRecord {
+            lean_name: "TraitFunc".to_string(),
+            rust_name: None,
+            source: None,
+            lines: None,
+            is_hidden: false,
+            is_extraction_artifact: false,
+        }];
+        let config = AeneasConfig::default();
+        let results = enrich_function_records(&records, &atoms, "mycrate", &config);
+
+        assert_eq!(results.len(), 1);
+        // rust_trait_impl would hide it, but spec override keeps it visible
+        assert!(!results[0].is_hidden);
+        assert!(results[0].specified);
+        assert!(results[0].verified);
+    }
+
+    #[test]
+    fn boilerplate_insts_hidden_when_no_spec() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom
+            .extensions
+            .insert("dependencies".to_string(), serde_json::json!([]));
+        func_atom
+            .extensions
+            .insert("is-in-package".to_string(), serde_json::json!(true));
+        atoms.insert(
+            "probe:Foo.Insts.CoreCloneClone.clone".to_string(),
+            func_atom,
+        );
+
+        let records = vec![FunctionRecord {
+            lean_name: "Foo.Insts.CoreCloneClone.clone".to_string(),
+            rust_name: None,
+            source: None,
+            lines: None,
+            is_hidden: false,
+            is_extraction_artifact: false,
+        }];
+        let config = AeneasConfig::default();
+        let results = enrich_function_records(&records, &atoms, "mycrate", &config);
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_hidden);
+        assert!(!results[0].specified);
     }
 }
