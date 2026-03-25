@@ -645,7 +645,9 @@ mod tests {
         assert!(is_hidden_by_name("Foo.Insts.CoreDefaultDefault.default"));
         // Meaningful .Insts. → NOT hidden by name alone
         assert!(!is_hidden_by_name("Foo.Insts.CoreOpsArithAddXY"));
-        assert!(!is_hidden_by_name("Foo.Insts.SubtleConditionallySelectable"));
+        assert!(!is_hidden_by_name(
+            "Foo.Insts.SubtleConditionallySelectable"
+        ));
         // Other patterns still hidden
         assert!(is_hidden_by_name("foo.mutual"));
         assert!(is_hidden_by_name("foo.closure.anon"));
@@ -685,11 +687,7 @@ mod tests {
             &[],
             &config
         ));
-        assert!(is_hidden(
-            "Scalar.Insts.CoreCloneClone.clone",
-            &[],
-            &config
-        ));
+        assert!(is_hidden("Scalar.Insts.CoreCloneClone.clone", &[], &config));
     }
 
     #[test]

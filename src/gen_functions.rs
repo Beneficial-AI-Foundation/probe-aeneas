@@ -19,10 +19,7 @@ pub fn parse_aeneas_project(lean_project: &Path) -> Result<Vec<FunctionRecord>, 
         ));
     }
 
-    println!(
-        "Parsing {} Aeneas-generated file(s)...",
-        lean_files.len()
-    );
+    println!("Parsing {} Aeneas-generated file(s)...", lean_files.len());
     for f in &lean_files {
         println!("  {}", f.display());
     }
@@ -128,12 +125,7 @@ fn parse_lean_file(content: &str) -> Vec<FunctionRecord> {
             pending_def = false;
             let name_on_line = trimmed.split_whitespace().next();
             if let Some(name) = name_on_line {
-                emit_record(
-                    name,
-                    &mut current_doc,
-                    &current_namespace,
-                    &mut records,
-                );
+                emit_record(name, &mut current_doc, &current_namespace, &mut records);
             }
             continue;
         }
