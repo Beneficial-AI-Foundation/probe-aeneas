@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 probe-aeneas is a Rust CLI tool that bridges Rust and Lean call graphs for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects. It has three subcommands:
-- **extract**: Full pipeline -- extract atoms (if needed), generate translation mappings, and merge Rust + Lean call graphs into a unified atom file with cross-language edges.
+- **extract**: Full pipeline -- point at an Aeneas project directory (containing `aeneas-config.yml`) to auto-detect Rust/Lean paths, extract atoms, generate translation mappings, and merge into a unified atom file. Also supports explicit `--rust-project`/`--lean-project` flags or pre-generated JSON files.
 - **translate**: Generate translation mappings between Rust and Lean code-names using `functions.json` as the bridge.
 - **listfuns**: Generate enriched `functions.json` with verification data (default), or delegate to `lake exe listfuns`, or produce a basic function list.
 
@@ -53,7 +53,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 ### Pipeline
 
-1. **Extract Pipeline** (`extract` command): resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → merge atom maps → Schema 2.0 envelope → output
+1. **Extract Pipeline** (`extract` command): resolve project (parse `aeneas-config.yml` if positional arg given) → resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → merge atom maps → Schema 2.0 envelope → output
 2. **Translate Pipeline** (`translate` command): load Rust atoms + Lean atoms + functions.json → three-strategy matching → translations JSON
 3. **Listfuns Pipeline** (`listfuns` command): `lake exe listfuns` → functions.json
 
@@ -66,7 +66,9 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 **Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `is-disabled` (`false` when the function's `rust-qualified-name` appears in `functions.json`, `true` otherwise).
 
-**Parallel Extraction**: When both `--rust-project` and `--lean-project` are given, `probe-rust extract` and `probe-lean extract` run in parallel via scoped threads.
+**Project Auto-Detection**: When a positional `PROJECT` path is given, `aeneas-config.yml` is parsed to derive `rust_project` (from `crate.dir`) and `lean_project` (the project root). If `functions.json` exists at the project root, it is reused.
+
+**Parallel Extraction**: When both Rust and Lean extractions are needed (via positional `PROJECT` or `--rust-project` + `--lean-project`), `probe-rust extract` and `probe-lean extract` run in parallel via scoped threads.
 
 **Auto-Install**: `probe-rust` is installed via `cargo install --git`, `probe-lean` is cloned and built with `lake build`, then copied to `~/.local/bin/`.
 

@@ -14,9 +14,8 @@ two language toolchains to build and run the extractors:
 | **Rust** (`cargo`) | Building probe-aeneas and `probe-rust` | [rustup.rs](https://rustup.rs/) |
 | **Lean 4** (`elan`, `lake`) | Building `probe-lean` and running `listfuns` | [elan](https://github.com/leanprover/elan#installation), [probe-lean README](https://github.com/Beneficial-AI-Foundation/probe-lean#readme) |
 
-The extractor tools (`probe-rust`, `probe-lean`) are auto-installed when you use
-`--rust-project` / `--lean-project`, but the underlying language toolchains must
-already be present.
+The extractor tools (`probe-rust`, `probe-lean`) are auto-installed on first use,
+but the underlying language toolchains must already be present.
 
 ## Installation
 
@@ -37,10 +36,8 @@ cargo install --path .
 ## Quick Start
 
 ```bash
-# Extract merged Rust + Lean call graph (fully automated)
-probe-aeneas extract \
-  --rust-project path/to/rust/project \
-  --lean-project path/to/lean/project
+# Point at an Aeneas project directory (reads aeneas-config.yml)
+probe-aeneas extract path/to/aeneas/project
 
 # Or use pre-generated JSON files
 probe-aeneas extract \
@@ -62,16 +59,17 @@ Output lands in `aeneas_{package}_{version}.json` by default.
 ### `extract`
 
 ```bash
-probe-aeneas extract [OPTIONS]
+probe-aeneas extract [OPTIONS] [PROJECT]
 ```
 
-| Option | Description |
-|--------|-------------|
+| Argument / Option | Description |
+|-------------------|-------------|
+| `PROJECT` | Path to an Aeneas project directory (contains `aeneas-config.yml`). Auto-detects Rust and Lean paths. |
 | `--rust <PATH>` | Path to pre-generated Rust atoms JSON |
 | `--rust-project <PATH>` | Path to a Rust project directory (runs `probe-rust extract` automatically) |
 | `--lean <PATH>` | Path to pre-generated Lean atoms JSON |
 | `--lean-project <PATH>` | Path to a Lean project directory (runs `probe-lean extract` automatically) |
-| `--functions <PATH>` | Path to `functions.json` (auto-generated when `--lean-project` is given) |
+| `--functions <PATH>` | Path to `functions.json` (auto-generated when `--lean-project` or `PROJECT` is given) |
 | `-o, --output <PATH>` | Output file path (default: `aeneas_{package}_{version}.json` from Rust input) |
 
 For the full command reference with all options, examples, and input modes, see **[docs/USAGE.md](docs/USAGE.md)**. For the complete JSON schema specification, see **[docs/SCHEMA.md](docs/SCHEMA.md)**.
@@ -110,7 +108,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 
 ## How It Works
 
-1. **Input resolution** -- accepts pre-generated JSON files, project paths, or a mix. When project paths are given, runs `probe-rust extract` and `probe-lean extract` (in parallel if both are project paths).
+1. **Input resolution** -- accepts an Aeneas project directory (auto-detects paths from `aeneas-config.yml`), pre-generated JSON files, explicit project paths, or a mix. When both Rust and Lean extractions are needed, they run in parallel.
 2. **Translation generation** -- matches Rust atoms to Lean atoms via `functions.json` using three strategies in priority order:
    1. `rust-qualified-name` -- exact match via Charon-derived qualified names
    2. `file+display-name` -- same source file + matching base method name

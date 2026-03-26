@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use probe::commands::merge::merge_atom_files;
 use probe::types::{Atom, InputProvenance, MergedAtomEnvelope, Tool};
+use serde::Deserialize;
 
 use crate::aeneas_config::AeneasConfig;
 use crate::enrich;
@@ -15,6 +16,115 @@ use crate::translate::{
 };
 
 type TranslationMaps = (HashMap<String, String>, HashMap<String, String>);
+
+// ---------------------------------------------------------------------------
+// aeneas-config.yml parsing (minimal: only fields probe-aeneas needs)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct AeneasProjectConfig {
+    #[serde(rename = "crate")]
+    crate_config: CrateConfig,
+    aeneas_args: Option<AeneasArgsConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CrateConfig {
+    dir: String,
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AeneasArgsConfig {
+    dest: Option<String>,
+    #[allow(dead_code)]
+    backend: Option<String>,
+    #[allow(dead_code)]
+    options: Option<Vec<String>>,
+}
+
+/// Resolved paths derived from an Aeneas project directory.
+#[derive(Debug)]
+pub struct ResolvedProject {
+    pub rust_project: PathBuf,
+    pub lean_project: PathBuf,
+    pub functions_json: Option<PathBuf>,
+}
+
+/// Parse `aeneas-config.yml` in the given project directory and derive
+/// the Rust project path, Lean project path, and optional functions.json.
+pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
+    let config_path = project.join("aeneas-config.yml");
+    if !config_path.exists() {
+        return Err(format!(
+            "No aeneas-config.yml found in {}\n\
+             Expected an Aeneas project directory containing aeneas-config.yml.\n\
+             Use --rust-project / --lean-project for manual input.",
+            project.display()
+        ));
+    }
+
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read {}: {e}", config_path.display()))?;
+    let config: AeneasProjectConfig = serde_yaml::from_str(&content)
+        .map_err(|e| format!("Failed to parse {}: {e}", config_path.display()))?;
+
+    let crate_dir = &config.crate_config.dir;
+    let rust_project = if crate_dir == "." {
+        project.to_path_buf()
+    } else {
+        project.join(crate_dir)
+    };
+    let lean_project = project.to_path_buf();
+
+    if !rust_project.join("Cargo.toml").exists() {
+        return Err(format!(
+            "No Cargo.toml found at {} (derived from crate.dir = {:?} in aeneas-config.yml)",
+            rust_project.display(),
+            crate_dir,
+        ));
+    }
+
+    if !lean_project.join("lakefile.toml").exists() && !lean_project.join("lakefile.lean").exists()
+    {
+        return Err(format!(
+            "No lakefile.toml or lakefile.lean found in {}\n\
+             The project root should be a Lean/Lake project.",
+            lean_project.display()
+        ));
+    }
+
+    if let Some(name) = &config.crate_config.name {
+        println!("Aeneas project: crate {:?} at {}", name, project.display());
+    } else {
+        println!("Aeneas project: {}", project.display());
+    }
+    println!("  Rust project: {}", rust_project.display());
+    println!("  Lean project: {}", lean_project.display());
+
+    if let Some(args) = &config.aeneas_args {
+        if let Some(dest) = &args.dest {
+            println!("  Aeneas dest:  {dest}");
+        }
+    }
+
+    let functions_path = project.join("functions.json");
+    let functions_json = if functions_path.exists() {
+        println!(
+            "  Using existing functions.json from {}",
+            functions_path.display()
+        );
+        Some(functions_path)
+    } else {
+        None
+    };
+
+    Ok(ResolvedProject {
+        rust_project,
+        lean_project,
+        functions_json,
+    })
+}
 
 /// Run the full extract pipeline with flexible input resolution.
 ///
@@ -37,14 +147,18 @@ pub fn run_extract(
 ) -> Result<(), String> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
-        return Err(
-            "Must provide either --rust (JSON path) or --rust-project (project path)".to_string(),
-        );
+        return Err("No Rust input provided. Use one of:\n  \
+             probe-aeneas extract <project_path>          (auto-detect from aeneas-config.yml)\n  \
+             probe-aeneas extract --rust-project <path>   (Rust project directory)\n  \
+             probe-aeneas extract --rust <json>            (pre-generated atoms JSON)"
+            .to_string());
     }
     if lean_json.is_none() && lean_project.is_none() {
-        return Err(
-            "Must provide either --lean (JSON path) or --lean-project (project path)".to_string(),
-        );
+        return Err("No Lean input provided. Use one of:\n  \
+             probe-aeneas extract <project_path>          (auto-detect from aeneas-config.yml)\n  \
+             probe-aeneas extract --lean-project <path>   (Lean project directory)\n  \
+             probe-aeneas extract --lean <json>            (pre-generated atoms JSON)"
+            .to_string());
     }
     if functions_json.is_none() && lean_project.is_none() {
         return Err("--functions is required when --lean-project is not given \
@@ -390,4 +504,172 @@ pub fn run_translate_only(
 
     println!("\nWritten to {}", output_path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn create_aeneas_project(dir: &Path, crate_dir: &str, crate_name: Option<&str>, dest: &str) {
+        fs::create_dir_all(dir).unwrap();
+
+        let rust_dir = if crate_dir == "." {
+            dir.to_path_buf()
+        } else {
+            dir.join(crate_dir)
+        };
+        fs::create_dir_all(&rust_dir).unwrap();
+        fs::write(rust_dir.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
+
+        fs::write(
+            dir.join("lakefile.toml"),
+            "name = \"Test\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
+
+        let name_line = match crate_name {
+            Some(n) => format!("  name: \"{n}\""),
+            None => String::new(),
+        };
+        let config = format!(
+            "crate:\n  dir: \"{crate_dir}\"\n{name_line}\naeneas_args:\n  dest: \"{dest}\"\n"
+        );
+        fs::write(dir.join("aeneas-config.yml"), config).unwrap();
+    }
+
+    #[test]
+    fn resolve_project_subdirectory_crate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("dalek");
+        create_aeneas_project(
+            &project,
+            "curve25519-dalek",
+            Some("curve25519_dalek"),
+            "Curve25519Dalek",
+        );
+
+        let resolved = resolve_project(&project).unwrap();
+        assert_eq!(resolved.rust_project, project.join("curve25519-dalek"));
+        assert_eq!(resolved.lean_project, project);
+        assert!(resolved.functions_json.is_none());
+    }
+
+    #[test]
+    fn resolve_project_dot_crate_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("spqr");
+        create_aeneas_project(&project, ".", Some("spqr"), "Extraction");
+
+        let resolved = resolve_project(&project).unwrap();
+        assert_eq!(resolved.rust_project, project);
+        assert_eq!(resolved.lean_project, project);
+        assert!(resolved.functions_json.is_none());
+    }
+
+    #[test]
+    fn resolve_project_picks_up_existing_functions_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("proj");
+        create_aeneas_project(&project, ".", None, "Out");
+
+        let fj = project.join("functions.json");
+        fs::write(&fj, r#"{"functions":[]}"#).unwrap();
+
+        let resolved = resolve_project(&project).unwrap();
+        assert_eq!(resolved.functions_json, Some(fj));
+    }
+
+    #[test]
+    fn resolve_project_missing_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = resolve_project(tmp.path()).unwrap_err();
+        assert!(err.contains("aeneas-config.yml"), "Error: {err}");
+    }
+
+    #[test]
+    fn resolve_project_missing_cargo_toml() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("bad");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(
+            project.join("lakefile.toml"),
+            "name = \"X\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
+        fs::write(
+            project.join("aeneas-config.yml"),
+            "crate:\n  dir: \"nonexistent\"\n",
+        )
+        .unwrap();
+
+        let err = resolve_project(&project).unwrap_err();
+        assert!(err.contains("Cargo.toml"), "Error: {err}");
+    }
+
+    #[test]
+    fn resolve_project_missing_lakefile() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("nolake");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("Cargo.toml"), "[package]\nname = \"t\"").unwrap();
+        fs::write(project.join("aeneas-config.yml"), "crate:\n  dir: \".\"\n").unwrap();
+
+        let err = resolve_project(&project).unwrap_err();
+        assert!(err.contains("lakefile"), "Error: {err}");
+    }
+
+    #[test]
+    fn yaml_parse_minimal_config() {
+        let yaml = "crate:\n  dir: \"src-rust\"\n";
+        let config: AeneasProjectConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.crate_config.dir, "src-rust");
+        assert!(config.crate_config.name.is_none());
+        assert!(config.aeneas_args.is_none());
+    }
+
+    #[test]
+    fn yaml_parse_full_config() {
+        let yaml = r#"
+crate:
+  dir: "curve25519-dalek"
+  name: "curve25519_dalek"
+aeneas_args:
+  dest: "Curve25519Dalek"
+  backend: lean
+  options:
+    - split-files
+"#;
+        let config: AeneasProjectConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.crate_config.dir, "curve25519-dalek");
+        assert_eq!(
+            config.crate_config.name.as_deref(),
+            Some("curve25519_dalek")
+        );
+        let args = config.aeneas_args.unwrap();
+        assert_eq!(args.dest.as_deref(), Some("Curve25519Dalek"));
+    }
+
+    #[test]
+    fn yaml_parse_ignores_extra_fields() {
+        let yaml = r#"
+aeneas:
+  commit: "abc123"
+  repo: "https://example.com"
+crate:
+  dir: "."
+  name: "test"
+charon:
+  preset: aeneas
+  start_from:
+    - "test::foo"
+aeneas_args:
+  dest: "Out"
+tweaks:
+  files: ["Types.lean"]
+"#;
+        let config: AeneasProjectConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.crate_config.dir, ".");
+        assert_eq!(config.crate_config.name.as_deref(), Some("test"));
+    }
 }

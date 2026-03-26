@@ -16,10 +16,22 @@ enum Commands {
     /// Full pipeline: extract atoms (if needed), generate translations, and
     /// merge Rust + Lean call graphs into a unified atom file.
     ///
-    /// Provide either pre-generated JSON files (--rust / --lean) or project paths
-    /// (--rust-project / --lean-project) which will run probe-rust/probe-lean
-    /// automatically.
+    /// The simplest invocation is a single project path:
+    ///   probe-aeneas extract <project_path>
+    ///
+    /// This reads aeneas-config.yml from the project directory to auto-detect
+    /// the Rust crate and Lean project locations. For advanced usage, provide
+    /// explicit paths with --rust-project / --lean-project or pre-generated
+    /// JSON files with --rust / --lean.
     Extract {
+        /// Path to an Aeneas project directory (contains aeneas-config.yml).
+        /// Auto-detects Rust and Lean project paths from the config.
+        #[arg(
+            value_name = "PROJECT",
+            conflicts_with_all = ["rust", "rust_project", "lean", "lean_project"],
+        )]
+        project: Option<PathBuf>,
+
         /// Path to pre-generated Rust atoms JSON (from probe-rust extract).
         #[arg(long, group = "rust_input")]
         rust: Option<PathBuf>,
@@ -40,7 +52,7 @@ enum Commands {
         lean_project: Option<PathBuf>,
 
         /// Path to functions.json (Aeneas name mapping).
-        /// Auto-generated via `lake exe listfuns` when --lean-project is given.
+        /// Auto-generated from Lean sources when --lean-project or PROJECT is given.
         #[arg(long)]
         functions: Option<PathBuf>,
 
@@ -120,11 +132,47 @@ enum Commands {
     },
 }
 
+#[allow(clippy::too_many_arguments)]
+fn resolve_and_extract(
+    project: Option<PathBuf>,
+    rust: Option<PathBuf>,
+    rust_project: Option<PathBuf>,
+    lean: Option<PathBuf>,
+    lean_project: Option<PathBuf>,
+    functions: Option<PathBuf>,
+    output: Option<PathBuf>,
+    aeneas_config: Option<PathBuf>,
+    lake: bool,
+) -> Result<(), String> {
+    let (rust, rust_project, lean_project, functions) = if let Some(ref proj) = project {
+        let resolved = extract::resolve_project(proj)?;
+        (
+            None,
+            Some(resolved.rust_project),
+            Some(resolved.lean_project),
+            functions.or(resolved.functions_json),
+        )
+    } else {
+        (rust, rust_project, lean_project, functions)
+    };
+    extract::run_extract(
+        rust.as_deref(),
+        rust_project.as_deref(),
+        lean.as_deref(),
+        lean_project.as_deref(),
+        functions.as_deref(),
+        output.as_deref(),
+        aeneas_config.as_deref(),
+        lake,
+    )
+}
+
 fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
         Commands::Extract {
+            project,
             rust,
             rust_project,
             lean,
@@ -133,14 +181,15 @@ fn main() {
             output,
             aeneas_config,
             lake,
-        } => extract::run_extract(
-            rust.as_deref(),
-            rust_project.as_deref(),
-            lean.as_deref(),
-            lean_project.as_deref(),
-            functions.as_deref(),
-            output.as_deref(),
-            aeneas_config.as_deref(),
+        } => resolve_and_extract(
+            project,
+            rust,
+            rust_project,
+            lean,
+            lean_project,
+            functions,
+            output,
+            aeneas_config,
             lake,
         ),
 

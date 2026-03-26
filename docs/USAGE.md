@@ -9,8 +9,36 @@ merge Rust + Lean call graphs into a unified atom file with cross-language
 dependency edges.
 
 ```
-probe-aeneas extract [OPTIONS]
+probe-aeneas extract [OPTIONS] [PROJECT]
 ```
+
+#### Project path (simplest form)
+
+The simplest way to run `extract` is with a single Aeneas project directory.
+The project must contain an `aeneas-config.yml` file; probe-aeneas reads
+`crate.dir` to locate the Rust crate and uses the project root as the Lean
+project.
+
+```bash
+probe-aeneas extract path/to/aeneas/project
+```
+
+If `functions.json` exists at the project root, it is reused automatically.
+Otherwise, it is generated from the Lean sources.
+
+**Aeneas project structure expected:**
+
+| File | Required | Purpose |
+|------|----------|---------|
+| `aeneas-config.yml` | Yes | Must contain `crate.dir` (path to Rust crate relative to project root) |
+| `lakefile.toml` or `lakefile.lean` | Yes | Identifies the Lean project root |
+| `Cargo.toml` | Yes | Must exist at the resolved Rust crate path (`project / crate.dir`) |
+| `functions.json` | No | Reused if present; otherwise auto-generated from Lean sources |
+
+#### Advanced input options
+
+For advanced usage (pre-generated JSON files, mixed inputs), use the named
+flags below. These are mutually exclusive with the positional `PROJECT` argument.
 
 **Input options (Rust):**
 
@@ -19,7 +47,7 @@ probe-aeneas extract [OPTIONS]
 | `--rust <PATH>` | Path to pre-generated Rust atoms JSON (from `probe-rust extract`). |
 | `--rust-project <PATH>` | Path to a Rust project directory. Runs `probe-rust extract --with-charon --auto-install` automatically. |
 
-Exactly one of `--rust` or `--rust-project` is required.
+Exactly one of `--rust` or `--rust-project` is required (when not using `PROJECT`).
 
 **Input options (Lean):**
 
@@ -28,18 +56,30 @@ Exactly one of `--rust` or `--rust-project` is required.
 | `--lean <PATH>` | Path to pre-generated Lean atoms JSON (from `probe-lean extract`). |
 | `--lean-project <PATH>` | Path to a Lean project directory. Runs `probe-lean extract` and `lake exe listfuns` automatically. |
 
-Exactly one of `--lean` or `--lean-project` is required.
+At least one of `--lean` or `--lean-project` is required (when not using `PROJECT`).
 
 **Other options:**
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--functions <PATH>` | | Path to `functions.json` (Aeneas name mapping). Auto-generated when `--lean-project` is given. Required when using `--lean`. |
+| `--functions <PATH>` | | Path to `functions.json` (Aeneas name mapping). Auto-generated when `--lean-project` or `PROJECT` is given. Required when using `--lean` alone. |
 | `--output <PATH>` | `-o` | Output file path. Default: `aeneas_{package}_{version}.json` derived from the Rust input. |
+| `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`). Defaults to `.verilib/aeneas.json` in the Lean project. |
+| `--lake` | | Use `lake exe listfuns` to generate `functions.json` instead of parsing Aeneas-generated Lean files directly. |
 
 ### Examples
 
-**From project paths (fully automated):**
+**From an Aeneas project directory (recommended):**
+
+```bash
+# curve25519-dalek-lean-verify (crate.dir = "curve25519-dalek")
+probe-aeneas extract ~/git_repos/baif/curve25519-dalek-lean-verify
+
+# SparsePostQuantumRatchet (crate.dir = ".")
+probe-aeneas extract ~/git_repos/baif/spqr_aeneas
+```
+
+**From separate project paths:**
 
 ```bash
 probe-aeneas extract \
@@ -216,8 +256,9 @@ schema containing an array of `{from, to, confidence, method}` mappings.
 
 ## Auto-Install Behavior
 
-When `--rust-project` or `--lean-project` is used, probe-aeneas locates or
-installs the required extractor tools automatically.
+When a project path is given (positional `PROJECT` or `--rust-project` /
+`--lean-project`), probe-aeneas locates or installs the required extractor
+tools automatically.
 
 ### probe-rust
 
@@ -247,6 +288,7 @@ installs the required extractor tools automatically.
 
 ## Parallel Extraction
 
-When both `--rust-project` and `--lean-project` are given, `probe-rust extract`
-and `probe-lean extract` are run in parallel using scoped threads. This can
-significantly reduce wall-clock time for the extract pipeline.
+When both Rust and Lean extractions are needed (either via the positional
+`PROJECT` argument or via `--rust-project` + `--lean-project`), `probe-rust
+extract` and `probe-lean extract` are run in parallel using scoped threads.
+This can significantly reduce wall-clock time for the extract pipeline.
