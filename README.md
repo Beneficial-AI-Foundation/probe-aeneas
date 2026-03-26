@@ -108,14 +108,16 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 
 ## How It Works
 
-1. **Input resolution** -- accepts an Aeneas project directory (auto-detects paths from `aeneas-config.yml`), pre-generated JSON files, explicit project paths, or a mix. When both Rust and Lean extractions are needed, they run in parallel.
-2. **Translation generation** -- matches Rust atoms to Lean atoms via `functions.json` using three strategies in priority order:
+1. **Input resolution** -- accepts an Aeneas project directory (auto-detects paths from `aeneas-config.yml`), pre-generated JSON files, explicit project paths, or a mix.
+2. **Extraction** -- runs `probe-rust extract --with-charon` on the Rust crate and `probe-lean extract` on the Lean project in parallel. Charon is auto-installed by `probe-rust` if not already present and provides Aeneas-compatible qualified names for Rust functions.
+3. **`functions.json` generation** -- if no `functions.json` is provided, one is generated automatically by parsing the Aeneas-generated `.lean` files in the Lean project. This file maps Lean definitions back to their Rust source names and locations.
+4. **Translation generation** -- matches Rust atoms to Lean atoms via `functions.json` using three strategies in priority order:
    1. `rust-qualified-name` -- exact match via Charon-derived qualified names
    2. `file+display-name` -- same source file + matching base method name
    3. `file+line-overlap` -- same source file + overlapping line ranges
-3. **Merge** -- combines Rust and Lean atom maps, adding cross-language dependency edges where translations exist.
-4. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `is-disabled` to Rust atoms.
-5. **Schema 2.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
+5. **Merge** -- combines Rust and Lean atom maps, adding cross-language dependency edges where translations exist.
+6. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `is-disabled` to Rust atoms.
+7. **Schema 2.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
 ## License
 
