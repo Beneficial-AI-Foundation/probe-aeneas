@@ -304,7 +304,7 @@ needed for each field.
 | Field | Method | Computation Details |
 |-------|--------|---------------------|
 | `is-extraction-artifact` | **AUTO** | `true` when the display name ends with an Aeneas-standard suffix: `_body`, `_loop`, `_loop0`–`_loop3`. These suffixes are universal Aeneas conventions, identical across all Aeneas projects. No config needed. |
-| `is-hidden` | **HYBRID** | **Auto:** `true` when `attributes` contains `"rust_trait_impl"`, OR the name contains `.Insts.` (trait instance pattern), OR the name ends with `.mutual` (loop mutual recursion), OR the name contains `.closure` (closures), OR the name contains `.Blanket.` (blanket impls), OR the name contains `DOC_HIDDEN` (doc-hidden constants). **Manual:** project-specific entries via `aeneas.json` config (inner constants, project-specific helpers). |
+| `is-hidden` | **HYBRID** | **Auto:** `true` when `attributes` contains `"rust_trait_impl"`, OR the name matches a boilerplate `.Insts.` trait (Clone, Copy, Default, Zeroize), OR the name is a borrow-pattern delegator variant (`SharedA`/`SharedB` in receiver or `SharedB` in trait args — `Shared0` primary forms are kept visible), OR the name ends with `.mutual` (loop mutual recursion), OR the name contains `.closure` (closures), OR the name contains `.Blanket.` (blanket impls), OR the name contains `DOC_HIDDEN` (doc-hidden constants), OR the entry is an `.Insts.` parent with exactly one nested child method (single-child parent collapsing). **Manual:** project-specific entries via `aeneas.json` config (inner constants, project-specific helpers). |
 | `is-relevant` | **AUTO** | For Lean atoms without `rust-source`: inherits `is-in-package` from probe-lean. For Lean atoms with `rust-source`: `true` when the source path contains the Rust crate name, does not start with `/`, and does not contain `/cargo/registry/`. This subsumes `excluded-namespace-prefixes` — external Rust dependencies that Aeneas transpiled will have `rust-source` paths from other crates. For Rust atoms: `is-relevant` = `!is-disabled`. |
 | `is-ignored` | **MANUAL** | Always requires explicit configuration in `aeneas.json`. This is a human editorial decision about what to exclude from verification progress percentages. probe-aeneas never auto-sets this to `true`. |
 | `is-externally-verified` | **AUTO** | `true` when `attributes` (from probe-lean) contains `"externally_verified"`. Applied to spec theorems where the proof uses `sorry` but is verified externally (e.g. in Verus). |
@@ -521,13 +521,13 @@ The `listfuns` command has three modes:
 | `source` | string | no | Relative path to the Rust source file |
 | `lines` | string | no | Line range in `"L<start>-L<end>"` format |
 | `dependencies` | array of strings | yes | Lean dependency names (probe prefix stripped) |
-| `nested_children` | array of strings | yes | Always `[]` (reserved for future use) |
+| `nested_children` | array of strings | yes | For `.Insts.` parents with exactly one child method: contains that child's name (parent is auto-hidden). Empty otherwise. |
 | `is_relevant` | bool | yes | Whether the function belongs to the target crate |
 | `is_extraction_artifact` | bool | yes | Whether the function is an Aeneas extraction artifact |
 | `is_hidden` | bool | yes | Whether the function is hidden from default views |
 | `is_ignored` | bool | yes | Whether the function is ignored from progress metrics |
 | `specified` | bool | yes | Whether a spec theorem exists for this function |
-| `verified` | bool | yes | Whether the spec theorem has `verification-status: verified` |
+| `verified` | bool | yes | Whether the spec theorem has `verification-status: verified` or the spec is externally verified |
 | `fully_verified` | bool | yes | Whether the function and all transitive Funs.lean dependencies are verified |
 | `externally_verified` | bool | yes | Whether the function is verified externally (e.g. in Verus) |
 | `spec_file` | string | no | Path to the file containing the spec theorem |

@@ -53,12 +53,39 @@ pub fn is_boilerplate_insts(name: &str) -> bool {
     BOILERPLATE_INSTS_FRAGMENTS.contains(&trait_part)
 }
 
+/// Check if a name is an Aeneas borrow-pattern delegator variant.
+///
+/// In Aeneas, each operator impl generates multiple borrow variants:
+/// - `Shared0<Type>` — primary (canonical reference-taking implementation)
+/// - `SharedA<Type>` — delegator (alternative borrow of receiver)
+/// - `SharedB<Type>` — delegator (alternative borrow in trait args, owned receiver)
+///
+/// Only the `Shared0` primary is meaningful; `SharedA`/`SharedB` variants
+/// are thin wrappers that delegate to it.
+pub fn is_borrow_delegator(name: &str) -> bool {
+    if let Some(insts_pos) = name.find(".Insts.") {
+        let receiver_part = &name[..insts_pos];
+        let receiver_type = receiver_part.rsplit('.').next().unwrap_or("");
+        if receiver_type.starts_with("SharedA") || receiver_type.starts_with("SharedB") {
+            return true;
+        }
+
+        let after_insts = &name[insts_pos + ".Insts.".len()..];
+        let trait_part = after_insts.split('.').next().unwrap_or("");
+        if trait_part.contains("SharedB") {
+            return true;
+        }
+    }
+    false
+}
+
 /// Check if a name should be hidden based on naming patterns and attributes.
 ///
 /// Returns `true` for boilerplate trait instance wrappers (Clone, Copy,
 /// Default, Zeroize via `.Insts.`), mutual loop defs (`.mutual`), closures
 /// (`.closure`), blanket impls (`.Blanket.`), DOC_HIDDEN constants,
-/// `rust_trait_impl` attribute, and names in the config's hidden set.
+/// `rust_trait_impl` attribute, borrow-pattern delegator variants
+/// (`SharedA`/`SharedB`), and names in the config's hidden set.
 pub fn is_hidden(name: &str, attrs: &[String], config: &AeneasConfig) -> bool {
     let has_trait_attr = attrs.iter().any(|a| a == "rust_trait_impl");
     let is_mutual_loop = name.ends_with(".mutual");
@@ -68,6 +95,7 @@ pub fn is_hidden(name: &str, attrs: &[String], config: &AeneasConfig) -> bool {
     let in_config = config.hidden.contains(name);
     has_trait_attr
         || is_boilerplate_insts(name)
+        || is_borrow_delegator(name)
         || is_mutual_loop
         || has_closure
         || has_blanket
@@ -80,6 +108,7 @@ pub fn is_hidden(name: &str, attrs: &[String], config: &AeneasConfig) -> bool {
 /// Used by `gen_functions` during initial parsing before atoms are available.
 pub fn is_hidden_by_name(name: &str) -> bool {
     is_boilerplate_insts(name)
+        || is_borrow_delegator(name)
         || name.ends_with(".mutual")
         || name.contains(".closure")
         || name.contains(".Blanket.")
@@ -160,19 +189,6 @@ pub fn atom_dependencies(atom: &Atom) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Get the `specs` extension from an atom (list of spec theorem code-names).
-pub fn atom_specs(atom: &Atom) -> Vec<String> {
-    atom.extensions
-        .get("specs")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// Strip the `probe:` prefix from an atom key.
 pub fn strip_prefix(key: &str) -> &str {
     key.strip_prefix(PROBE_PREFIX).unwrap_or(key)
@@ -202,8 +218,6 @@ pub struct EnrichedFunctionOutput {
     pub verified: bool,
     pub fully_verified: bool,
     pub externally_verified: bool,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub specs: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spec_file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -275,7 +289,7 @@ pub fn enrich_function_records(
         if func_is_hidden && specified {
             func_is_hidden = false;
         }
-        let verified = spec_atom
+        let proof_verified = spec_atom
             .and_then(|a| {
                 a.extensions
                     .get("verification-status")
@@ -286,21 +300,13 @@ pub fn enrich_function_records(
         let ext_verified = spec_atom
             .map(|a| is_externally_verified(&atom_attrs(a)))
             .unwrap_or(false);
+        let verified = proof_verified || ext_verified;
 
         let spec_file = spec_atom
             .map(|a| a.code_path.clone())
             .filter(|p| !p.is_empty());
 
         let (spec_docstring, spec_statement) = extract_spec_text(spec_atom);
-
-        let specs: Vec<String> = atom
-            .map(|a| {
-                atom_specs(a)
-                    .iter()
-                    .map(|s| strip_prefix(s).to_string())
-                    .collect()
-            })
-            .unwrap_or_default();
 
         let dependencies: Vec<String> = deps_raw
             .iter()
@@ -324,16 +330,50 @@ pub fn enrich_function_records(
             verified,
             fully_verified,
             externally_verified: ext_verified,
-            specs,
             spec_file,
             spec_docstring,
             spec_statement,
         });
     }
 
+    hide_single_child_parents(&mut results);
+
     let stats = compute_enrichment_stats(&results);
     print_enrichment_stats(&stats);
     results
+}
+
+/// Hide `.Insts.` parent structs that have exactly one nested child method.
+///
+/// Aeneas generates a parent entry (e.g. `Type.Insts.TraitName`) for each
+/// trait implementation alongside the leaf method (e.g. `Type.Insts.TraitName.method`).
+/// When there is exactly one child, the parent is a structural container with
+/// no independent value — hide it and populate `nested_children` on the parent.
+///
+/// Parents with a primary spec override (Layer B) are not re-hidden.
+fn hide_single_child_parents(results: &mut [EnrichedFunctionOutput]) {
+    let names: Vec<String> = results.iter().map(|r| r.lean_name.clone()).collect();
+    let name_set: std::collections::HashSet<&str> = names.iter().map(|s| s.as_str()).collect();
+
+    for result in results.iter_mut() {
+        if !result.lean_name.contains(".Insts.") {
+            continue;
+        }
+
+        let prefix = format!("{}.", result.lean_name);
+        let children: Vec<&str> = name_set
+            .iter()
+            .filter(|n| n.starts_with(prefix.as_str()) && !n[prefix.len()..].contains('.'))
+            .copied()
+            .collect();
+
+        if children.len() == 1 {
+            result.nested_children = children.iter().map(|s| s.to_string()).collect();
+            if !result.specified {
+                result.is_hidden = true;
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -342,8 +382,8 @@ pub fn enrich_function_records(
 
 /// Find the primary spec atom for a function.
 ///
-/// Checks in order: (1) `primary-spec` extension, (2) `<name>_spec` naming
-/// convention, (3) first entry in the `specs` array (probe-lean v0.2.0+).
+/// Checks the `primary-spec` extension first, then falls back to the
+/// `<name>_spec` naming convention.
 fn find_primary_spec<'a>(
     lean_name: &str,
     atoms: &'a BTreeMap<String, Atom>,
@@ -366,23 +406,6 @@ fn find_primary_spec<'a>(
     let spec_key = format!("{key}_spec");
     if let Some(spec_atom) = atoms.get(&spec_key) {
         return (Some(spec_key.clone()), Some(spec_atom));
-    }
-
-    if let Some(atom) = atoms.get(&key) {
-        if let Some(specs) = atom.extensions.get("specs").and_then(|v| v.as_array()) {
-            for spec_val in specs {
-                if let Some(spec_name) = spec_val.as_str() {
-                    let sk = if spec_name.starts_with(PROBE_PREFIX) {
-                        spec_name.to_string()
-                    } else {
-                        format!("{PROBE_PREFIX}{spec_name}")
-                    };
-                    if let Some(spec_atom) = atoms.get(&sk) {
-                        return (Some(sk), Some(spec_atom));
-                    }
-                }
-            }
-        }
     }
 
     (None, None)
@@ -424,7 +447,7 @@ pub fn compute_fully_verified(
     let (primary_key, _) = find_primary_spec(lean_name, atoms);
     if let Some(pk) = &primary_key {
         let spec_atom = atoms.get(pk);
-        let is_verified = spec_atom
+        let proof_verified = spec_atom
             .and_then(|a| {
                 a.extensions
                     .get("verification-status")
@@ -432,7 +455,10 @@ pub fn compute_fully_verified(
             })
             .map(|s| s == "verified")
             .unwrap_or(false);
-        if !is_verified {
+        let ev = spec_atom
+            .map(|a| is_externally_verified(&atom_attrs(a)))
+            .unwrap_or(false);
+        if !proof_verified && !ev {
             return false;
         }
     } else {
@@ -824,72 +850,6 @@ mod tests {
     }
 
     #[test]
-    fn find_primary_spec_via_specs_field() {
-        let mut atoms = BTreeMap::new();
-
-        let mut func_atom = test_atom();
-        func_atom.extensions.insert(
-            "specs".to_string(),
-            serde_json::json!(["MyFunc_custom_theorem", "MyFunc_other"]),
-        );
-        atoms.insert("probe:MyFunc".to_string(), func_atom);
-
-        let mut spec_atom = test_atom();
-        spec_atom.code_path = "Specs.lean".to_string();
-        atoms.insert("probe:MyFunc_custom_theorem".to_string(), spec_atom);
-
-        let (key, atom) = find_primary_spec("MyFunc", &atoms);
-        assert_eq!(key, Some("probe:MyFunc_custom_theorem".to_string()));
-        assert!(atom.is_some());
-    }
-
-    #[test]
-    fn find_primary_spec_specs_field_skips_missing() {
-        let mut atoms = BTreeMap::new();
-
-        let mut func_atom = test_atom();
-        func_atom.extensions.insert(
-            "specs".to_string(),
-            serde_json::json!(["MissingSpec", "ActualSpec"]),
-        );
-        atoms.insert("probe:MyFunc".to_string(), func_atom);
-
-        let mut spec_atom = test_atom();
-        spec_atom.code_path = "Specs.lean".to_string();
-        atoms.insert("probe:ActualSpec".to_string(), spec_atom);
-
-        let (key, atom) = find_primary_spec("MyFunc", &atoms);
-        assert_eq!(key, Some("probe:ActualSpec".to_string()));
-        assert!(atom.is_some());
-    }
-
-    #[test]
-    fn find_primary_spec_primary_spec_wins_over_specs_field() {
-        let mut atoms = BTreeMap::new();
-
-        let mut func_atom = test_atom();
-        func_atom
-            .extensions
-            .insert("primary-spec".to_string(), serde_json::json!("FromPrimary"));
-        func_atom
-            .extensions
-            .insert("specs".to_string(), serde_json::json!(["FromSpecs"]));
-        atoms.insert("probe:MyFunc".to_string(), func_atom);
-
-        let mut primary_atom = test_atom();
-        primary_atom.code_path = "Primary.lean".to_string();
-        atoms.insert("probe:FromPrimary".to_string(), primary_atom);
-
-        let mut specs_atom = test_atom();
-        specs_atom.code_path = "Specs.lean".to_string();
-        atoms.insert("probe:FromSpecs".to_string(), specs_atom);
-
-        let (key, atom) = find_primary_spec("MyFunc", &atoms);
-        assert_eq!(key, Some("probe:FromPrimary".to_string()));
-        assert_eq!(atom.unwrap().code_path, "Primary.lean");
-    }
-
-    #[test]
     fn find_primary_spec_none_when_missing() {
         let atoms = BTreeMap::new();
         let (key, atom) = find_primary_spec("NoSuchFunc", &atoms);
@@ -943,6 +903,34 @@ mod tests {
 
         let mut cache = HashMap::new();
         assert!(!compute_fully_verified("Foo", &atoms, &mut cache));
+    }
+
+    #[test]
+    fn compute_fully_verified_externally_verified() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom
+            .extensions
+            .insert("dependencies".to_string(), serde_json::json!([]));
+        func_atom
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("Foo_spec"));
+        atoms.insert("probe:Foo".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("unverified"),
+        );
+        spec_atom.extensions.insert(
+            "attributes".to_string(),
+            serde_json::json!(["externally_verified"]),
+        );
+        atoms.insert("probe:Foo_spec".to_string(), spec_atom);
+
+        let mut cache = HashMap::new();
+        assert!(compute_fully_verified("Foo", &atoms, &mut cache));
     }
 
     #[test]
@@ -1116,5 +1104,147 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert!(results[0].is_hidden);
         assert!(!results[0].specified);
+    }
+
+    #[test]
+    fn borrow_delegator_shared_a_receiver() {
+        assert!(is_borrow_delegator(
+            "crate.SharedAScalar.Insts.CoreOpsArithMulEdwardsPointEdwardsPoint.mul"
+        ));
+        assert!(is_borrow_delegator(
+            "crate.SharedAEdwardsPoint.Insts.CoreOpsArithAddEdwardsPointEdwardsPoint.add"
+        ));
+    }
+
+    #[test]
+    fn borrow_delegator_shared_b_in_trait_args() {
+        assert!(is_borrow_delegator(
+            "crate.edwards.EdwardsPoint.Insts.CoreOpsArithAddSharedBEdwardsPointEdwardsPoint.add"
+        ));
+        assert!(is_borrow_delegator(
+            "crate.scalar.Scalar.Insts.CoreOpsArithAddSharedBScalarScalar.add"
+        ));
+    }
+
+    #[test]
+    fn borrow_delegator_shared0_not_hidden() {
+        assert!(!is_borrow_delegator(
+            "crate.Shared0EdwardsPoint.Insts.CoreOpsArithAddSharedAProjectiveNielsPointCompletedPoint.add"
+        ));
+        assert!(!is_borrow_delegator(
+            "crate.Shared0Scalar.Insts.CoreOpsArithAddSharedAScalarScalar.add"
+        ));
+    }
+
+    #[test]
+    fn borrow_delegator_no_insts_not_matched() {
+        assert!(!is_borrow_delegator("SharedAScalar.mul"));
+        assert!(!is_borrow_delegator("normal.function"));
+        assert!(!is_borrow_delegator(""));
+    }
+
+    #[test]
+    fn borrow_delegator_hidden_by_name() {
+        assert!(is_hidden_by_name(
+            "crate.SharedAScalar.Insts.CoreOpsArithMulXY.mul"
+        ));
+        assert!(is_hidden_by_name(
+            "crate.X.Insts.CoreOpsArithAddSharedBYZ.add"
+        ));
+        assert!(!is_hidden_by_name(
+            "crate.Shared0X.Insts.CoreOpsArithAddSharedAYZ.add"
+        ));
+    }
+
+    #[test]
+    fn externally_verified_implies_verified() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom
+            .extensions
+            .insert("dependencies".to_string(), serde_json::json!([]));
+        func_atom
+            .extensions
+            .insert("is-in-package".to_string(), serde_json::json!(true));
+        func_atom
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("Foo_spec"));
+        atoms.insert("probe:Foo".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("unverified"),
+        );
+        spec_atom.extensions.insert(
+            "attributes".to_string(),
+            serde_json::json!(["externally_verified"]),
+        );
+        atoms.insert("probe:Foo_spec".to_string(), spec_atom);
+
+        let records = vec![FunctionRecord {
+            lean_name: "Foo".to_string(),
+            rust_name: None,
+            source: None,
+            lines: None,
+            is_hidden: false,
+            is_extraction_artifact: false,
+        }];
+        let config = AeneasConfig::default();
+        let results = enrich_function_records(&records, &atoms, "", &config);
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].externally_verified);
+        assert!(
+            results[0].verified,
+            "externally_verified should imply verified"
+        );
+    }
+
+    #[test]
+    fn single_child_parent_hidden() {
+        let mut atoms = BTreeMap::new();
+
+        for name in &["Foo.Insts.TraitName", "Foo.Insts.TraitName.method"] {
+            let mut a = test_atom();
+            a.extensions
+                .insert("is-in-package".to_string(), serde_json::json!(true));
+            a.extensions
+                .insert("dependencies".to_string(), serde_json::json!([]));
+            atoms.insert(format!("probe:{name}"), a);
+        }
+
+        let records = vec![
+            FunctionRecord {
+                lean_name: "Foo.Insts.TraitName".to_string(),
+                rust_name: None,
+                source: None,
+                lines: None,
+                is_hidden: false,
+                is_extraction_artifact: false,
+            },
+            FunctionRecord {
+                lean_name: "Foo.Insts.TraitName.method".to_string(),
+                rust_name: None,
+                source: None,
+                lines: None,
+                is_hidden: false,
+                is_extraction_artifact: false,
+            },
+        ];
+        let config = AeneasConfig::default();
+        let results = enrich_function_records(&records, &atoms, "", &config);
+
+        assert_eq!(results.len(), 2);
+        assert!(
+            results[0].is_hidden,
+            "parent with one child should be hidden"
+        );
+        assert_eq!(
+            results[0].nested_children,
+            vec!["Foo.Insts.TraitName.method"]
+        );
+        assert!(!results[1].is_hidden, "child method should remain visible");
     }
 }
