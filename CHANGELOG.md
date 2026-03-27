@@ -6,8 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-27
+
 ### Added
-- `is-disabled` field on all Rust atoms in merged output. `false` when the function's `rust-qualified-name` appears as a `rust_name` in `functions.json` (i.e. Aeneas processed it); `true` otherwise. Schema version bumped to 2.1.
+- **`is-public` field** on all Rust atoms in merged output. `true` when the item is declared `pub` per Charon LLBC; `false` when private or visibility data unavailable.
+- **`is-disabled` field** on all Rust atoms in merged output. `false` when the function's `rust-qualified-name` appears as a `rust_name` in `functions.json` (i.e. Aeneas processed it); `true` otherwise.
+- **`is-relevant` field** on all Rust atoms (inverse of `is-disabled`).
+- **Positional project path**: `probe-aeneas extract <project>` parses `aeneas-config.yml` to auto-detect Rust/Lean paths and `functions.json`.
+- **Enriched `listfuns`**: `probe-aeneas listfuns --enriched` parses Aeneas-generated Lean files directly to produce `functions.json` with verification data.
+
+### Changed
+- Release workflow migrated to cargo-dist v0.31.0 (aligned with probe-rust and probe-verus). Adds Windows target, shell/powershell installers, checksums, and PR dry-run builds.
+- CI workflow simplified: removed redundant `probe` repo checkout (now fetched via git dep), updated to `actions/checkout@v6`.
 
 ## [0.1.0] - 2026-03-13
 
@@ -27,5 +37,6 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/tag/v0.1.0
