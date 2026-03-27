@@ -118,6 +118,7 @@ extension fields passed through verbatim.
     "language": "rust",
     "rust-qualified-name": "curve25519_dalek::scalar::Scalar::from_bytes_mod_order",
     "is-disabled": false,
+    "is-public": true,
     "translation-name": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
     "translation-path": "Curve25519Dalek/Funs.lean",
     "translation-text": { "lines-start": 7089, "lines-end": 7098 }
@@ -212,6 +213,7 @@ Rust atoms (added automatically by the merge step).
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
 | `is-disabled` | bool | yes | `false` if the function's `rust-qualified-name` appears as a `rust_name` in `functions.json`; `true` otherwise. Indicates whether Aeneas processed this function. |
 | `is-relevant` | bool | yes | Inverse of `is-disabled`. `true` when Aeneas transpiled this function. |
+| `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
@@ -268,6 +270,29 @@ translation metadata, since they were never transpiled.
 Rust call graph into "in scope for verification" (`false`) and "out of scope"
 (`true`). This is useful for computing verification coverage, filtering
 dependency trees, or highlighting functions that still need transpilation.
+
+### `is-public` -- Rust Visibility Indicator
+
+Every Rust atom in the merged output carries an `is-public` boolean that
+records whether the function is declared with the `pub` keyword.
+
+**Semantics:**
+- `is-public: true` -- the Rust function carries the `pub` visibility
+  keyword. This is item-level visibility, not crate-level API reachability --
+  a `pub fn` inside a private module will still have `is-public: true`.
+- `is-public: false` -- the function is not declared `pub`, or Charon
+  enrichment did not produce visibility data (e.g. Charon was not used, or
+  the atom did not match a Charon entry).
+
+**How it is computed:** When `probe-rust extract --with-charon` is used,
+Charon's LLBC output includes `item_meta.attr_info.public` for each function
+declaration. probe-rust reads this field and emits `is-public` on matched
+atoms. During the `extract` merge step, probe-aeneas preserves any existing
+`is-public` value from the Rust atoms and defaults missing ones to `false`.
+
+**Consumer guidance:** Downstream tools can use `is-public` together with
+`is-disabled` to identify functions that are both part of the public API and
+in scope for verification, useful for prioritizing verification effort.
 
 ### Computed Fields: Auto vs Manual
 

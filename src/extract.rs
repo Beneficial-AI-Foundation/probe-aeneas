@@ -401,6 +401,10 @@ fn enrich_with_aeneas_metadata(
                 .insert("is-disabled".to_string(), serde_json::json!(!in_functions));
             atom.extensions
                 .insert("is-relevant".to_string(), serde_json::json!(in_functions));
+            if !atom.extensions.contains_key("is-public") {
+                atom.extensions
+                    .insert("is-public".to_string(), serde_json::json!(false));
+            }
         }
     }
 }
@@ -671,5 +675,96 @@ tweaks:
         let config: AeneasProjectConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(config.crate_config.dir, ".");
         assert_eq!(config.crate_config.name.as_deref(), Some("test"));
+    }
+
+    fn make_rust_atom(name: &str) -> Atom {
+        Atom {
+            display_name: name.to_string(),
+            dependencies: std::collections::BTreeSet::new(),
+            code_module: "module".to_string(),
+            code_path: "src/lib.rs".to_string(),
+            code_text: probe::types::CodeText {
+                lines_start: 1,
+                lines_end: 10,
+            },
+            kind: "exec".to_string(),
+            language: "rust".to_string(),
+            extensions: std::collections::BTreeMap::new(),
+        }
+    }
+
+    fn make_lean_atom(name: &str) -> Atom {
+        Atom {
+            display_name: name.to_string(),
+            dependencies: std::collections::BTreeSet::new(),
+            code_module: "Module".to_string(),
+            code_path: "Module/Funs.lean".to_string(),
+            code_text: probe::types::CodeText {
+                lines_start: 100,
+                lines_end: 110,
+            },
+            kind: "def".to_string(),
+            language: "lean".to_string(),
+            extensions: std::collections::BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn enrich_defaults_is_public_false_for_rust_atoms() {
+        let mut merged = std::collections::BTreeMap::new();
+        merged.insert("probe:crate/1.0/foo()".to_string(), make_rust_atom("foo"));
+
+        let from_to = HashMap::new();
+        let funs_rust_names = &HashSet::new();
+
+        enrich_with_aeneas_metadata(&mut merged, &from_to, funs_rust_names);
+
+        let atom = merged.get("probe:crate/1.0/foo()").unwrap();
+        assert_eq!(
+            atom.extensions.get("is-public"),
+            Some(&serde_json::json!(false)),
+            "Rust atom without Charon data should default is-public to false"
+        );
+    }
+
+    #[test]
+    fn enrich_preserves_existing_is_public_true() {
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("bar");
+        atom.extensions
+            .insert("is-public".to_string(), serde_json::json!(true));
+        merged.insert("probe:crate/1.0/bar()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        let funs_rust_names = &HashSet::new();
+
+        enrich_with_aeneas_metadata(&mut merged, &from_to, funs_rust_names);
+
+        let atom = merged.get("probe:crate/1.0/bar()").unwrap();
+        assert_eq!(
+            atom.extensions.get("is-public"),
+            Some(&serde_json::json!(true)),
+            "Existing is-public: true from probe-rust should be preserved"
+        );
+    }
+
+    #[test]
+    fn enrich_does_not_add_is_public_to_lean_atoms() {
+        let mut merged = std::collections::BTreeMap::new();
+        merged.insert(
+            "probe:module.lean_fn".to_string(),
+            make_lean_atom("lean_fn"),
+        );
+
+        let from_to = HashMap::new();
+        let funs_rust_names = &HashSet::new();
+
+        enrich_with_aeneas_metadata(&mut merged, &from_to, funs_rust_names);
+
+        let atom = merged.get("probe:module.lean_fn").unwrap();
+        assert!(
+            !atom.extensions.contains_key("is-public"),
+            "Lean atoms should not get is-public"
+        );
     }
 }
