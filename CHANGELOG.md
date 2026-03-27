@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-27
+
+### Added
+- **Borrow-pattern delegator hiding**: `SharedA`/`SharedB` Aeneas borrow-pattern delegator variants are now auto-hidden; `Shared0` primary forms remain visible.
+- **Single-child parent collapsing**: `.Insts.` parents with exactly one nested child method are auto-hidden; `nested_children` is populated with the child name.
+- **`compute_fully_verified` with external verification**: externally verified functions now count as verified in the fully-verified transitive walk.
+
+### Changed
+- **`verified` semantics**: `verified` is now `true` when the spec has `verification-status: verified` OR the spec is externally verified (previously only proof-verified).
+- **`nested_children` populated**: was always `[]`; now contains child names for single-child `.Insts.` parents.
+
+### Removed
+- **`specs` field** from enriched `listfuns` output (`EnrichedFunctionOutput`). The `specs` array on Lean atoms (from probe-lean) is unaffected.
+- **`atom_specs` helper** and the specs-array fallback strategy in `find_primary_spec`.
+
 ## [0.2.0] - 2026-03-27
 
 ### Added
@@ -37,6 +52,7 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/tag/v0.1.0

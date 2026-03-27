@@ -25,7 +25,7 @@ Download from [GitHub Releases](https://github.com/Beneficial-AI-Foundation/prob
 
 ```bash
 # Example: Linux x86_64
-curl -sL https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/latest/download/probe-aeneas-v0.1.0-linux-x86_64.tar.gz \
+curl -sL https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/latest/download/probe-aeneas-v0.3.0-linux-x86_64.tar.gz \
   | tar -xz -C ~/.local/bin --strip-components=1 bin/probe-aeneas
 ```
 
@@ -94,7 +94,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 {
   "schema": "probe-aeneas/extract",
   "schema-version": "2.0",
-  "tool": { "name": "probe-aeneas", "version": "0.1.0", "command": "extract" },
+  "tool": { "name": "probe-aeneas", "version": "0.3.0", "command": "extract" },
   "inputs": [
     { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
     { "schema": "probe-lean/extract", "package": "Curve25519Dalek", "package-version": "0.1.0" }
