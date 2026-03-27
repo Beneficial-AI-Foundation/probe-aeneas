@@ -270,16 +270,26 @@ tools automatically.
 
 ### probe-lean
 
+probe-aeneas detects the target project's Lean version from its
+`lean-toolchain` file and installs a version-matched `probe-lean` binary.
+Multiple Lean versions can coexist via per-version binaries.
+
 **Resolution order:**
 
-1. `probe-lean` on `$PATH`
-2. `~/.local/bin/probe-lean`
-3. Clone from source, build with `lake build`, copy to `~/.local/bin/probe-lean`
+1. `~/.local/bin/probe-lean-<version>` (versioned binary matching the target project's Lean toolchain)
+2. `probe-lean` on `$PATH`
+3. `~/.local/bin/probe-lean` (unversioned symlink / fallback when no `lean-toolchain` is found)
+4. Download pre-built binary from GitHub Releases (`probe-lean-<version>-<platform>.tar.gz`)
+5. Clone from source, pin `lean-toolchain` to the target version, build with `lake build`, install to `~/.local/bin/probe-lean-<version>`
+
+After installation, a `~/.local/bin/probe-lean` symlink is created pointing
+to the versioned binary.
 
 ---
 
 ## Prerequisites
 
+- **probe-aeneas** itself can be installed from [GitHub Releases](https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases) (pre-built binaries) or via `cargo install --git`
 - **Rust toolchain** (`cargo`) -- for building/installing `probe-rust`
 - **Lean 4 toolchain** (`elan`, `lake`) -- for building/installing `probe-lean` and running `listfuns`
 - `probe-rust` and `probe-lean` are auto-installed when using `--rust-project` / `--lean-project`

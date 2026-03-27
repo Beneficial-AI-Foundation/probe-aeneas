@@ -160,6 +160,19 @@ pub fn atom_dependencies(atom: &Atom) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Get the `specs` extension from an atom (list of spec theorem code-names).
+pub fn atom_specs(atom: &Atom) -> Vec<String> {
+    atom.extensions
+        .get("specs")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Strip the `probe:` prefix from an atom key.
 pub fn strip_prefix(key: &str) -> &str {
     key.strip_prefix(PROBE_PREFIX).unwrap_or(key)
@@ -189,6 +202,8 @@ pub struct EnrichedFunctionOutput {
     pub verified: bool,
     pub fully_verified: bool,
     pub externally_verified: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub specs: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spec_file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -278,6 +293,15 @@ pub fn enrich_function_records(
 
         let (spec_docstring, spec_statement) = extract_spec_text(spec_atom);
 
+        let specs: Vec<String> = atom
+            .map(|a| {
+                atom_specs(a)
+                    .iter()
+                    .map(|s| strip_prefix(s).to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let dependencies: Vec<String> = deps_raw
             .iter()
             .map(|d| strip_prefix(d).to_string())
@@ -300,6 +324,7 @@ pub fn enrich_function_records(
             verified,
             fully_verified,
             externally_verified: ext_verified,
+            specs,
             spec_file,
             spec_docstring,
             spec_statement,
@@ -317,8 +342,8 @@ pub fn enrich_function_records(
 
 /// Find the primary spec atom for a function.
 ///
-/// Checks the `primary-spec` extension first, then falls back to the
-/// `<name>_spec` naming convention.
+/// Checks in order: (1) `primary-spec` extension, (2) `<name>_spec` naming
+/// convention, (3) first entry in the `specs` array (probe-lean v0.2.0+).
 fn find_primary_spec<'a>(
     lean_name: &str,
     atoms: &'a BTreeMap<String, Atom>,
@@ -341,6 +366,23 @@ fn find_primary_spec<'a>(
     let spec_key = format!("{key}_spec");
     if let Some(spec_atom) = atoms.get(&spec_key) {
         return (Some(spec_key.clone()), Some(spec_atom));
+    }
+
+    if let Some(atom) = atoms.get(&key) {
+        if let Some(specs) = atom.extensions.get("specs").and_then(|v| v.as_array()) {
+            for spec_val in specs {
+                if let Some(spec_name) = spec_val.as_str() {
+                    let sk = if spec_name.starts_with(PROBE_PREFIX) {
+                        spec_name.to_string()
+                    } else {
+                        format!("{PROBE_PREFIX}{spec_name}")
+                    };
+                    if let Some(spec_atom) = atoms.get(&sk) {
+                        return (Some(sk), Some(spec_atom));
+                    }
+                }
+            }
+        }
     }
 
     (None, None)
@@ -779,6 +821,72 @@ mod tests {
         let (key, atom) = find_primary_spec("MyFunc", &atoms);
         assert_eq!(key, Some("probe:MyFunc_spec".to_string()));
         assert!(atom.is_some());
+    }
+
+    #[test]
+    fn find_primary_spec_via_specs_field() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom.extensions.insert(
+            "specs".to_string(),
+            serde_json::json!(["MyFunc_custom_theorem", "MyFunc_other"]),
+        );
+        atoms.insert("probe:MyFunc".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.code_path = "Specs.lean".to_string();
+        atoms.insert("probe:MyFunc_custom_theorem".to_string(), spec_atom);
+
+        let (key, atom) = find_primary_spec("MyFunc", &atoms);
+        assert_eq!(key, Some("probe:MyFunc_custom_theorem".to_string()));
+        assert!(atom.is_some());
+    }
+
+    #[test]
+    fn find_primary_spec_specs_field_skips_missing() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom.extensions.insert(
+            "specs".to_string(),
+            serde_json::json!(["MissingSpec", "ActualSpec"]),
+        );
+        atoms.insert("probe:MyFunc".to_string(), func_atom);
+
+        let mut spec_atom = test_atom();
+        spec_atom.code_path = "Specs.lean".to_string();
+        atoms.insert("probe:ActualSpec".to_string(), spec_atom);
+
+        let (key, atom) = find_primary_spec("MyFunc", &atoms);
+        assert_eq!(key, Some("probe:ActualSpec".to_string()));
+        assert!(atom.is_some());
+    }
+
+    #[test]
+    fn find_primary_spec_primary_spec_wins_over_specs_field() {
+        let mut atoms = BTreeMap::new();
+
+        let mut func_atom = test_atom();
+        func_atom
+            .extensions
+            .insert("primary-spec".to_string(), serde_json::json!("FromPrimary"));
+        func_atom
+            .extensions
+            .insert("specs".to_string(), serde_json::json!(["FromSpecs"]));
+        atoms.insert("probe:MyFunc".to_string(), func_atom);
+
+        let mut primary_atom = test_atom();
+        primary_atom.code_path = "Primary.lean".to_string();
+        atoms.insert("probe:FromPrimary".to_string(), primary_atom);
+
+        let mut specs_atom = test_atom();
+        specs_atom.code_path = "Specs.lean".to_string();
+        atoms.insert("probe:FromSpecs".to_string(), specs_atom);
+
+        let (key, atom) = find_primary_spec("MyFunc", &atoms);
+        assert_eq!(key, Some("probe:FromPrimary".to_string()));
+        assert_eq!(atom.unwrap().code_path, "Primary.lean");
     }
 
     #[test]

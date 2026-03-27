@@ -70,7 +70,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 **Parallel Extraction**: When both Rust and Lean extractions are needed (via positional `PROJECT` or `--rust-project` + `--lean-project`), `probe-rust extract` and `probe-lean extract` run in parallel via scoped threads.
 
-**Auto-Install**: `probe-rust` is installed via `cargo install --git`, `probe-lean` is cloned and built with `lake build`, then copied to `~/.local/bin/`.
+**Auto-Install**: `probe-rust` is installed via `cargo install --git`. `probe-lean` is version-aware: the target project's `lean-toolchain` is read, then a versioned binary (`~/.local/bin/probe-lean-<version>`) is looked up or installed (pre-built download from GitHub Releases, falling back to source build with `lake build`). A `~/.local/bin/probe-lean` symlink points to the active version.
 
 **Schema 2.0 Metadata Envelope**: Merged output uses `probe-aeneas/extract` schema; translation output uses `probe/translations` schema. Both wrap payloads with tool info, source provenance, and timestamps.
 
@@ -85,15 +85,48 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 ## External Tool Dependencies
 
 - **probe-rust**: Rust atom extractor (auto-installable via `cargo install`)
-- **probe-lean**: Lean atom extractor (auto-installable from source)
+- **probe-lean**: Lean atom extractor (auto-installable; pre-built binary download or source build, version-matched to target project's `lean-toolchain`)
 - **lake**: Lean build tool for running `listfuns` (must be installed via elan)
+
+## Knowledge Base
+
+The ecosystem KB lives at `../probe/kb/`. Read `../probe/kb/index.md` for orientation. Your implementation must conform to `../probe/kb/engineering/properties.md`. Use terminology from `../probe/kb/engineering/glossary.md`.
+
+## Development Loop (Ralph Loop)
+
+The Ralph Loop is defined in `../probe/CLAUDE.md` and applies to all probe ecosystem repos. For probe-aeneas, the loop is:
+
+1. Implement the change
+2. Run auditor skills if available (`/ambiguity-auditor`, `/code-quality-auditor`, `/test-quality-auditor`); read reports in `../probe/kb/reports/`
+3. Fix every issue found
+4. Repeat steps 2-3 until all auditors pass clean
+5. Run the validation suite:
+   ```bash
+   cargo fmt --all && cargo clippy --all-targets -- -D warnings && cargo test
+   ```
+6. Also validate the upstream probe crate (since probe-aeneas depends on it):
+   ```bash
+   cd ../probe && cargo fmt -- --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test
+   ```
+
+Never skip the audit step. Never mark a task complete with unresolved audit findings.
+
+### When to run the full loop
+
+Run it when touching:
+- Translation logic or enrichment pipeline (`translate.rs`, `enrich.rs`, `extract.rs`)
+- Extract runner or auto-install logic (`extract_runner.rs`)
+- Atom field consumption (any change to how probe-lean/probe-rust output is parsed)
+- Anything that could violate a property in `../probe/kb/engineering/properties.md`
+
+For trivial changes (typo fixes, comment updates, dependency bumps), just run `cargo fmt --all && cargo clippy --all-targets -- -D warnings && cargo test`.
 
 ## Before Committing
 
-Always run fmt and clippy before committing:
+Always run at minimum:
 
 ```bash
-cargo fmt --all && cargo clippy --all-targets -- -D warnings
+cargo fmt --all && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
 ## Commit Message Style

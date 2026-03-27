@@ -54,7 +54,7 @@ pub fn run_probe_lean_extract_with_opts(
     project: &Path,
     module_prefix: Option<&str>,
 ) -> Result<PathBuf, String> {
-    let bin = find_or_install_probe_lean()?;
+    let bin = find_or_install_probe_lean(Some(project))?;
     let output = tempfile("probe_lean", ".json");
 
     let project_str = project
@@ -127,17 +127,172 @@ fn find_or_install_probe_rust() -> Result<PathBuf, String> {
     }
 }
 
-fn find_or_install_probe_lean() -> Result<PathBuf, String> {
+fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf, String> {
+    let lean_version = lean_project.and_then(|p| detect_lean_version(p).ok());
+
+    if let Some(ref ver) = lean_version {
+        let versioned_bin = home_dir()?.join(format!(".local/bin/probe-lean-{ver}"));
+        if versioned_bin.exists() {
+            println!("Using versioned probe-lean for Lean {ver}");
+            return Ok(versioned_bin);
+        }
+    }
+
     if let Some(p) = find_on_path("probe-lean") {
         return Ok(p);
     }
 
     let local_bin = home_dir()?.join(".local/bin/probe-lean");
-    if local_bin.exists() {
+    if local_bin.exists() && lean_version.is_none() {
         return Ok(local_bin);
     }
 
-    println!("probe-lean not found, installing from source...");
+    let version = lean_version.unwrap_or_else(|| "latest".to_string());
+    println!("probe-lean not found for Lean {version}, installing...");
+
+    let dest_dir = home_dir()?.join(".local/bin");
+    std::fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("Failed to create ~/.local/bin: {e}"))?;
+
+    if version != "latest" {
+        if let Ok(bin) = try_prebuilt_download(&version) {
+            update_symlink(&bin)?;
+            return Ok(bin);
+        }
+    }
+
+    build_from_source(&version)
+}
+
+/// Read the Lean version from a project's `lean-toolchain` file.
+fn detect_lean_version(project: &Path) -> Result<String, String> {
+    let toolchain_path = project.join("lean-toolchain");
+    let content = std::fs::read_to_string(&toolchain_path)
+        .map_err(|e| format!("Failed to read lean-toolchain: {e}"))?;
+    let trimmed = content.trim();
+    let version = if let Some(after_colon) = trimmed.split(':').nth(1) {
+        after_colon.trim().to_string()
+    } else {
+        trimmed.to_string()
+    };
+    if version.is_empty() {
+        return Err("lean-toolchain file is empty".to_string());
+    }
+    Ok(version)
+}
+
+/// Detect platform as `{os}-{arch}` for pre-built binary downloads.
+fn detect_platform() -> String {
+    let os = if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(target_os = "macos") {
+        "darwin"
+    } else {
+        "unknown"
+    };
+    let arch = if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "unknown"
+    };
+    format!("{os}-{arch}")
+}
+
+/// Try downloading a pre-built probe-lean binary from GitHub Releases.
+fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf, String> {
+    let platform = detect_platform();
+    let artifact = format!("probe-lean-{lean_version}-{platform}.tar.gz");
+    println!("Checking for pre-built binary: {artifact}...");
+
+    let output = Command::new("curl")
+        .args([
+            "-sL",
+            "https://api.github.com/repos/Beneficial-AI-Foundation/probe-lean/releases",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to query GitHub releases: {e}"))?;
+
+    if !output.status.success() {
+        return Err("GitHub API request failed".to_string());
+    }
+
+    let body = String::from_utf8_lossy(&output.stdout);
+    let download_url = body
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.contains("browser_download_url") && line.contains(&artifact) {
+                line.split('"')
+                    .find(|s| s.starts_with("https://") && s.contains(&artifact))
+                    .map(String::from)
+            } else {
+                None
+            }
+        })
+        .next();
+
+    let url = download_url
+        .ok_or_else(|| "No pre-built binary available, falling back to source build".to_string())?;
+
+    println!("Downloading pre-built binary...");
+
+    let tmpdir = std::env::temp_dir().join("probe-lean-download");
+    if tmpdir.exists() {
+        std::fs::remove_dir_all(&tmpdir).ok();
+    }
+    std::fs::create_dir_all(&tmpdir).map_err(|e| format!("Failed to create temp dir: {e}"))?;
+
+    let status = Command::new("bash")
+        .args([
+            "-c",
+            &format!("curl -sL '{}' | tar -xz -C '{}'", url, tmpdir.display()),
+        ])
+        .status()
+        .map_err(|e| format!("Failed to download/extract binary: {e}"))?;
+
+    if !status.success() {
+        return Err("Download/extraction failed".to_string());
+    }
+
+    let dest_dir = home_dir()?.join(".local/bin");
+    std::fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("Failed to create ~/.local/bin: {e}"))?;
+
+    let versioned_bin = dest_dir.join(format!("probe-lean-{lean_version}"));
+    let downloaded_bin = tmpdir.join("bin/probe-lean");
+    if !downloaded_bin.exists() {
+        return Err("Downloaded archive does not contain bin/probe-lean".to_string());
+    }
+
+    std::fs::copy(&downloaded_bin, &versioned_bin)
+        .map_err(|e| format!("Failed to install binary: {e}"))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&versioned_bin, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set executable permission: {e}"))?;
+    }
+
+    let versioned_lib = home_dir()?.join(format!(".local/lib/probe-lean-{lean_version}"));
+    let downloaded_lib = tmpdir.join("lib");
+    if downloaded_lib.exists() {
+        std::fs::create_dir_all(&versioned_lib)
+            .map_err(|e| format!("Failed to create lib dir: {e}"))?;
+        copy_dir_contents(&downloaded_lib, &versioned_lib)?;
+    }
+
+    std::fs::remove_dir_all(&tmpdir).ok();
+
+    println!("  ✓ Installed pre-built probe-lean-{lean_version}");
+    Ok(versioned_bin)
+}
+
+/// Build probe-lean from source for a specific Lean version.
+fn build_from_source(lean_version: &str) -> Result<PathBuf, String> {
+    println!("Building probe-lean from source for Lean {lean_version}...");
 
     let build_dir = std::env::temp_dir().join("probe-lean-build");
     if build_dir.exists() {
@@ -153,6 +308,21 @@ fn find_or_install_probe_lean() -> Result<PathBuf, String> {
 
     if !status.success() {
         return Err("git clone probe-lean failed".to_string());
+    }
+
+    if lean_version != "latest" {
+        let toolchain_content = format!("leanprover/lean4:{lean_version}\n");
+        std::fs::write(build_dir.join("lean-toolchain"), &toolchain_content)
+            .map_err(|e| format!("Failed to write lean-toolchain: {e}"))?;
+
+        let lake_manifest = build_dir.join("lake-manifest.json");
+        if lake_manifest.exists() {
+            std::fs::remove_file(&lake_manifest).ok();
+        }
+        let lake_dir = build_dir.join(".lake");
+        if lake_dir.exists() {
+            std::fs::remove_dir_all(&lake_dir).ok();
+        }
     }
 
     let status = Command::new("lake")
@@ -178,18 +348,74 @@ fn find_or_install_probe_lean() -> Result<PathBuf, String> {
     std::fs::create_dir_all(&dest_dir)
         .map_err(|e| format!("Failed to create ~/.local/bin: {e}"))?;
 
-    std::fs::copy(&built_bin, &local_bin)
+    let (dest_bin, label) = if lean_version != "latest" {
+        let versioned = dest_dir.join(format!("probe-lean-{lean_version}"));
+        (versioned, format!("probe-lean-{lean_version}"))
+    } else {
+        (dest_dir.join("probe-lean"), "probe-lean".to_string())
+    };
+
+    std::fs::copy(&built_bin, &dest_bin)
         .map_err(|e| format!("Failed to copy probe-lean to ~/.local/bin: {e}"))?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&local_bin, std::fs::Permissions::from_mode(0o755))
+        std::fs::set_permissions(&dest_bin, std::fs::Permissions::from_mode(0o755))
             .map_err(|e| format!("Failed to set executable permission: {e}"))?;
     }
 
-    println!("  ✓ Installed probe-lean to {}", local_bin.display());
-    Ok(local_bin)
+    if lean_version != "latest" {
+        update_symlink(&dest_bin)?;
+    }
+
+    println!("  ✓ Installed {label} to {}", dest_bin.display());
+    Ok(dest_bin)
+}
+
+/// Update the `~/.local/bin/probe-lean` symlink to point at a versioned binary.
+fn update_symlink(versioned_bin: &Path) -> Result<(), String> {
+    let symlink = versioned_bin
+        .parent()
+        .ok_or("Invalid binary path")?
+        .join("probe-lean");
+
+    if symlink.exists() || symlink.symlink_metadata().is_ok() {
+        std::fs::remove_file(&symlink).ok();
+    }
+
+    #[cfg(unix)]
+    {
+        let target = versioned_bin
+            .file_name()
+            .ok_or("Invalid versioned binary filename")?;
+        std::os::unix::fs::symlink(target, &symlink)
+            .map_err(|e| format!("Failed to create symlink: {e}"))?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::copy(versioned_bin, &symlink)
+            .map_err(|e| format!("Failed to create probe-lean copy: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Recursively copy directory contents from `src` to `dst`.
+fn copy_dir_contents(src: &Path, dst: &Path) -> Result<(), String> {
+    let entries =
+        std::fs::read_dir(src).map_err(|e| format!("Failed to read dir {}: {e}", src.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read dir entry: {e}"))?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            std::fs::create_dir_all(&dst_path).map_err(|e| format!("Failed to create dir: {e}"))?;
+            copy_dir_contents(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path).map_err(|e| format!("Failed to copy file: {e}"))?;
+        }
+    }
+    Ok(())
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {

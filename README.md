@@ -19,7 +19,19 @@ but the underlying language toolchains must already be present.
 
 ## Installation
 
-### From source (recommended)
+### Pre-built binaries
+
+Download from [GitHub Releases](https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases):
+
+```bash
+# Example: Linux x86_64
+curl -sL https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/latest/download/probe-aeneas-v0.1.0-linux-x86_64.tar.gz \
+  | tar -xz -C ~/.local/bin --strip-components=1 bin/probe-aeneas
+```
+
+Binaries are available for Linux (x86_64, ARM64) and macOS (Apple Silicon, Intel).
+
+### From source
 
 ```bash
 cargo install --git https://github.com/Beneficial-AI-Foundation/probe-aeneas
