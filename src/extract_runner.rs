@@ -136,15 +136,17 @@ fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf, St
             println!("Using versioned probe-lean for Lean {ver}");
             return Ok(versioned_bin);
         }
-    }
-
-    if let Some(p) = find_on_path("probe-lean") {
-        return Ok(p);
-    }
-
-    let local_bin = home_dir()?.join(".local/bin/probe-lean");
-    if local_bin.exists() && lean_version.is_none() {
-        return Ok(local_bin);
+        // Specific version required but not installed — skip unversioned
+        // fallbacks (PATH, symlink) since they may point to an incompatible
+        // Lean version with a different olean format.
+    } else {
+        if let Some(p) = find_on_path("probe-lean") {
+            return Ok(p);
+        }
+        let local_bin = home_dir()?.join(".local/bin/probe-lean");
+        if local_bin.exists() {
+            return Ok(local_bin);
+        }
     }
 
     let version = lean_version.unwrap_or_else(|| "latest".to_string());

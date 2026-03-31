@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-03-31
+
+### Fixed
+- **probe-lean version resolution**: when a Lean project specifies a toolchain version, only accept the exact versioned binary (`probe-lean-<version>`). Previously, an unversioned `probe-lean` on PATH could be returned even when it was built for a different Lean version, causing olean incompatibility errors.
+
+### Changed
+- Regenerated `examples/aeneas_curve25519-dalek_4.1.3.json` with latest extractors.
+
+## [0.3.1] - 2026-03-27
+
+### Fixed
+- Resolved clippy and fmt CI failures.
+
 ## [0.3.0] - 2026-03-27
 
 ### Added
@@ -52,7 +65,9 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/tag/v0.1.0
