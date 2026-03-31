@@ -211,7 +211,7 @@ Rust atoms (added automatically by the merge step).
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
-| `is-disabled` | bool | yes | `false` if the function's `rust-qualified-name` appears as a `rust_name` in `functions.json`; `true` otherwise. Indicates whether Aeneas processed this function. |
+| `is-disabled` | bool | yes | `false` if the function's `rust-qualified-name` appears as a `rust_name` in `functions.json` or it has a `translation-name`; `true` otherwise. Indicates whether Aeneas processed this function. |
 | `is-relevant` | bool | yes | Inverse of `is-disabled`. `true` when Aeneas transpiled this function. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
@@ -248,23 +248,25 @@ records whether the function was processed by Aeneas during transpilation.
 
 **Semantics:**
 - `is-disabled: false` -- Aeneas transpiled this Rust function into Lean.
-  The function's `rust-qualified-name` appears as a `rust_name` entry in the
-  project's `functions.json` (produced by `lake exe listfuns`).
+  Either the function's `rust-qualified-name` appears as a `rust_name` entry
+  in the project's `functions.json`, or a translation was found by one of the
+  secondary matching strategies (`file+display-name` or `file+line-overlap`).
 - `is-disabled: true` -- Aeneas did **not** process this function. It exists
   in the Rust crate but has no corresponding Lean transpilation. This
   typically means the function is out of scope for formal verification.
 
-**How it is computed:** During the `extract` merge step, probe-aeneas loads
-all `rust_name` values from `functions.json` and normalizes them (stripping
-leading `::` and collapsing whitespace). For each Rust atom, if its
-`rust-qualified-name` (after the same normalization) is found in that set,
-`is-disabled` is `false`; otherwise `true`.
+**How it is computed:** During the `extract` merge step, probe-aeneas first
+populates `translation-name` for Rust atoms that have a Lean translation
+(found via any of the three matching strategies). Then for each Rust atom,
+`is-disabled` is `false` if the atom's `rust-qualified-name` (normalized)
+appears in `functions.json` **or** the atom already has a `translation-name`;
+otherwise `is-disabled` is `true`.
 
 **Relationship to translation fields:** A function with `is-disabled: false`
 *may* still lack `translation-name`/`translation-path`/`translation-text` if
 the matching strategies could not resolve which specific Lean definition
-corresponds to it. Conversely, `is-disabled: true` functions will never have
-translation metadata, since they were never transpiled.
+corresponds to it (the name appeared in `functions.json` but no Lean atom
+could be paired).
 
 **Consumer guidance:** Downstream tools can use `is-disabled` to partition the
 Rust call graph into "in scope for verification" (`false`) and "out of scope"
@@ -305,7 +307,7 @@ needed for each field.
 |-------|--------|---------------------|
 | `is-extraction-artifact` | **AUTO** | `true` when the display name ends with an Aeneas-standard suffix: `_body`, `_loop`, `_loop0`–`_loop3`. These suffixes are universal Aeneas conventions, identical across all Aeneas projects. No config needed. |
 | `is-hidden` | **HYBRID** | **Auto:** `true` when `attributes` contains `"rust_trait_impl"`, OR the name matches a boilerplate `.Insts.` trait (Clone, Copy, Default, Zeroize), OR the name is a borrow-pattern delegator variant (`SharedA`/`SharedB` in receiver or `SharedB` in trait args — `Shared0` primary forms are kept visible), OR the name ends with `.mutual` (loop mutual recursion), OR the name contains `.closure` (closures), OR the name contains `.Blanket.` (blanket impls), OR the name contains `DOC_HIDDEN` (doc-hidden constants), OR the entry is an `.Insts.` parent with exactly one nested child method (single-child parent collapsing). **Manual:** project-specific entries via `aeneas.json` config (inner constants, project-specific helpers). |
-| `is-relevant` | **AUTO** | For Lean atoms without `rust-source`: inherits `is-in-package` from probe-lean. For Lean atoms with `rust-source`: `true` when the source path contains the Rust crate name, does not start with `/`, and does not contain `/cargo/registry/`. This subsumes `excluded-namespace-prefixes` — external Rust dependencies that Aeneas transpiled will have `rust-source` paths from other crates. For Rust atoms: `is-relevant` = `!is-disabled`. |
+| `is-relevant` | **AUTO** | For Lean atoms without `rust-source`: inherits `is-in-package` from probe-lean. For Lean atoms with `rust-source`: `true` when the source path contains the Rust crate name, does not start with `/`, and does not contain `/cargo/registry/`. This subsumes `excluded-namespace-prefixes` — external Rust dependencies that Aeneas transpiled will have `rust-source` paths from other crates. For Rust atoms: `is-relevant` = `!is-disabled` (i.e. `true` when in `functions.json` or has a translation). |
 | `is-ignored` | **MANUAL** | Always requires explicit configuration in `aeneas.json`. This is a human editorial decision about what to exclude from verification progress percentages. probe-aeneas never auto-sets this to `true`. |
 | `is-externally-verified` | **AUTO** | `true` when `attributes` (from probe-lean) contains `"externally_verified"`. Applied to spec theorems where the proof uses `sorry` but is verified externally (e.g. in Verus). |
 

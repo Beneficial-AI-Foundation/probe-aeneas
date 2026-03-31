@@ -64,7 +64,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 2. `file+display-name` -- same source file path + matching base method name (unambiguous only)
 3. `file+line-overlap` -- same source file + overlapping line ranges (best overlap wins)
 
-**Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `is-disabled` (`false` when the function's `rust-qualified-name` appears in `functions.json`, `true` otherwise).
+**Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `is-disabled` (`false` when the function's `rust-qualified-name` appears in `functions.json` or the atom has a `translation-name`; `true` otherwise).
 
 **Project Auto-Detection**: When a positional `PROJECT` path is given, `aeneas-config.yml` is parsed to derive `rust_project` (from `crate.dir`) and `lean_project` (the project root). If `functions.json` exists at the project root, it is reused.
 

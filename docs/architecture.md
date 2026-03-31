@@ -95,11 +95,10 @@ the merged atom map:
    translation, sets `translation-name`, `translation-path`, and
    `translation-text` from the corresponding Lean atom.
 
-2. **`is-disabled` flag**: for every Rust atom, checks whether its
-   `rust-qualified-name` appears as a `rust_name` in
-   `functions.json`. If so, Aeneas processed this function
-   (`is-disabled: false`); otherwise it is out of scope
-   (`is-disabled: true`).
+2. **`is-disabled` flag**: for every Rust atom, `is-disabled` is `false`
+   when its `rust-qualified-name` appears as a `rust_name` in
+   `functions.json` or the atom already has a `translation-name` from
+   step 1. Otherwise it is out of scope (`is-disabled: true`).
 
 Implementation: `src/extract.rs::enrich_with_aeneas_metadata`.
 

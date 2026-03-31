@@ -350,8 +350,10 @@ fn run_extract_with_translations(
 /// Two enrichment passes:
 /// 1. For each Rust atom with a Lean translation, set `translation-name`,
 ///    `translation-path`, and `translation-text` from the Lean atom.
-/// 2. For every Rust atom, set `is-disabled` based on whether its
-///    `rust-qualified-name` appears in `functions.json`.
+/// 2. For every Rust atom, set `is-disabled` to `false` when its
+///    `rust-qualified-name` appears in `functions.json` **or** it already
+///    has a `translation-name` from pass 1 (defensive: a translation found
+///    by any strategy means Aeneas processed the function).
 fn enrich_with_aeneas_metadata(
     merged: &mut std::collections::BTreeMap<String, Atom>,
     from_to: &HashMap<String, String>,
@@ -397,10 +399,16 @@ fn enrich_with_aeneas_metadata(
                 .get("rust-qualified-name")
                 .and_then(|v| v.as_str())
                 .is_some_and(|rqn| funs_rust_names.contains(&normalize_rust_name(rqn)));
-            atom.extensions
-                .insert("is-disabled".to_string(), serde_json::json!(!in_functions));
-            atom.extensions
-                .insert("is-relevant".to_string(), serde_json::json!(in_functions));
+            let has_translation = atom.extensions.contains_key("translation-name");
+            let aeneas_processed = in_functions || has_translation;
+            atom.extensions.insert(
+                "is-disabled".to_string(),
+                serde_json::json!(!aeneas_processed),
+            );
+            atom.extensions.insert(
+                "is-relevant".to_string(),
+                serde_json::json!(aeneas_processed),
+            );
             if !atom.extensions.contains_key("is-public") {
                 atom.extensions
                     .insert("is-public".to_string(), serde_json::json!(false));
@@ -765,6 +773,56 @@ tweaks:
         assert!(
             !atom.extensions.contains_key("is-public"),
             "Lean atoms should not get is-public"
+        );
+    }
+
+    #[test]
+    fn enrich_translation_overrides_is_disabled() {
+        let mut merged = std::collections::BTreeMap::new();
+
+        let mut rust_atom = make_rust_atom("step_2");
+        rust_atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("my_crate::ristretto::step_2"),
+        );
+        merged.insert(
+            "probe:my-crate/1.0/ristretto/decompress/step_2()".to_string(),
+            rust_atom,
+        );
+        merged.insert(
+            "probe:my_crate.ristretto.decompress.step_2".to_string(),
+            make_lean_atom("step_2"),
+        );
+
+        let mut from_to = HashMap::new();
+        from_to.insert(
+            "probe:my-crate/1.0/ristretto/decompress/step_2()".to_string(),
+            "probe:my_crate.ristretto.decompress.step_2".to_string(),
+        );
+        // The rust-qualified-name does NOT appear in funs_rust_names (name mismatch).
+        let funs_rust_names = HashSet::new();
+
+        enrich_with_aeneas_metadata(&mut merged, &from_to, &funs_rust_names);
+
+        let atom = merged
+            .get("probe:my-crate/1.0/ristretto/decompress/step_2()")
+            .unwrap();
+        assert_eq!(
+            atom.extensions.get("is-disabled"),
+            Some(&serde_json::json!(false)),
+            "atom with translation should not be disabled even if RQN not in functions.json"
+        );
+        assert_eq!(
+            atom.extensions.get("is-relevant"),
+            Some(&serde_json::json!(true)),
+            "atom with translation should be relevant"
+        );
+        assert_eq!(
+            atom.extensions.get("translation-name"),
+            Some(&serde_json::json!(
+                "probe:my_crate.ristretto.decompress.step_2"
+            )),
+            "translation-name should be set from Lean atom"
         );
     }
 }

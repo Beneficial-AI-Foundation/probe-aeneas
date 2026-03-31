@@ -324,7 +324,7 @@ pub fn enrich_function_records(
             is_relevant: func_is_relevant,
             is_extraction_artifact: func_is_artifact,
             is_hidden: func_is_hidden,
-            is_ignored: false,
+            is_ignored: config.ignored.contains(&rec.lean_name),
             specified,
             verified,
             fully_verified,
@@ -354,12 +354,12 @@ fn hide_single_child_parents(results: &mut [EnrichedFunctionOutput]) {
     let names: Vec<String> = results.iter().map(|r| r.lean_name.clone()).collect();
     let name_set: std::collections::HashSet<&str> = names.iter().map(|s| s.as_str()).collect();
 
-    for result in results.iter_mut() {
-        if !result.lean_name.contains(".Insts.") {
+    for i in 0..results.len() {
+        if !results[i].lean_name.contains(".Insts.") {
             continue;
         }
 
-        let prefix = format!("{}.", result.lean_name);
+        let prefix = format!("{}.", results[i].lean_name);
         let children: Vec<&str> = name_set
             .iter()
             .filter(|n| n.starts_with(prefix.as_str()) && !n[prefix.len()..].contains('.'))
@@ -367,9 +367,9 @@ fn hide_single_child_parents(results: &mut [EnrichedFunctionOutput]) {
             .collect();
 
         if children.len() == 1 {
-            result.nested_children = children.iter().map(|s| s.to_string()).collect();
-            if !result.specified {
-                result.is_hidden = true;
+            results[i].nested_children = children.iter().map(|s| s.to_string()).collect();
+            if !results[i].specified {
+                results[i].is_hidden = true;
             }
         }
     }
