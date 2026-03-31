@@ -527,7 +527,7 @@ The `listfuns` command has three modes:
 | `is_hidden` | bool | yes | Whether the function is hidden from default views |
 | `is_ignored` | bool | yes | Whether the function is ignored from progress metrics |
 | `specified` | bool | yes | Whether a spec theorem exists for this function |
-| `verified` | bool | yes | Whether the spec theorem has `verification-status: verified` or the spec is externally verified |
+| `verified` | bool | yes | Whether the spec theorem has `verification-status: verified` (Lean proof only; exclusive of `externally_verified`) |
 | `fully_verified` | bool | yes | Whether the function and all transitive Funs.lean dependencies are verified |
 | `externally_verified` | bool | yes | Whether the function is verified externally (e.g. in Verus) |
 | `spec_file` | string | no | Path to the file containing the spec theorem |

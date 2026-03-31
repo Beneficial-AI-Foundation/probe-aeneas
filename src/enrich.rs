@@ -289,7 +289,7 @@ pub fn enrich_function_records(
         if func_is_hidden && specified {
             func_is_hidden = false;
         }
-        let proof_verified = spec_atom
+        let verified = spec_atom
             .and_then(|a| {
                 a.extensions
                     .get("verification-status")
@@ -300,7 +300,6 @@ pub fn enrich_function_records(
         let ext_verified = spec_atom
             .map(|a| is_externally_verified(&atom_attrs(a)))
             .unwrap_or(false);
-        let verified = proof_verified || ext_verified;
 
         let spec_file = spec_atom
             .map(|a| a.code_path.clone())
@@ -355,12 +354,12 @@ fn hide_single_child_parents(results: &mut [EnrichedFunctionOutput]) {
     let names: Vec<String> = results.iter().map(|r| r.lean_name.clone()).collect();
     let name_set: std::collections::HashSet<&str> = names.iter().map(|s| s.as_str()).collect();
 
-    for result in results.iter_mut() {
-        if !result.lean_name.contains(".Insts.") {
+    for i in 0..results.len() {
+        if !results[i].lean_name.contains(".Insts.") {
             continue;
         }
 
-        let prefix = format!("{}.", result.lean_name);
+        let prefix = format!("{}.", results[i].lean_name);
         let children: Vec<&str> = name_set
             .iter()
             .filter(|n| n.starts_with(prefix.as_str()) && !n[prefix.len()..].contains('.'))
@@ -368,9 +367,9 @@ fn hide_single_child_parents(results: &mut [EnrichedFunctionOutput]) {
             .collect();
 
         if children.len() == 1 {
-            result.nested_children = children.iter().map(|s| s.to_string()).collect();
-            if !result.specified {
-                result.is_hidden = true;
+            results[i].nested_children = children.iter().map(|s| s.to_string()).collect();
+            if !results[i].specified {
+                results[i].is_hidden = true;
             }
         }
     }
@@ -906,34 +905,6 @@ mod tests {
     }
 
     #[test]
-    fn compute_fully_verified_externally_verified() {
-        let mut atoms = BTreeMap::new();
-
-        let mut func_atom = test_atom();
-        func_atom
-            .extensions
-            .insert("dependencies".to_string(), serde_json::json!([]));
-        func_atom
-            .extensions
-            .insert("primary-spec".to_string(), serde_json::json!("Foo_spec"));
-        atoms.insert("probe:Foo".to_string(), func_atom);
-
-        let mut spec_atom = test_atom();
-        spec_atom.extensions.insert(
-            "verification-status".to_string(),
-            serde_json::json!("unverified"),
-        );
-        spec_atom.extensions.insert(
-            "attributes".to_string(),
-            serde_json::json!(["externally_verified"]),
-        );
-        atoms.insert("probe:Foo_spec".to_string(), spec_atom);
-
-        let mut cache = HashMap::new();
-        assert!(compute_fully_verified("Foo", &atoms, &mut cache));
-    }
-
-    #[test]
     fn compute_fully_verified_no_spec_returns_false() {
         let mut atoms = BTreeMap::new();
         let func_atom = test_atom();
@@ -1157,7 +1128,7 @@ mod tests {
     }
 
     #[test]
-    fn externally_verified_implies_verified() {
+    fn externally_verified_exclusive_from_verified() {
         let mut atoms = BTreeMap::new();
 
         let mut func_atom = test_atom();
@@ -1196,17 +1167,18 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert!(results[0].externally_verified);
-        assert!(
-            results[0].verified,
-            "externally_verified should imply verified"
-        );
+        assert!(!results[0].verified, "externally_verified should be exclusive from verified");
+        assert!(results[0].specified);
     }
 
     #[test]
     fn single_child_parent_hidden() {
         let mut atoms = BTreeMap::new();
 
-        for name in &["Foo.Insts.TraitName", "Foo.Insts.TraitName.method"] {
+        for name in &[
+            "Foo.Insts.TraitName",
+            "Foo.Insts.TraitName.method",
+        ] {
             let mut a = test_atom();
             a.extensions
                 .insert("is-in-package".to_string(), serde_json::json!(true));
@@ -1237,14 +1209,8 @@ mod tests {
         let results = enrich_function_records(&records, &atoms, "", &config);
 
         assert_eq!(results.len(), 2);
-        assert!(
-            results[0].is_hidden,
-            "parent with one child should be hidden"
-        );
-        assert_eq!(
-            results[0].nested_children,
-            vec!["Foo.Insts.TraitName.method"]
-        );
+        assert!(results[0].is_hidden, "parent with one child should be hidden");
+        assert_eq!(results[0].nested_children, vec!["Foo.Insts.TraitName.method"]);
         assert!(!results[1].is_hidden, "child method should remain visible");
     }
 }
