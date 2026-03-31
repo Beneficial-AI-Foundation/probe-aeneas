@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-31
+
+### Added
+- **Repo-relative `code-path` for Rust atoms**: when running `probe-aeneas extract <project>` with `crate.dir` pointing to a subdirectory (e.g. `curve25519-dalek`), Rust atom `code-path` values are now prefixed with the crate directory. This produces repo-relative paths like `curve25519-dalek/src/backend/mod.rs` instead of crate-relative `src/backend/mod.rs`, matching file paths stored when the full repository is ingested.
+- **`.verilib/probes/` output directory**: the default output path for `extract` now follows the probe ecosystem convention, writing to `<project>/.verilib/probes/aeneas_<pkg>_<ver>.json`. The `-o` flag still overrides.
+- **Intermediate extractor outputs saved alongside merged output**: when extracting from a project path, probe-rust and probe-lean intermediate JSONs are written to `<project>/.verilib/probes/rust_extract.json` and `lean_extract.json` (previously written to temp files in `/tmp/`).
+
 ## [0.3.2] - 2026-03-31
 
 ### Fixed
@@ -65,7 +72,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.2.0...v0.3.0

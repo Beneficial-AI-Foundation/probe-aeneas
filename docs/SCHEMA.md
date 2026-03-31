@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.3
-Date: 2026-03-27
+Version: 2.4
+Date: 2026-03-31
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -41,7 +41,7 @@ sections below), but share this structure:
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.3.2",
+    "version": "0.4.0",
     "command": "extract"
   },
   "inputs": [
@@ -112,7 +112,7 @@ extension fields passed through verbatim.
       "probe:curve25519_dalek.scalar.Scalar.reduce"
     ],
     "code-module": "scalar",
-    "code-path": "src/scalar.rs",
+    "code-path": "curve25519-dalek/src/scalar.rs",
     "code-text": { "lines-start": 237, "lines-end": 246 },
     "kind": "exec",
     "language": "rust",
@@ -188,7 +188,7 @@ Rust atoms (added automatically by the merge step).
 | `display-name` | string | yes | Human-readable name |
 | `dependencies` | array of strings | yes | Sorted code-names of callees, including cross-language edges added by extract |
 | `code-module` | string | yes | Module path |
-| `code-path` | string | yes | Relative source file path (empty for external stubs) |
+| `code-path` | string | yes | Source file path relative to the repository root (empty for external stubs). For Rust atoms, includes the crate directory prefix when the crate is a subdirectory (e.g. `curve25519-dalek/src/scalar.rs`). |
 | `code-text` | object | yes | `{"lines-start": N, "lines-end": M}` (1-based, inclusive) |
 | `kind` | string | yes | Declaration kind (see below) |
 | `language` | string | yes | `"rust"` or `"lean"` |
@@ -400,7 +400,7 @@ entries with:
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.3.2",
+    "version": "0.4.0",
     "command": "translate"
   },
   "timestamp": "2026-03-16T12:00:00Z",

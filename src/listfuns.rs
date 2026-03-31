@@ -95,7 +95,9 @@ fn load_atoms(
             println!("Using pre-computed atoms from {}", p.display());
             p.to_path_buf()
         }
-        None => extract_runner::run_probe_lean_extract_with_opts(lean_project, module_prefix)?,
+        None => {
+            extract_runner::run_probe_lean_extract_with_opts(lean_project, module_prefix, None)?
+        }
     };
 
     crate::translate::load_atoms(&json_path)

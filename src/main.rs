@@ -144,17 +144,24 @@ fn resolve_and_extract(
     aeneas_config: Option<PathBuf>,
     lake: bool,
 ) -> Result<(), String> {
-    let (rust, rust_project, lean_project, functions) = if let Some(ref proj) = project {
-        let resolved = extract::resolve_project(proj)?;
-        (
-            None,
-            Some(resolved.rust_project),
-            Some(resolved.lean_project),
-            functions.or(resolved.functions_json),
-        )
-    } else {
-        (rust, rust_project, lean_project, functions)
-    };
+    let (rust, rust_project, lean_project, functions, rust_path_prefix) =
+        if let Some(ref proj) = project {
+            let resolved = extract::resolve_project(proj)?;
+            let prefix = if resolved.crate_dir != "." {
+                Some(resolved.crate_dir.clone())
+            } else {
+                None
+            };
+            (
+                None,
+                Some(resolved.rust_project),
+                Some(resolved.lean_project),
+                functions.or(resolved.functions_json),
+                prefix,
+            )
+        } else {
+            (rust, rust_project, lean_project, functions, None)
+        };
     extract::run_extract(
         rust.as_deref(),
         rust_project.as_deref(),
@@ -164,6 +171,7 @@ fn resolve_and_extract(
         output.as_deref(),
         aeneas_config.as_deref(),
         lake,
+        rust_path_prefix.as_deref(),
     )
 }
 

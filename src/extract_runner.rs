@@ -5,9 +5,15 @@ const PROBE_RUST_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-
 const PROBE_LEAN_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-lean.git";
 
 /// Run `probe-rust extract` on a project and return the path to the generated JSON.
-pub fn run_probe_rust_extract(project: &Path) -> Result<PathBuf, String> {
+///
+/// When `output_dir` is provided, the output file is written there
+/// (e.g. `.verilib/probes/`); otherwise a temp file is used.
+pub fn run_probe_rust_extract(
+    project: &Path,
+    output_dir: Option<&Path>,
+) -> Result<PathBuf, String> {
     let bin = find_or_install_probe_rust()?;
-    let output = tempfile("probe_rust", ".json");
+    let output = output_path(output_dir, "rust_extract", ".json");
 
     println!("Running probe-rust extract on {}...", project.display());
     let status = Command::new(&bin)
@@ -45,17 +51,24 @@ pub fn run_probe_rust_extract(project: &Path) -> Result<PathBuf, String> {
 }
 
 /// Run `probe-lean extract` on a project and return the path to the generated JSON.
-pub fn run_probe_lean_extract(project: &Path) -> Result<PathBuf, String> {
-    run_probe_lean_extract_with_opts(project, None)
+///
+/// When `output_dir` is provided, the output file is written there
+/// (e.g. `.verilib/probes/`); otherwise a temp file is used.
+pub fn run_probe_lean_extract(
+    project: &Path,
+    output_dir: Option<&Path>,
+) -> Result<PathBuf, String> {
+    run_probe_lean_extract_with_opts(project, None, output_dir)
 }
 
 /// Run `probe-lean extract` with optional module prefix filter.
 pub fn run_probe_lean_extract_with_opts(
     project: &Path,
     module_prefix: Option<&str>,
+    output_dir: Option<&Path>,
 ) -> Result<PathBuf, String> {
     let bin = find_or_install_probe_lean(Some(project))?;
-    let output = tempfile("probe_lean", ".json");
+    let output = output_path(output_dir, "lean_extract", ".json");
 
     let project_str = project
         .to_str()
@@ -426,6 +439,16 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
 
 fn home_dir() -> Result<PathBuf, String> {
     dirs::home_dir().ok_or_else(|| "Could not determine home directory".to_string())
+}
+
+/// Compute the output path for an extractor. When `output_dir` is given, writes
+/// a stable-named file there (e.g. `.verilib/probes/rust_extract.json`);
+/// otherwise falls back to a unique temp file.
+fn output_path(output_dir: Option<&Path>, name: &str, suffix: &str) -> PathBuf {
+    match output_dir {
+        Some(dir) => dir.join(format!("{name}{suffix}")),
+        None => tempfile(name, suffix),
+    }
 }
 
 fn tempfile(prefix: &str, suffix: &str) -> PathBuf {

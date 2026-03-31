@@ -49,6 +49,10 @@ pub struct ResolvedProject {
     pub rust_project: PathBuf,
     pub lean_project: PathBuf,
     pub functions_json: Option<PathBuf>,
+    /// The `crate.dir` value from `aeneas-config.yml`.
+    /// When not `"."`, Rust atoms need their `code-path` prefixed with this
+    /// directory so paths are relative to the repository root, not the crate.
+    pub crate_dir: String,
 }
 
 /// Parse `aeneas-config.yml` in the given project directory and derive
@@ -123,6 +127,7 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
         rust_project,
         lean_project,
         functions_json,
+        crate_dir: config.crate_config.dir.clone(),
     })
 }
 
@@ -144,6 +149,7 @@ pub fn run_extract(
     output_path: Option<&Path>,
     aeneas_config: Option<&Path>,
     use_lake: bool,
+    rust_path_prefix: Option<&str>,
 ) -> Result<(), String> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
@@ -189,11 +195,16 @@ pub fn run_extract(
         &funs_rust_names,
         output_path,
         &config,
+        rust_path_prefix,
+        lean_project,
     )
 }
 
 /// Resolve Rust and Lean inputs, running extractors in parallel when both are
 /// project paths.
+///
+/// When `lean_project` is available, intermediate extractor outputs are saved
+/// to `<lean_project>/.verilib/probes/` alongside the final merged output.
 fn resolve_inputs(
     rust_json: Option<&Path>,
     rust_project: Option<&Path>,
@@ -205,14 +216,24 @@ fn resolve_inputs(
     // --lean-project is also present.
     let need_lean_extract = lean_json.is_none();
 
+    let probes_dir = lean_project.map(|p| p.join(".verilib").join("probes"));
+    let probes_dir_ref = probes_dir.as_deref();
+
     if need_rust_extract && need_lean_extract {
         let rust_proj = rust_project.unwrap();
         let lean_proj = lean_project.unwrap();
 
+        if let Some(dir) = probes_dir_ref {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
+        }
+
         println!("Extracting Rust and Lean atoms in parallel...\n");
         let (rust_result, lean_result) = std::thread::scope(|s| {
-            let rust_handle = s.spawn(|| extract_runner::run_probe_rust_extract(rust_proj));
-            let lean_handle = s.spawn(|| extract_runner::run_probe_lean_extract(lean_proj));
+            let rust_handle =
+                s.spawn(|| extract_runner::run_probe_rust_extract(rust_proj, probes_dir_ref));
+            let lean_handle =
+                s.spawn(|| extract_runner::run_probe_lean_extract(lean_proj, probes_dir_ref));
             (rust_handle.join(), lean_handle.join())
         });
 
@@ -225,13 +246,21 @@ fn resolve_inputs(
         let rust_path = if let Some(json) = rust_json {
             json.to_path_buf()
         } else {
-            extract_runner::run_probe_rust_extract(rust_project.unwrap())?
+            if let Some(dir) = probes_dir_ref {
+                std::fs::create_dir_all(dir)
+                    .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
+            }
+            extract_runner::run_probe_rust_extract(rust_project.unwrap(), probes_dir_ref)?
         };
 
         let lean_path = if let Some(json) = lean_json {
             json.to_path_buf()
         } else {
-            extract_runner::run_probe_lean_extract(lean_project.unwrap())?
+            if let Some(dir) = probes_dir_ref {
+                std::fs::create_dir_all(dir)
+                    .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
+            }
+            extract_runner::run_probe_lean_extract(lean_project.unwrap(), probes_dir_ref)?
         };
 
         Ok((rust_path, lean_path))
@@ -307,8 +336,11 @@ fn run_translate(
 /// 2. **Enrich** — Aeneas-specific metadata (`translation-*`, `is-disabled`).
 /// 3. **Write** — envelope construction and output.
 ///
-/// When `output_path` is `None`, derives `aeneas_{package}_{version}.json`
-/// from the Rust input's envelope metadata.
+/// When `output_path` is `None`, writes to
+/// `<project_root>/.verilib/probes/aeneas_{package}_{version}.json`
+/// (matching the probe ecosystem convention). Falls back to the current
+/// directory when no project root is available.
+#[allow(clippy::too_many_arguments)]
 fn run_extract_with_translations(
     rust_path: &Path,
     lean_path: &Path,
@@ -316,6 +348,8 @@ fn run_extract_with_translations(
     funs_rust_names: &HashSet<String>,
     output_path: Option<&Path>,
     config: &AeneasConfig,
+    rust_path_prefix: Option<&str>,
+    project_root: Option<&Path>,
 ) -> Result<(), String> {
     // Phase 1: Merge (generic probe operation)
     println!("\nMerging atoms with translations...");
@@ -326,7 +360,7 @@ fn run_extract_with_translations(
     let output_path = match output_path {
         Some(p) => p,
         None => {
-            output_path_buf = default_output_path(&provenance);
+            output_path_buf = default_output_path(&provenance, project_root);
             &output_path_buf
         }
     };
@@ -337,12 +371,35 @@ fn run_extract_with_translations(
         .map(|p| p.source.package.as_str())
         .unwrap_or("");
 
+    // Phase 1.5: Prefix Rust code-paths with crate directory when the Rust
+    // crate lives in a subdirectory of the repository root (e.g. crate.dir =
+    // "curve25519-dalek" → "src/foo.rs" becomes "curve25519-dalek/src/foo.rs").
+    if let Some(prefix) = rust_path_prefix {
+        prefix_rust_code_paths(&mut merged, prefix);
+    }
+
     // Phase 2: Enrich (Aeneas-specific)
     enrich_with_aeneas_metadata(&mut merged, &translations.0, funs_rust_names);
     enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config);
 
     // Phase 3: Write envelope
     write_aeneas_envelope(merged, provenance, output_path, &stats)
+}
+
+/// Prefix `code-path` on Rust atoms so paths are relative to the repository
+/// root rather than the Rust crate root.
+///
+/// When the Rust crate is a subdirectory of the Aeneas project (e.g.
+/// `crate.dir = "curve25519-dalek"`), probe-rust produces crate-relative
+/// paths like `src/backend/mod.rs`. This function prepends the crate
+/// directory so the final output uses `curve25519-dalek/src/backend/mod.rs`,
+/// matching the file paths stored when the full repository is ingested.
+fn prefix_rust_code_paths(merged: &mut std::collections::BTreeMap<String, Atom>, prefix: &str) {
+    for atom in merged.values_mut() {
+        if atom.language == "rust" && !atom.code_path.is_empty() {
+            atom.code_path = format!("{prefix}/{}", atom.code_path);
+        }
+    }
 }
 
 /// Add Aeneas-specific metadata to merged atoms.
@@ -441,6 +498,12 @@ fn write_aeneas_envelope(
 
     let json = serde_json::to_string_pretty(&envelope)
         .map_err(|e| format!("Failed to serialize output: {e}"))?;
+
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
+    }
+
     std::fs::write(output_path, format!("{json}\n"))
         .map_err(|e| format!("Failed to write {}: {e}", output_path.display()))?;
 
@@ -453,19 +516,36 @@ fn write_aeneas_envelope(
     Ok(())
 }
 
-/// Derive `aeneas_{package}_{version}.json` from Rust input provenance.
-fn default_output_path(rust_prov: &[InputProvenance]) -> PathBuf {
+/// Derive the default output path: `<project>/.verilib/probes/aeneas_<pkg>_<ver>.json`.
+///
+/// Follows the probe ecosystem convention (same layout as probe-rust, probe-verus).
+/// Falls back to `aeneas_<pkg>_<ver>.json` in the current directory when no
+/// project root is available.
+fn default_output_path(rust_prov: &[InputProvenance], project_root: Option<&Path>) -> PathBuf {
     let (pkg, ver) = rust_prov
         .first()
         .map(|p| (p.source.package.as_str(), p.source.package_version.as_str()))
         .unwrap_or(("unknown", "0.0.0"));
 
-    let name = if ver.is_empty() {
-        format!("aeneas_{pkg}.json")
+    let safe_pkg = sanitize_for_filename(pkg);
+    let safe_ver = sanitize_for_filename(ver);
+
+    let name = if safe_ver.is_empty() {
+        format!("aeneas_{safe_pkg}.json")
     } else {
-        format!("aeneas_{pkg}_{ver}.json")
+        format!("aeneas_{safe_pkg}_{safe_ver}.json")
     };
-    PathBuf::from(name)
+
+    match project_root {
+        Some(root) => root.join(".verilib").join("probes").join(name),
+        None => PathBuf::from(name),
+    }
+}
+
+/// Sanitize a string for use in a filename: replace `/`, `\` with `_`, and
+/// collapse `..` to `_`.
+fn sanitize_for_filename(s: &str) -> String {
+    s.replace(['/', '\\'], "_").replace("..", "_")
 }
 
 /// Public entry point for the `translate` subcommand (translations only, no merge).
@@ -565,6 +645,7 @@ mod tests {
         assert_eq!(resolved.rust_project, project.join("curve25519-dalek"));
         assert_eq!(resolved.lean_project, project);
         assert!(resolved.functions_json.is_none());
+        assert_eq!(resolved.crate_dir, "curve25519-dalek");
     }
 
     #[test]
@@ -577,6 +658,7 @@ mod tests {
         assert_eq!(resolved.rust_project, project);
         assert_eq!(resolved.lean_project, project);
         assert!(resolved.functions_json.is_none());
+        assert_eq!(resolved.crate_dir, ".");
     }
 
     #[test]
@@ -824,5 +906,82 @@ tweaks:
             )),
             "translation-name should be set from Lean atom"
         );
+    }
+
+    #[test]
+    fn prefix_rust_code_paths_adds_crate_dir() {
+        let mut merged = std::collections::BTreeMap::new();
+        merged.insert("probe:crate/1.0/foo()".to_string(), make_rust_atom("foo"));
+        merged.insert(
+            "probe:module.lean_fn".to_string(),
+            make_lean_atom("lean_fn"),
+        );
+
+        prefix_rust_code_paths(&mut merged, "curve25519-dalek");
+
+        assert_eq!(
+            merged["probe:crate/1.0/foo()"].code_path, "curve25519-dalek/src/lib.rs",
+            "Rust atom code-path should be prefixed with crate directory"
+        );
+        assert_eq!(
+            merged["probe:module.lean_fn"].code_path, "Module/Funs.lean",
+            "Lean atom code-path should not be modified"
+        );
+    }
+
+    #[test]
+    fn prefix_rust_code_paths_skips_empty_paths() {
+        let mut merged = std::collections::BTreeMap::new();
+        let mut stub = make_rust_atom("stub");
+        stub.code_path = String::new();
+        merged.insert("probe:crate/1.0/stub()".to_string(), stub);
+
+        prefix_rust_code_paths(&mut merged, "curve25519-dalek");
+
+        assert_eq!(
+            merged["probe:crate/1.0/stub()"].code_path, "",
+            "Empty code-path (stdlib stubs) should not be prefixed"
+        );
+    }
+
+    fn make_provenance(pkg: &str, ver: &str) -> InputProvenance {
+        InputProvenance {
+            schema: "probe-rust/extract".to_string(),
+            source: probe::types::Source {
+                repo: String::new(),
+                commit: String::new(),
+                language: "rust".to_string(),
+                package: pkg.to_string(),
+                package_version: ver.to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn default_output_path_with_project_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let prov = vec![make_provenance("curve25519-dalek", "4.1.3")];
+
+        let path = default_output_path(&prov, Some(tmp.path()));
+        assert_eq!(
+            path,
+            tmp.path()
+                .join(".verilib/probes/aeneas_curve25519-dalek_4.1.3.json")
+        );
+    }
+
+    #[test]
+    fn default_output_path_without_project_root() {
+        let prov = vec![make_provenance("my-crate", "1.0.0")];
+
+        let path = default_output_path(&prov, None);
+        assert_eq!(path, PathBuf::from("aeneas_my-crate_1.0.0.json"));
+    }
+
+    #[test]
+    fn sanitize_for_filename_replaces_slashes() {
+        assert_eq!(sanitize_for_filename("a/b\\c"), "a_b_c");
+        assert_eq!(sanitize_for_filename("foo..bar"), "foo_bar");
+        assert_eq!(sanitize_for_filename("normal-name"), "normal-name");
     }
 }

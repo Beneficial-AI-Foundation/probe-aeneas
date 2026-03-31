@@ -63,7 +63,7 @@ At least one of `--lean` or `--lean-project` is required (when not using `PROJEC
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--functions <PATH>` | | Path to `functions.json` (Aeneas name mapping). Auto-generated when `--lean-project` or `PROJECT` is given. Required when using `--lean` alone. |
-| `--output <PATH>` | `-o` | Output file path. Default: `aeneas_{package}_{version}.json` derived from the Rust input. |
+| `--output <PATH>` | `-o` | Output file path. Default: `<project>/.verilib/probes/aeneas_<pkg>_<ver>.json` when a project root is available; otherwise `aeneas_<pkg>_<ver>.json` in the current directory. |
 | `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`). Defaults to `.verilib/aeneas.json` in the Lean project. |
 | `--lake` | | Use `lake exe listfuns` to generate `functions.json` instead of parsing Aeneas-generated Lean files directly. |
 
@@ -302,3 +302,37 @@ When both Rust and Lean extractions are needed (either via the positional
 `PROJECT` argument or via `--rust-project` + `--lean-project`), `probe-rust
 extract` and `probe-lean extract` are run in parallel using scoped threads.
 This can significantly reduce wall-clock time for the extract pipeline.
+
+---
+
+## Output Files
+
+When running `extract` from a project path (positional `PROJECT` or
+`--lean-project`), all output files are written to
+`<project>/.verilib/probes/`, following the probe ecosystem convention
+(same layout as probe-rust, probe-verus, probe-lean):
+
+```
+<project>/.verilib/probes/
+  rust_extract.json                  # Intermediate probe-rust output
+  lean_extract.json                  # Intermediate probe-lean output
+  aeneas_<package>_<version>.json    # Merged output from probe-aeneas
+```
+
+When using pre-generated JSON files (`--rust` / `--lean`) without a project
+root, the merged output defaults to `aeneas_<package>_<version>.json` in the
+current directory. The `-o` flag always overrides the output location.
+
+### Code paths
+
+Rust atom `code-path` values are relative to the repository root (the Aeneas
+project directory). When the Rust crate lives in a subdirectory
+(`crate.dir != "."` in `aeneas-config.yml`), probe-aeneas prefixes the
+crate-relative paths from probe-rust with the crate directory. For example,
+with `crate.dir = "curve25519-dalek"`:
+
+- probe-rust produces: `src/backend/mod.rs`
+- probe-aeneas emits: `curve25519-dalek/src/backend/mod.rs`
+
+This ensures `code-path` matches file paths as stored when the full
+repository is ingested into a database.
