@@ -783,6 +783,76 @@ tweaks:
         assert_eq!(config.crate_config.name.as_deref(), Some("test"));
     }
 
+    #[test]
+    fn yaml_parse_charon_config() {
+        let yaml = r#"
+crate:
+  dir: "curve25519-dalek"
+  name: "curve25519_dalek"
+charon:
+  preset: aeneas
+  package: "curve25519-dalek"
+  cargo_args:
+    - "--no-default-features"
+    - "--features"
+    - "alloc,zeroize"
+  start_from:
+    - "curve25519_dalek::scalar"
+    - "curve25519_dalek::field"
+  exclude:
+    - "curve25519_dalek::backend::vector"
+  opaque:
+    - "core::*"
+"#;
+        let config: AeneasProjectConfig = serde_yaml::from_str(yaml).unwrap();
+        let charon = config.charon.expect("charon section should be parsed");
+        assert_eq!(charon.preset.as_deref(), Some("aeneas"));
+        assert_eq!(charon.package.as_deref(), Some("curve25519-dalek"));
+        assert_eq!(
+            charon.cargo_args.as_deref(),
+            Some(
+                ["--no-default-features", "--features", "alloc,zeroize"]
+                    .map(String::from)
+                    .as_slice()
+            )
+        );
+        assert_eq!(charon.start_from.as_ref().map(|v| v.len()), Some(2));
+        assert_eq!(charon.exclude.as_ref().map(|v| v.len()), Some(1));
+        assert_eq!(charon.opaque.as_ref().map(|v| v.len()), Some(1));
+    }
+
+    #[test]
+    fn yaml_parse_no_charon_section() {
+        let yaml = "crate:\n  dir: \".\"\n";
+        let config: AeneasProjectConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.charon.is_none());
+    }
+
+    #[test]
+    fn resolve_project_carries_charon_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("proj");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("Cargo.toml"), "[package]\nname = \"t\"").unwrap();
+        fs::write(
+            project.join("lakefile.toml"),
+            "name = \"T\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
+        fs::write(
+            project.join("aeneas-config.yml"),
+            "crate:\n  dir: \".\"\ncharon:\n  preset: aeneas\n  exclude:\n    - \"x::y\"\n",
+        )
+        .unwrap();
+
+        let resolved = resolve_project(&project).unwrap();
+        let cc = resolved
+            .charon_config
+            .expect("charon_config should be Some");
+        assert_eq!(cc.preset.as_deref(), Some("aeneas"));
+        assert_eq!(cc.exclude.as_ref().map(|v| v.len()), Some(1));
+    }
+
     fn make_rust_atom(name: &str) -> Atom {
         Atom {
             display_name: name.to_string(),

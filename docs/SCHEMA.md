@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.4
-Date: 2026-03-31
+Version: 2.5
+Date: 2026-04-02
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -41,7 +41,7 @@ sections below), but share this structure:
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "command": "extract"
   },
   "inputs": [
@@ -400,7 +400,7 @@ entries with:
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "command": "translate"
   },
   "timestamp": "2026-03-16T12:00:00Z",
