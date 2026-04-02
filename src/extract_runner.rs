@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::extract::CharonConfig;
+
 const PROBE_RUST_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-rust.git";
 const PROBE_LEAN_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-lean.git";
 
@@ -431,6 +433,127 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Pre-generate the Charon LLBC file using config from `aeneas-config.yml`.
+///
+/// `probe-rust --with-charon` runs charon with only `--preset aeneas`, which
+/// misses project-specific cargo args (e.g. `--no-default-features`),
+/// `--start-from` filters, and `--exclude` lists. This function runs charon
+/// directly with the full configuration so the LLBC is cached at
+/// `<rust_project>/data/charon.llbc` before `probe-rust` needs it.
+pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<(), String> {
+    let data_dir = rust_project.join("data");
+    let llbc_path = data_dir.join("charon.llbc");
+
+    if llbc_path.exists() {
+        println!("Using cached Charon LLBC at {}", llbc_path.display());
+        return Ok(());
+    }
+
+    let charon_bin = resolve_charon()?;
+
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("Failed to create {}: {e}", data_dir.display()))?;
+
+    // Canonicalize to absolute path: charon resolves --dest-file relative to
+    // its own cwd (rust_project), not probe-aeneas's cwd.
+    let abs_llbc = std::fs::canonicalize(&data_dir)
+        .map_err(|e| format!("Failed to canonicalize {}: {e}", data_dir.display()))?
+        .join("charon.llbc");
+    let llbc_str = abs_llbc.to_string_lossy();
+
+    let mut args: Vec<String> = vec![
+        "cargo".to_string(),
+        "--preset".to_string(),
+        config.preset.as_deref().unwrap_or("aeneas").to_string(),
+        "--dest-file".to_string(),
+        llbc_str.to_string(),
+        "--no-dedup-serialized-ast".to_string(),
+    ];
+
+    if let Some(ref start_from) = config.start_from {
+        for item in start_from {
+            args.push("--start-from".to_string());
+            args.push(item.clone());
+        }
+    }
+
+    if let Some(ref exclude) = config.exclude {
+        for item in exclude {
+            args.push("--exclude".to_string());
+            args.push(item.clone());
+        }
+    }
+
+    if let Some(ref opaque) = config.opaque {
+        for item in opaque {
+            args.push("--opaque".to_string());
+            args.push(item.clone());
+        }
+    }
+
+    if let Some(ref cargo_args) = config.cargo_args {
+        args.push("--".to_string());
+        if let Some(ref pkg) = config.package {
+            args.push("--package".to_string());
+            args.push(pkg.clone());
+        }
+        args.extend(cargo_args.iter().cloned());
+    } else if let Some(ref pkg) = config.package {
+        args.push("--".to_string());
+        args.push("--package".to_string());
+        args.push(pkg.clone());
+    }
+
+    println!("\nPre-generating Charon LLBC with aeneas-config.yml settings...");
+
+    let mut path_env = std::env::var("PATH").unwrap_or_default();
+    if let Some(parent) = charon_bin.parent() {
+        path_env = format!("{}:{}", parent.display(), path_env);
+    }
+
+    let output = Command::new(&charon_bin)
+        .args(&args)
+        .current_dir(rust_project)
+        .env("PATH", &path_env)
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .output()
+        .map_err(|e| format!("Failed to run charon: {e}"))?;
+
+    if !output.status.success() {
+        eprintln!(
+            "  ⚠ Charon pre-generation failed (exit {}); \
+             probe-rust will retry with defaults",
+            output.status.code().unwrap_or(-1)
+        );
+        return Ok(());
+    }
+
+    if !llbc_path.exists() {
+        eprintln!("  ⚠ Charon ran successfully but LLBC file was not created");
+        return Ok(());
+    }
+
+    println!("  ✓ Charon LLBC generated at {}\n", llbc_path.display());
+    Ok(())
+}
+
+/// Resolve charon binary: check managed directory then PATH.
+fn resolve_charon() -> Result<PathBuf, String> {
+    let managed = home_dir()?.join(".probe-rust/tools/charon");
+    if managed.exists() {
+        return Ok(managed);
+    }
+    if let Some(p) = find_on_path("charon") {
+        return Ok(p);
+    }
+    Err(
+        "charon not found. Install it or run probe-rust with --auto-install first.\n  \
+         Charon is needed for rust-qualified-name enrichment (Aeneas integration)."
+            .to_string(),
+    )
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {

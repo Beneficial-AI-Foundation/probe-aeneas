@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use probe_aeneas::{extract, gen_functions, listfuns};
+use probe_aeneas::{extract, extract_runner, gen_functions, listfuns};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -144,7 +144,7 @@ fn resolve_and_extract(
     aeneas_config: Option<PathBuf>,
     lake: bool,
 ) -> Result<(), String> {
-    let (rust, rust_project, lean_project, functions, rust_path_prefix) =
+    let (rust, rust_project, lean_project, functions, rust_path_prefix, charon_config) =
         if let Some(ref proj) = project {
             let resolved = extract::resolve_project(proj)?;
             let prefix = if resolved.crate_dir != "." {
@@ -158,10 +158,17 @@ fn resolve_and_extract(
                 Some(resolved.lean_project),
                 functions.or(resolved.functions_json),
                 prefix,
+                resolved.charon_config,
             )
         } else {
-            (rust, rust_project, lean_project, functions, None)
+            (rust, rust_project, lean_project, functions, None, None)
         };
+
+    // Pre-flight: generate charon LLBC with aeneas-config.yml args
+    if let (Some(ref rp), Some(ref cc)) = (&rust_project, &charon_config) {
+        extract_runner::ensure_charon_llbc(rp, cc)?;
+    }
+
     extract::run_extract(
         rust.as_deref(),
         rust_project.as_deref(),

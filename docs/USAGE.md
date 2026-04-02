@@ -35,6 +35,23 @@ Otherwise, it is generated from the Lean sources.
 | `Cargo.toml` | Yes | Must exist at the resolved Rust crate path (`project / crate.dir`) |
 | `functions.json` | No | Reused if present; otherwise auto-generated from Lean sources |
 
+**Charon configuration** (optional `charon` section in `aeneas-config.yml`):
+
+When present, probe-aeneas pre-generates the Charon LLBC file with the full
+project-specific settings before running `probe-rust`. Supported fields:
+
+| Field | Description |
+|-------|-------------|
+| `preset` | Charon preset (default: `aeneas`) |
+| `package` | Cargo package name (passed as `--package`) |
+| `cargo_args` | Extra cargo args (e.g. `["--no-default-features", "--features", "alloc"]`) |
+| `start_from` | Rust item paths to use as translation starting points |
+| `exclude` | Rust item paths to exclude from translation |
+| `opaque` | Rust item paths to keep opaque |
+
+The generated LLBC is cached at `<rust_project>/data/charon.llbc` and reused
+on subsequent runs.
+
 #### Advanced input options
 
 For advanced usage (pre-generated JSON files, mixed inputs), use the named

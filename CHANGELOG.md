@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-02
+
+### Added
+- **Charon config forwarding from `aeneas-config.yml`**: the `charon` section
+  (`cargo_args`, `start_from`, `exclude`, `opaque`, `package`, `preset`) is now
+  parsed and used to pre-generate the Charon LLBC file before `probe-rust`
+  runs. Previously, `probe-rust --with-charon` ran charon with only
+  `--preset aeneas`, missing project-specific cargo args (e.g.
+  `--no-default-features --features alloc,zeroize`) and filter lists, causing
+  LLBC generation to silently fail on projects like curve25519-dalek.
+- **`CharonConfig` struct** in `extract.rs` for typed parsing of the `charon`
+  YAML section.
+- **`ensure_charon_llbc` pre-flight** in `extract_runner.rs`: runs charon with
+  the full config and caches the LLBC at `<rust_project>/data/charon.llbc`
+  so `probe-rust` reuses it.
+
 ## [0.4.0] - 2026-03-31
 
 ### Added
@@ -72,7 +88,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.0...v0.3.1

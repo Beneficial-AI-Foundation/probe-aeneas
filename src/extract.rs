@@ -26,6 +26,7 @@ struct AeneasProjectConfig {
     #[serde(rename = "crate")]
     crate_config: CrateConfig,
     aeneas_args: Option<AeneasArgsConfig>,
+    charon: Option<CharonConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,6 +44,17 @@ struct AeneasArgsConfig {
     options: Option<Vec<String>>,
 }
 
+/// Charon configuration parsed from `aeneas-config.yml`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CharonConfig {
+    pub preset: Option<String>,
+    pub package: Option<String>,
+    pub cargo_args: Option<Vec<String>>,
+    pub start_from: Option<Vec<String>>,
+    pub exclude: Option<Vec<String>>,
+    pub opaque: Option<Vec<String>>,
+}
+
 /// Resolved paths derived from an Aeneas project directory.
 #[derive(Debug)]
 pub struct ResolvedProject {
@@ -53,6 +65,9 @@ pub struct ResolvedProject {
     /// When not `"."`, Rust atoms need their `code-path` prefixed with this
     /// directory so paths are relative to the repository root, not the crate.
     pub crate_dir: String,
+    /// Charon configuration from `aeneas-config.yml`, used to pre-generate
+    /// the LLBC file with the correct cargo args, start_from, and exclude lists.
+    pub charon_config: Option<CharonConfig>,
 }
 
 /// Parse `aeneas-config.yml` in the given project directory and derive
@@ -128,6 +143,7 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
         lean_project,
         functions_json,
         crate_dir: config.crate_config.dir.clone(),
+        charon_config: config.charon,
     })
 }
 
