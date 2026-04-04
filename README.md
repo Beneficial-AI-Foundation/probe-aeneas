@@ -25,8 +25,8 @@ Download from [GitHub Releases](https://github.com/Beneficial-AI-Foundation/prob
 
 ```bash
 # Example: Linux x86_64
-curl -sL https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/latest/download/probe-aeneas-v0.3.2-linux-x86_64.tar.gz \
-  | tar -xz -C ~/.local/bin --strip-components=1 bin/probe-aeneas
+curl -sL https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/latest/download/probe-aeneas-x86_64-unknown-linux-gnu.tar.xz \
+  | tar -xJ -C ~/.local/bin probe-aeneas
 ```
 
 Binaries are available for Linux (x86_64, ARM64) and macOS (Apple Silicon, Intel).
@@ -64,6 +64,7 @@ Output lands in `aeneas_{package}_{version}.json` by default.
 
 | Command | Description |
 |---------|-------------|
+| `setup` | Install external tool dependencies (probe-rust, charon) |
 | `extract` | Full pipeline: extract atoms (if needed), generate translations, merge Rust + Lean call graphs |
 | `translate` | Generate Rust ↔ Lean translation mappings from pre-generated atom files |
 | `listfuns` | Run `lake exe listfuns` in a Lean project to produce `functions.json` |
@@ -94,7 +95,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 {
   "schema": "probe-aeneas/extract",
   "schema-version": "2.0",
-  "tool": { "name": "probe-aeneas", "version": "0.3.2", "command": "extract" },
+  "tool": { "name": "probe-aeneas", "version": "0.6.0", "command": "extract" },
   "inputs": [
     { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
     { "schema": "probe-lean/extract", "package": "Curve25519Dalek", "package-version": "0.1.0" }

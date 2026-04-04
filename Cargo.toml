@@ -1,6 +1,6 @@
 [package]
 name = "probe-aeneas"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "Cross-language extract tool for Aeneas-transpiled projects (Rust ↔ Lean)"
 license = "MIT"

@@ -4,5 +4,6 @@ pub mod extract;
 pub mod extract_runner;
 pub mod gen_functions;
 pub mod listfuns;
+pub mod setup;
 pub mod translate;
 pub mod types;

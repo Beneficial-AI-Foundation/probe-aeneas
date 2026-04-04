@@ -2,6 +2,44 @@
 
 ## Commands
 
+### `setup`
+
+Install external tool dependencies (probe-rust, charon).
+
+```
+probe-aeneas setup [--status]
+```
+
+The `setup` command installs probe-rust (via `cargo install`) and charon
+(built from source into `~/.probe-rust/tools/`). These are global tools
+that only need to be installed once.
+
+probe-lean is **not** installed by `setup` because it must be
+version-matched to each target project's `lean-toolchain` file. It is
+installed automatically during `extract`.
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--status` | Show which tools are installed and their locations, without installing anything. |
+
+**Examples:**
+
+```bash
+# Install all tools
+probe-aeneas setup
+
+# Check installation status
+probe-aeneas setup --status
+```
+
+Running `setup` is recommended before first use, especially in CI or Docker
+environments. However, `extract` will also auto-install missing tools as a
+fallback.
+
+---
+
 ### `extract`
 
 Full pipeline: extract atoms (if needed), generate translation mappings, and
@@ -50,7 +88,10 @@ project-specific settings before running `probe-rust`. Supported fields:
 | `opaque` | Rust item paths to keep opaque |
 
 The generated LLBC is cached at `<rust_project>/data/charon.llbc` and reused
-on subsequent runs.
+on subsequent runs. If charon is not yet installed (e.g. first run),
+probe-aeneas builds it from source automatically (cloned from the
+[charon repo](https://github.com/AeneasVerif/charon) into
+`~/.probe-rust/tools/`).
 
 #### Advanced input options
 

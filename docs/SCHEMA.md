@@ -41,7 +41,7 @@ sections below), but share this structure:
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "command": "extract"
   },
   "inputs": [
@@ -400,7 +400,7 @@ entries with:
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "command": "translate"
   },
   "timestamp": "2026-03-16T12:00:00Z",

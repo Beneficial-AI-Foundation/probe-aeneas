@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::extract::CharonConfig;
+use crate::setup;
 
-const PROBE_RUST_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-rust.git";
 const PROBE_LEAN_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-lean.git";
 
 /// Run `probe-rust extract` on a project and return the path to the generated JSON.
@@ -112,34 +112,7 @@ pub fn run_probe_lean_extract_with_opts(
 }
 
 fn find_or_install_probe_rust() -> Result<PathBuf, String> {
-    if let Some(p) = find_on_path("probe-rust") {
-        return Ok(p);
-    }
-
-    let cargo_bin = home_dir()?.join(".cargo/bin/probe-rust");
-    if cargo_bin.exists() {
-        return Ok(cargo_bin);
-    }
-
-    println!("probe-rust not found, installing via cargo...");
-    let status = Command::new("cargo")
-        .args(["install", "--git", PROBE_RUST_GIT])
-        .status()
-        .map_err(|e| format!("Failed to run cargo install: {e}"))?;
-
-    if !status.success() {
-        return Err(
-            "cargo install probe-rust failed. Please install manually:\n  \
-             cargo install --git https://github.com/Beneficial-AI-Foundation/probe-rust.git"
-                .to_string(),
-        );
-    }
-
-    if cargo_bin.exists() {
-        Ok(cargo_bin)
-    } else {
-        Err("cargo install succeeded but probe-rust binary not found in ~/.cargo/bin/".to_string())
-    }
+    setup::find_or_install_probe_rust()
 }
 
 fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf, String> {
@@ -451,7 +424,14 @@ pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<
         return Ok(());
     }
 
-    let charon_bin = resolve_charon()?;
+    let charon_bin = match setup::resolve_charon_or_err() {
+        Ok(bin) => bin,
+        Err(_) => {
+            println!("charon not found, building from source...");
+            setup::install_charon()?;
+            setup::resolve_charon_or_err()?
+        }
+    };
 
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("Failed to create {}: {e}", data_dir.display()))?;
@@ -540,28 +520,12 @@ pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<
     Ok(())
 }
 
-/// Resolve charon binary: check managed directory then PATH.
-fn resolve_charon() -> Result<PathBuf, String> {
-    let managed = home_dir()?.join(".probe-rust/tools/charon");
-    if managed.exists() {
-        return Ok(managed);
-    }
-    if let Some(p) = find_on_path("charon") {
-        return Ok(p);
-    }
-    Err(
-        "charon not found. Install it or run probe-rust with --auto-install first.\n  \
-         Charon is needed for rust-qualified-name enrichment (Aeneas integration)."
-            .to_string(),
-    )
-}
-
 fn find_on_path(name: &str) -> Option<PathBuf> {
-    which::which(name).ok()
+    setup::find_on_path(name)
 }
 
 fn home_dir() -> Result<PathBuf, String> {
-    dirs::home_dir().ok_or_else(|| "Could not determine home directory".to_string())
+    setup::home_dir()
 }
 
 /// Compute the output path for an extractor. When `output_dir` is given, writes

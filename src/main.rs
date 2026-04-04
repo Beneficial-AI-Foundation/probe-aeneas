@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use probe_aeneas::{extract, extract_runner, gen_functions, listfuns};
+use probe_aeneas::{extract, extract_runner, gen_functions, listfuns, setup};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -130,6 +130,18 @@ enum Commands {
         #[arg(long)]
         aeneas_config: Option<PathBuf>,
     },
+
+    /// Install external tool dependencies (probe-rust, charon).
+    ///
+    /// Installs probe-rust and charon into their managed directories.
+    /// Use --status to check which tools are installed without installing.
+    /// probe-lean is installed automatically per-project during extract
+    /// (version-matched to the target project's lean-toolchain).
+    Setup {
+        /// Show installation status instead of installing
+        #[arg(long)]
+        status: bool,
+    },
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -237,6 +249,11 @@ fn main() {
                     aeneas_config.as_deref(),
                 )
             }
+        }
+
+        Commands::Setup { status } => {
+            setup::cmd_setup(status);
+            Ok(())
         }
     };
 

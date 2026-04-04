@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-04
+
+### Added
+- **`setup` command**: installs external tool dependencies (probe-rust and
+  charon) into their managed directories. Use `--status` to check which
+  tools are installed. probe-lean is version-matched per project and
+  auto-installed during `extract`.
+
+### Fixed
+- **Charon auto-install on first run**: when charon is not yet installed,
+  `ensure_charon_llbc` now builds it from source automatically (into
+  `~/.probe-rust/tools/`, the same managed directory probe-rust uses) and
+  then pre-generates the LLBC with the full `aeneas-config.yml` settings.
+  Previously, running `probe-aeneas extract` on a machine without charon
+  already installed would fail with a hard error before probe-rust had a
+  chance to auto-install it.
+
+### Changed
+- **Tool installation refactored into `setup.rs`**: installation logic for
+  probe-rust and charon is now centralized in the `setup` module. Both the
+  `setup` command and `extract` (as fallback) call the same functions.
+
 ## [0.5.0] - 2026-04-02
 
 ### Added
@@ -88,7 +110,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.1...v0.3.2
