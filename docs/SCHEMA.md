@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.5
-Date: 2026-04-02
+Version: 2.6
+Date: 2026-04-07
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -41,7 +41,7 @@ sections below), but share this structure:
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "command": "extract"
   },
   "inputs": [
@@ -101,7 +101,7 @@ input files, potentially enriched with cross-language dependency edges. The
 atom format follows the shared `probe` atom schema with language-specific
 extension fields passed through verbatim.
 
-**Rust atom example** (with translation metadata and cross-language edge):
+**Rust atom example** (with translation metadata, verification status, and cross-language edge):
 
 ```json
 {
@@ -119,6 +119,8 @@ extension fields passed through verbatim.
     "rust-qualified-name": "curve25519_dalek::scalar::Scalar::from_bytes_mod_order",
     "is-disabled": false,
     "is-public": true,
+    "is-public-api": true,
+    "verification-status": "verified",
     "translation-name": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
     "translation-path": "Curve25519Dalek/Funs.lean",
     "translation-text": { "lines-start": 7089, "lines-end": 7098 }
@@ -179,6 +181,27 @@ Here the Lean `reduce` depends on Lean definitions like `montgomery_reduce`
 and `Scalar.unpack`, plus cross-language edges back to the corresponding
 Rust atoms (added automatically by the merge step).
 
+**Lean trusted atom example** (axiom from `*External.lean`):
+
+```json
+{
+  "probe:curve25519_dalek.Array.Insts.ZeroizeZeroize.zeroize": {
+    "display-name": "zeroize",
+    "code-module": "Curve25519Dalek.FunsExternal",
+    "code-path": "Curve25519Dalek/FunsExternal.lean",
+    "kind": "axiom",
+    "language": "lean",
+    "verification-status": "trusted",
+    "trusted-reason": "axiom",
+    "..."
+  }
+}
+```
+
+Trusted atoms represent the verification trust base: axioms (`trusted-reason:
+"axiom"`) and hand-written definitions in `*External.lean` files
+(`trusted-reason: "external"`).
+
 ### Atom Field Reference
 
 #### Core fields (all atoms)
@@ -214,6 +237,8 @@ Rust atoms (added automatically by the merge step).
 | `is-disabled` | bool | yes | `false` if the function's `rust-qualified-name` appears as a `rust_name` in `functions.json` or it has a `translation-name`; `true` otherwise. Indicates whether Aeneas processed this function. |
 | `is-relevant` | bool | yes | Inverse of `is-disabled`. `true` when Aeneas transpiled this function. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
+| `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
+| `verification-status` | string | no | Verification status of the Lean translation: `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. Propagated from the Lean atom referenced by `translation-name`. Absent when the Rust function has no Lean translation. Matches the semantics of `verification-status` on Lean atoms, enabling uniform queries across both languages (same key as used by probe-verus on Rust atoms). |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
@@ -226,7 +251,8 @@ the enrichment pass:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `verification-status` | string | yes | `"verified"`, `"unverified"`, or `"failed"` |
+| `verification-status` | string | yes | `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. `"trusted"` indicates the declaration belongs to the trust base (axioms or `*External.lean` files). |
+| `trusted-reason` | string | no | Why the atom is trusted: `"axiom"` (axiomatic declaration) or `"external"` (defined in an `*External.lean` file). Present only when `verification-status` is `"trusted"`. |
 | `type-dependencies` | array of strings | yes | Code-names of dependencies used in the type signature |
 | `term-dependencies` | array of strings | yes | Code-names of dependencies used in the definition body |
 | `is-in-package` | bool | yes | Whether the declaration belongs to the Lean package (from probe-lean) |
@@ -400,7 +426,7 @@ entries with:
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "command": "translate"
   },
   "timestamp": "2026-03-16T12:00:00Z",

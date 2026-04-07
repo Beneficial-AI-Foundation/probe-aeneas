@@ -442,12 +442,13 @@ fn enrich_with_aeneas_metadata(
                     lean_atom.code_path.clone(),
                     lean_atom.code_text.lines_start,
                     lean_atom.code_text.lines_end,
+                    lean_atom.extensions.get("verification-status").cloned(),
                 )
             })
         })
         .collect();
 
-    for (rust_name, lean_name, path, start, end) in enrichments {
+    for (rust_name, lean_name, path, start, end, lean_vs) in enrichments {
         if let Some(atom) = merged.get_mut(&rust_name) {
             atom.extensions
                 .insert("translation-name".to_string(), serde_json::json!(lean_name));
@@ -461,6 +462,10 @@ fn enrich_with_aeneas_metadata(
                         "lines-end": end,
                     }),
                 );
+            }
+            if let Some(vs) = lean_vs {
+                atom.extensions
+                    .insert("verification-status".to_string(), vs);
             }
         }
     }
@@ -499,6 +504,8 @@ fn write_aeneas_envelope(
 ) -> Result<(), String> {
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
+    print_public_api_coverage(&merged);
+
     let envelope = MergedAtomEnvelope {
         schema: "probe-aeneas/extract".to_string(),
         schema_version: "2.0".to_string(),
@@ -530,6 +537,64 @@ fn write_aeneas_envelope(
     println!("  Cross-lang edges: {}", stats.translations_applied);
 
     Ok(())
+}
+
+/// Print public API verification coverage for Rust atoms that have
+/// `is-public-api: true` (set by probe-rust). Uses the `verification-status`
+/// already propagated onto Rust atoms from their Lean translations.
+fn print_public_api_coverage(merged: &std::collections::BTreeMap<String, Atom>) {
+    let public_api: Vec<&Atom> = merged
+        .values()
+        .filter(|a| {
+            a.language == "rust"
+                && a.extensions.get("is-public-api").and_then(|v| v.as_bool()) == Some(true)
+        })
+        .collect();
+
+    if public_api.is_empty() {
+        return;
+    }
+
+    let mut verified = 0u32;
+    let mut unverified = 0u32;
+    let mut trusted = 0u32;
+    let mut other_status = 0u32;
+    let mut no_translation = 0u32;
+
+    for atom in &public_api {
+        let status = atom
+            .extensions
+            .get("verification-status")
+            .and_then(|v| v.as_str());
+
+        match status {
+            Some("verified") => verified += 1,
+            Some("unverified") => unverified += 1,
+            Some("trusted") => trusted += 1,
+            Some(_) => other_status += 1,
+            None => no_translation += 1,
+        }
+    }
+
+    let total = public_api.len() as u32;
+
+    println!("\nPublic API coverage:");
+    println!("  {total} public API functions");
+    if verified > 0 {
+        println!("    {verified} verified");
+    }
+    if unverified > 0 {
+        println!("    {unverified} unverified");
+    }
+    if trusted > 0 {
+        println!("    {trusted} trusted");
+    }
+    if other_status > 0 {
+        println!("    {other_status} other");
+    }
+    if no_translation > 0 {
+        println!("    {no_translation} not in scope (no Lean translation)");
+    }
 }
 
 /// Derive the default output path: `<project>/.verilib/probes/aeneas_<pkg>_<ver>.json`.

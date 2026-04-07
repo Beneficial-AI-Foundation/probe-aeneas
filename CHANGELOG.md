@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-07
+
+### Added
+- **`verification-status` on Rust atoms**: Rust atoms with a Lean translation
+  now carry `verification-status` propagated from the corresponding Lean atom.
+  Values are `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. Absent
+  when no translation exists. Enables uniform verification queries across both
+  languages (same key as probe-verus uses on Rust atoms).
+- **`is-public-api` pass-through**: the `is-public-api` field from probe-rust
+  (distinguishing crate-level public API from item-level `pub` visibility) is
+  now preserved in the merged output. More selective than `is-public` — a
+  `pub fn` inside a private module has `is-public: true` but
+  `is-public-api: false`.
+- **`trusted` verification status** for Lean atoms: probe-lean v0.4.5 now
+  classifies axioms and `*External.lean` declarations as
+  `verification-status: "trusted"` with a `trusted-reason` field (`"axiom"`
+  or `"external"`). These are passed through in the merged output.
+- **Public API coverage summary** printed during `extract`: shows how many
+  public API functions are verified, unverified, trusted, or not in scope.
+
+### Changed
+- Schema version bumped to 2.6; SCHEMA.md documents all new fields.
+
 ## [0.6.0] - 2026-04-04
 
 ### Added
@@ -110,7 +133,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.3.2...v0.4.0
