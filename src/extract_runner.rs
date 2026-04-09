@@ -13,24 +13,31 @@ const PROBE_LEAN_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-
 pub fn run_probe_rust_extract(
     project: &Path,
     output_dir: Option<&Path>,
+    with_public_api: bool,
 ) -> Result<PathBuf, String> {
     let bin = find_or_install_probe_rust()?;
     let output = output_path(output_dir, "rust_extract", ".json");
 
     println!("Running probe-rust extract on {}...", project.display());
+    let mut args = vec![
+        "extract".to_string(),
+        project
+            .to_str()
+            .ok_or_else(|| "Project path is not valid UTF-8".to_string())?
+            .to_string(),
+        "-o".to_string(),
+        output
+            .to_str()
+            .ok_or_else(|| "Output path is not valid UTF-8".to_string())?
+            .to_string(),
+        "--auto-install".to_string(),
+        "--with-charon".to_string(),
+    ];
+    if with_public_api {
+        args.push("--with-public-api".to_string());
+    }
     let status = Command::new(&bin)
-        .args([
-            "extract",
-            project
-                .to_str()
-                .ok_or_else(|| "Project path is not valid UTF-8".to_string())?,
-            "-o",
-            output
-                .to_str()
-                .ok_or_else(|| "Output path is not valid UTF-8".to_string())?,
-            "--auto-install",
-            "--with-charon",
-        ])
+        .args(&args)
         .status()
         .map_err(|e| format!("Failed to run probe-rust: {e}"))?;
 

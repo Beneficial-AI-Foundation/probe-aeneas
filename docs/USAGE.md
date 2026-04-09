@@ -103,7 +103,7 @@ flags below. These are mutually exclusive with the positional `PROJECT` argument
 | Flag | Description |
 |------|-------------|
 | `--rust <PATH>` | Path to pre-generated Rust atoms JSON (from `probe-rust extract`). |
-| `--rust-project <PATH>` | Path to a Rust project directory. Runs `probe-rust extract --with-charon --auto-install` automatically. |
+| `--rust-project <PATH>` | Path to a Rust project directory. Runs `probe-rust extract --with-charon --auto-install` automatically (adds `--with-public-api` when `--with-public-api` is given). |
 
 Exactly one of `--rust` or `--rust-project` is required (when not using `PROJECT`).
 
@@ -124,6 +124,22 @@ At least one of `--lean` or `--lean-project` is required (when not using `PROJEC
 | `--output <PATH>` | `-o` | Output file path. Default: `<project>/.verilib/probes/aeneas_<pkg>_<ver>.json` when a project root is available; otherwise `aeneas_<pkg>_<ver>.json` in the current directory. |
 | `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`). Defaults to `.verilib/aeneas.json` in the Lean project. |
 | `--lake` | | Use `lake exe listfuns` to generate `functions.json` instead of parsing Aeneas-generated Lean files directly. |
+| `--with-public-api` | | Use `cargo public-api` to compute accurate `is-public-api` on Rust atoms (requires `cargo-public-api`; see below). |
+
+#### Installing `cargo-public-api` (for `--with-public-api`)
+
+The `--with-public-api` flag passes `--with-public-api` to `probe-rust extract`,
+which shells out to [`cargo-public-api`](https://crates.io/crates/cargo-public-api).
+`cargo-public-api` uses rustdoc JSON (a nightly-only feature). Install both the
+tool and a nightly toolchain:
+
+```bash
+cargo install cargo-public-api
+rustup install nightly --profile minimal
+```
+
+`cargo-public-api` automatically invokes `rustdoc +nightly` — the nightly
+toolchain does not need to be your default.
 
 ### Examples
 
@@ -351,6 +367,7 @@ to the versioned binary.
 - **Rust toolchain** (`cargo`) -- for building/installing `probe-rust`
 - **Lean 4 toolchain** (`elan`, `lake`) -- for building/installing `probe-lean` and running `listfuns`
 - `probe-rust` and `probe-lean` are auto-installed when using `--rust-project` / `--lean-project`
+- **For `--with-public-api`**: `cargo-public-api` (`cargo install cargo-public-api`) and a nightly Rust toolchain (`rustup install nightly --profile minimal`)
 
 ---
 

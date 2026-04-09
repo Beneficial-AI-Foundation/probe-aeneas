@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-09
+
+### Added
+- **`--with-public-api` flag** on `extract`: passes `--with-public-api` to
+  `probe-rust extract` so that `cargo public-api` computes accurate
+  `is-public-api` values on Rust atoms. Requires `cargo-public-api` and a
+  nightly Rust toolchain. Off by default.
+
 ## [0.7.0] - 2026-04-07
 
 ### Added
@@ -133,7 +141,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.4.0...v0.5.0

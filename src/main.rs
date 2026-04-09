@@ -71,6 +71,11 @@ enum Commands {
         /// project to define a `listfuns` executable.
         #[arg(long)]
         lake: bool,
+
+        /// Run `cargo public-api` to compute accurate `is-public-api` on Rust atoms.
+        /// Requires `cargo-public-api` installed and a nightly toolchain.
+        #[arg(long)]
+        with_public_api: bool,
     },
 
     /// Generate a translations file mapping Rust code-names to Lean code-names.
@@ -155,6 +160,7 @@ fn resolve_and_extract(
     output: Option<PathBuf>,
     aeneas_config: Option<PathBuf>,
     lake: bool,
+    with_public_api: bool,
 ) -> Result<(), String> {
     let (rust, rust_project, lean_project, functions, rust_path_prefix, charon_config) =
         if let Some(ref proj) = project {
@@ -191,6 +197,7 @@ fn resolve_and_extract(
         aeneas_config.as_deref(),
         lake,
         rust_path_prefix.as_deref(),
+        with_public_api,
     )
 }
 
@@ -208,6 +215,7 @@ fn main() {
             output,
             aeneas_config,
             lake,
+            with_public_api,
         } => resolve_and_extract(
             project,
             rust,
@@ -218,6 +226,7 @@ fn main() {
             output,
             aeneas_config,
             lake,
+            with_public_api,
         ),
 
         Commands::Translate {

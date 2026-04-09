@@ -166,6 +166,7 @@ pub fn run_extract(
     aeneas_config: Option<&Path>,
     use_lake: bool,
     rust_path_prefix: Option<&str>,
+    with_public_api: bool,
 ) -> Result<(), String> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
@@ -191,7 +192,13 @@ pub fn run_extract(
     // --- Resolve inputs (extract if needed) ---
     // When both --lean and --lean-project are given, skip Lean extraction
     // (use the pre-computed JSON) but keep the project dir for listfuns.
-    let (rust_path, lean_path) = resolve_inputs(rust_json, rust_project, lean_json, lean_project)?;
+    let (rust_path, lean_path) = resolve_inputs(
+        rust_json,
+        rust_project,
+        lean_json,
+        lean_project,
+        with_public_api,
+    )?;
 
     // --- Resolve functions.json ---
     let functions_path = resolve_functions(functions_json, lean_project, use_lake)?;
@@ -226,6 +233,7 @@ fn resolve_inputs(
     rust_project: Option<&Path>,
     lean_json: Option<&Path>,
     lean_project: Option<&Path>,
+    with_public_api: bool,
 ) -> Result<(PathBuf, PathBuf), String> {
     let need_rust_extract = rust_json.is_none();
     // When --lean is given (pre-computed JSON), skip Lean extraction even if
@@ -246,8 +254,9 @@ fn resolve_inputs(
 
         println!("Extracting Rust and Lean atoms in parallel...\n");
         let (rust_result, lean_result) = std::thread::scope(|s| {
-            let rust_handle =
-                s.spawn(|| extract_runner::run_probe_rust_extract(rust_proj, probes_dir_ref));
+            let rust_handle = s.spawn(|| {
+                extract_runner::run_probe_rust_extract(rust_proj, probes_dir_ref, with_public_api)
+            });
             let lean_handle =
                 s.spawn(|| extract_runner::run_probe_lean_extract(lean_proj, probes_dir_ref));
             (rust_handle.join(), lean_handle.join())
@@ -266,7 +275,11 @@ fn resolve_inputs(
                 std::fs::create_dir_all(dir)
                     .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
             }
-            extract_runner::run_probe_rust_extract(rust_project.unwrap(), probes_dir_ref)?
+            extract_runner::run_probe_rust_extract(
+                rust_project.unwrap(),
+                probes_dir_ref,
+                with_public_api,
+            )?
         };
 
         let lean_path = if let Some(json) = lean_json {
