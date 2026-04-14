@@ -1,8 +1,10 @@
 //! `setup` subcommand: install and manage external tool dependencies.
 //!
-//! Manages probe-rust and charon binaries. probe-lean is version-matched to
-//! each target project's `lean-toolchain` and is auto-installed per-project
-//! during `extract`, so it is not handled here.
+//! Manages probe-rust and charon. After installing probe-rust, delegates to
+//! `probe-rust setup` to install its own dependencies (rust-analyzer, scip).
+//! probe-lean is version-matched to each target project's `lean-toolchain`
+//! and is auto-installed per-project during `extract`, so it is not handled
+//! here.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -134,6 +136,22 @@ pub fn resolve_charon() -> Option<PathBuf> {
     find_on_path("charon")
 }
 
+/// Delegate to `probe-rust setup` to install probe-rust's own dependencies
+/// (rust-analyzer, scip). The `probe_rust_bin` must already be installed.
+fn run_probe_rust_setup(probe_rust_bin: &std::path::Path) -> Result<(), String> {
+    eprintln!("\nRunning probe-rust setup to install its dependencies...\n");
+    let status = Command::new(probe_rust_bin)
+        .arg("setup")
+        .status()
+        .map_err(|e| format!("Failed to run probe-rust setup: {e}"))?;
+    if !status.success() {
+        return Err("probe-rust setup failed. Run it manually for details:\n  \
+                     probe-rust setup"
+            .to_string());
+    }
+    Ok(())
+}
+
 /// Resolve probe-lean binary (any version on PATH or in `~/.local/bin/`).
 fn resolve_probe_lean() -> Option<PathBuf> {
     if let Some(p) = find_on_path("probe-lean") {
@@ -180,6 +198,11 @@ pub fn print_status() {
         " (installed per-project during extract)",
     );
     eprintln!();
+
+    if let Some(ref pr) = probe_rust {
+        eprintln!("probe-rust dependencies (rust-analyzer, scip):");
+        let _ = Command::new(pr).args(["setup", "--status"]).status();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -197,13 +220,25 @@ pub fn cmd_setup(status: bool) {
 
     let mut errors: Vec<String> = Vec::new();
 
-    // probe-rust
-    match resolve_probe_rust() {
-        Some(p) => eprintln!("probe-rust: already available at {}", p.display()),
-        None => {
-            if let Err(e) = install_probe_rust() {
+    // probe-rust (install if needed, then delegate to its setup for deps)
+    let probe_rust_bin = match resolve_probe_rust() {
+        Some(p) => {
+            eprintln!("probe-rust: already available at {}", p.display());
+            Some(p)
+        }
+        None => match install_probe_rust() {
+            Ok(p) => Some(p),
+            Err(e) => {
                 errors.push(format!("probe-rust: {e}"));
+                None
             }
+        },
+    };
+
+    // rust-analyzer + scip (delegated to probe-rust setup)
+    if let Some(ref bin) = probe_rust_bin {
+        if let Err(e) = run_probe_rust_setup(bin) {
+            errors.push(e);
         }
     }
 

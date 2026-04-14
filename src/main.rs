@@ -138,7 +138,8 @@ enum Commands {
 
     /// Install external tool dependencies (probe-rust, charon).
     ///
-    /// Installs probe-rust and charon into their managed directories.
+    /// Installs probe-rust and charon, then delegates to `probe-rust setup`
+    /// to install probe-rust's own dependencies (rust-analyzer, scip).
     /// Use --status to check which tools are installed without installing.
     /// probe-lean is installed automatically per-project during extract
     /// (version-matched to the target project's lean-toolchain).

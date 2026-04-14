@@ -95,7 +95,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 {
   "schema": "probe-aeneas/extract",
   "schema-version": "2.0",
-  "tool": { "name": "probe-aeneas", "version": "0.6.0", "command": "extract" },
+  "tool": { "name": "probe-aeneas", "version": "0.9.0", "command": "extract" },
   "inputs": [
     { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
     { "schema": "probe-lean/extract", "package": "Curve25519Dalek", "package-version": "0.1.0" }

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-14
+
+### Added
+- **Cargo workspace support**: `probe-aeneas extract <project>` now handles
+  projects where `crate.dir` in `aeneas-config.yml` points to a source
+  subdirectory without its own `Cargo.toml` (e.g. libsignal with
+  `crate.dir = "rust"` and a workspace `Cargo.toml` at the project root).
+  Uses `cargo metadata --no-deps` to resolve the target member crate from
+  `crate.name`, `charon.package`, or `-p` in `charon.cargo_args`.
+- **`start_from_pub` and `include` charon config forwarding**: the `charon`
+  section in `aeneas-config.yml` now supports `start_from_pub: true` (passed
+  as `--start-from-pub`) and `include` lists (passed as `--include <name>`).
+  Previously these fields were silently ignored, causing incomplete LLBC
+  generation for projects like libsignal that rely on `start_from_pub`
+  instead of explicit `start_from` entries for the target crate.
+
+### Changed
+- **`setup` command delegates to `probe-rust setup`**: after installing
+  probe-rust, `probe-aeneas setup` now runs `probe-rust setup` to install
+  probe-rust's own dependencies (rust-analyzer, scip).
+
 ## [0.8.0] - 2026-04-09
 
 ### Added
@@ -141,7 +162,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.5.0...v0.6.0

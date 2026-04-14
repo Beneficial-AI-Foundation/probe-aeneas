@@ -51,6 +51,8 @@ pub struct CharonConfig {
     pub package: Option<String>,
     pub cargo_args: Option<Vec<String>>,
     pub start_from: Option<Vec<String>>,
+    pub start_from_pub: Option<bool>,
+    pub include: Option<Vec<String>>,
     pub exclude: Option<Vec<String>>,
     pub opaque: Option<Vec<String>>,
 }
@@ -68,6 +70,134 @@ pub struct ResolvedProject {
     /// Charon configuration from `aeneas-config.yml`, used to pre-generate
     /// the LLBC file with the correct cargo args, start_from, and exclude lists.
     pub charon_config: Option<CharonConfig>,
+}
+
+/// Check whether a directory contains a Cargo workspace (its `Cargo.toml`
+/// has a `[workspace]` table). A quick text check avoids pulling in a TOML
+/// parser just for this.
+fn is_cargo_workspace(dir: &Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(dir.join("Cargo.toml")) else {
+        return false;
+    };
+    content.lines().any(|l| l.trim() == "[workspace]")
+}
+
+/// Resolve the target package name from available config sources, in priority
+/// order: `charon.package`, `-p`/`--package` in `charon.cargo_args`, then
+/// `crate.name` with Cargo's underscore-to-hyphen convention.
+fn resolve_target_package_name(
+    crate_name: Option<&str>,
+    charon_config: Option<&CharonConfig>,
+) -> Option<String> {
+    if let Some(pkg) = charon_config.and_then(|c| c.package.as_deref()) {
+        return Some(pkg.to_string());
+    }
+
+    if let Some(args) = charon_config.and_then(|c| c.cargo_args.as_deref()) {
+        let mut iter = args.iter();
+        while let Some(arg) = iter.next() {
+            if arg == "-p" || arg == "--package" {
+                if let Some(name) = iter.next() {
+                    return Some(name.clone());
+                }
+            }
+            if let Some(name) = arg
+                .strip_prefix("-p=")
+                .or_else(|| arg.strip_prefix("--package="))
+            {
+                return Some(name.to_string());
+            }
+        }
+    }
+
+    crate_name.map(|n| n.replace('_', "-"))
+}
+
+/// Resolve a workspace member crate directory using `cargo metadata`.
+///
+/// Given a workspace root, finds the member matching the target package name
+/// and returns `(member_directory, relative_path_from_project_root)`. The
+/// relative path is used as `crate_dir` for code-path prefixing.
+fn resolve_workspace_member(
+    project: &Path,
+    crate_name: Option<&str>,
+    charon_config: Option<&CharonConfig>,
+) -> Result<(PathBuf, String), String> {
+    let target = resolve_target_package_name(crate_name, charon_config).ok_or_else(|| {
+        format!(
+            "Workspace at {} but cannot determine target package \
+             (need crate.name, charon.package, or -p in charon.cargo_args)",
+            project.display()
+        )
+    })?;
+
+    let output = std::process::Command::new("cargo")
+        .args(["metadata", "--no-deps", "--format-version", "1"])
+        .current_dir(project)
+        .stderr(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .output()
+        .map_err(|e| format!("Failed to run cargo metadata: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("cargo metadata failed:\n{stderr}"));
+    }
+
+    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("Failed to parse cargo metadata: {e}"))?;
+
+    let packages = metadata["packages"]
+        .as_array()
+        .ok_or("cargo metadata: missing 'packages' array")?;
+
+    let normalized_target = target.replace('-', "_");
+
+    for pkg in packages {
+        let name = pkg["name"].as_str().unwrap_or("");
+        if name.replace('-', "_") != normalized_target {
+            continue;
+        }
+
+        let manifest_path = pkg["manifest_path"]
+            .as_str()
+            .ok_or("cargo metadata: package missing manifest_path")?;
+        let member_dir = Path::new(manifest_path)
+            .parent()
+            .ok_or("Invalid manifest_path")?;
+
+        let project_abs = std::fs::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
+        let member_abs =
+            std::fs::canonicalize(member_dir).unwrap_or_else(|_| member_dir.to_path_buf());
+
+        let rel = member_abs.strip_prefix(&project_abs).map_err(|_| {
+            format!(
+                "Workspace member {} is not under project root {}",
+                member_dir.display(),
+                project.display()
+            )
+        })?;
+
+        let crate_dir = rel.to_string_lossy().to_string();
+        let crate_dir = if crate_dir.is_empty() {
+            ".".to_string()
+        } else {
+            crate_dir
+        };
+
+        println!(
+            "  Resolved workspace member {:?} at {}",
+            name,
+            member_dir.display()
+        );
+
+        return Ok((member_dir.to_path_buf(), crate_dir));
+    }
+
+    Err(format!(
+        "Package {target:?} not found in workspace at {}",
+        project.display()
+    ))
 }
 
 /// Parse `aeneas-config.yml` in the given project directory and derive
@@ -88,11 +218,29 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
     let config: AeneasProjectConfig = serde_yaml::from_str(&content)
         .map_err(|e| format!("Failed to parse {}: {e}", config_path.display()))?;
 
-    let crate_dir = &config.crate_config.dir;
-    let rust_project = if crate_dir == "." {
-        project.to_path_buf()
+    let raw_crate_dir = &config.crate_config.dir;
+    let (rust_project, crate_dir) = if raw_crate_dir == "." {
+        (project.to_path_buf(), ".".to_string())
     } else {
-        project.join(crate_dir)
+        let candidate = project.join(raw_crate_dir);
+        if candidate.join("Cargo.toml").exists() {
+            (candidate, raw_crate_dir.clone())
+        } else if is_cargo_workspace(project) {
+            // Workspace layout: crate.dir doesn't have its own Cargo.toml
+            // (e.g. libsignal with crate.dir = "rust" and workspace root at
+            // project). Resolve the actual member crate via cargo metadata.
+            resolve_workspace_member(
+                project,
+                config.crate_config.name.as_deref(),
+                config.charon.as_ref(),
+            )?
+        } else {
+            return Err(format!(
+                "No Cargo.toml found at {} (derived from crate.dir = {:?} in aeneas-config.yml)",
+                candidate.display(),
+                raw_crate_dir,
+            ));
+        }
     };
     let lean_project = project.to_path_buf();
 
@@ -100,7 +248,7 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
         return Err(format!(
             "No Cargo.toml found at {} (derived from crate.dir = {:?} in aeneas-config.yml)",
             rust_project.display(),
-            crate_dir,
+            raw_crate_dir,
         ));
     }
 
@@ -142,7 +290,7 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
         rust_project,
         lean_project,
         functions_json,
-        crate_dir: config.crate_config.dir.clone(),
+        crate_dir,
         charon_config: config.charon,
     })
 }
@@ -793,6 +941,157 @@ mod tests {
 
         let err = resolve_project(&project).unwrap_err();
         assert!(err.contains("Cargo.toml"), "Error: {err}");
+    }
+
+    /// Create a minimal Cargo workspace in a temp directory for testing
+    /// `resolve_workspace_member`. The workspace has a single member crate.
+    fn create_workspace_project(
+        project: &Path,
+        member_rel: &str,
+        member_pkg_name: &str,
+        crate_dir: &str,
+        crate_name: &str,
+    ) {
+        fs::create_dir_all(project.join(member_rel)).unwrap();
+
+        // Workspace Cargo.toml at project root
+        fs::write(
+            project.join("Cargo.toml"),
+            format!("[workspace]\nresolver = \"2\"\nmembers = [\"{member_rel}\"]\n"),
+        )
+        .unwrap();
+
+        // Member crate Cargo.toml
+        fs::write(
+            project.join(member_rel).join("Cargo.toml"),
+            format!(
+                "[package]\nname = \"{member_pkg_name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"
+            ),
+        )
+        .unwrap();
+
+        // Member needs at least a lib.rs or main.rs for cargo metadata to be happy
+        let src = project.join(member_rel).join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("lib.rs"), "").unwrap();
+
+        // Lean project files
+        fs::write(
+            project.join("lakefile.toml"),
+            "name = \"T\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
+
+        // aeneas-config.yml
+        fs::write(
+            project.join("aeneas-config.yml"),
+            format!(
+                "crate:\n  dir: \"{crate_dir}\"\n  name: \"{crate_name}\"\n\
+                 charon:\n  cargo_args: [\"-p\", \"{member_pkg_name}\"]\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn resolve_project_workspace_member() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("workspace");
+        create_workspace_project(
+            &project,
+            "rust/crypto",
+            "signal-crypto",
+            "rust",
+            "signal_crypto",
+        );
+
+        let resolved = resolve_project(&project).unwrap();
+
+        let expected_member = std::fs::canonicalize(project.join("rust/crypto")).unwrap();
+        let actual_member = std::fs::canonicalize(&resolved.rust_project).unwrap();
+        assert_eq!(
+            actual_member, expected_member,
+            "Should resolve to the member crate directory"
+        );
+        assert_eq!(
+            resolved.crate_dir, "rust/crypto",
+            "crate_dir should be the relative path to the member"
+        );
+    }
+
+    #[test]
+    fn resolve_project_non_workspace_root_still_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("nonws");
+        fs::create_dir_all(project.join("rust")).unwrap();
+
+        // Root Cargo.toml is a regular package, NOT a workspace
+        fs::write(
+            project.join("Cargo.toml"),
+            "[package]\nname = \"other\"\nversion = \"0.1.0\"\nedition = \"2021\"",
+        )
+        .unwrap();
+        fs::write(
+            project.join("lakefile.toml"),
+            "name = \"T\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
+        fs::write(
+            project.join("aeneas-config.yml"),
+            "crate:\n  dir: \"rust\"\n",
+        )
+        .unwrap();
+
+        let err = resolve_project(&project).unwrap_err();
+        assert!(
+            err.contains("Cargo.toml"),
+            "Non-workspace root should still error: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_target_package_name_from_charon_package() {
+        let cc = CharonConfig {
+            package: Some("signal-crypto".to_string()),
+            cargo_args: Some(vec!["-p".to_string(), "other".to_string()]),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_target_package_name(Some("crate_name"), Some(&cc)),
+            Some("signal-crypto".to_string()),
+            "charon.package takes highest priority"
+        );
+    }
+
+    #[test]
+    fn resolve_target_package_name_from_cargo_args() {
+        let cc = CharonConfig {
+            cargo_args: Some(vec![
+                "-p".to_string(),
+                "signal-crypto".to_string(),
+                "--features".to_string(),
+                "extraction".to_string(),
+            ]),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_target_package_name(None, Some(&cc)),
+            Some("signal-crypto".to_string()),
+        );
+    }
+
+    #[test]
+    fn resolve_target_package_name_from_crate_name() {
+        assert_eq!(
+            resolve_target_package_name(Some("signal_crypto"), None),
+            Some("signal-crypto".to_string()),
+            "crate.name underscores should be converted to hyphens"
+        );
+    }
+
+    #[test]
+    fn resolve_target_package_name_none_when_empty() {
+        assert_eq!(resolve_target_package_name(None, None), None);
     }
 
     #[test]

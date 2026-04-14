@@ -66,7 +66,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 **Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `is-disabled` (`false` when the function's `rust-qualified-name` appears in `functions.json` or the atom has a `translation-name`; `true` otherwise).
 
-**Project Auto-Detection**: When a positional `PROJECT` path is given, `aeneas-config.yml` is parsed to derive `rust_project` (from `crate.dir`) and `lean_project` (the project root). If `functions.json` exists at the project root, it is reused.
+**Project Auto-Detection**: When a positional `PROJECT` path is given, `aeneas-config.yml` is parsed to derive `rust_project` (from `crate.dir`) and `lean_project` (the project root). If `crate.dir` lacks its own `Cargo.toml` but the project root is a Cargo `[workspace]`, the target member crate is resolved via `cargo metadata --no-deps` using `crate.name`, `charon.package`, or `-p` from `charon.cargo_args`. If `functions.json` exists at the project root, it is reused.
 
 **Parallel Extraction**: When both Rust and Lean extractions are needed (via positional `PROJECT` or `--rust-project` + `--lean-project`), `probe-rust extract` and `probe-lean extract` run in parallel via scoped threads.
 

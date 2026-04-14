@@ -70,7 +70,7 @@ Otherwise, it is generated from the Lean sources.
 |------|----------|---------|
 | `aeneas-config.yml` | Yes | Must contain `crate.dir` (path to Rust crate relative to project root) |
 | `lakefile.toml` or `lakefile.lean` | Yes | Identifies the Lean project root |
-| `Cargo.toml` | Yes | Must exist at the resolved Rust crate path (`project / crate.dir`) |
+| `Cargo.toml` | Yes | Must exist at `project / crate.dir`, or at the project root as a `[workspace]` (member resolved via `cargo metadata`) |
 | `functions.json` | No | Reused if present; otherwise auto-generated from Lean sources |
 
 **Charon configuration** (optional `charon` section in `aeneas-config.yml`):
@@ -84,6 +84,8 @@ project-specific settings before running `probe-rust`. Supported fields:
 | `package` | Cargo package name (passed as `--package`) |
 | `cargo_args` | Extra cargo args (e.g. `["--no-default-features", "--features", "alloc"]`) |
 | `start_from` | Rust item paths to use as translation starting points |
+| `start_from_pub` | When `true`, start from all pub items of the target crate (`--start-from-pub`) |
+| `include` | Crate names to include as transparent dependencies (e.g. `["libsignal_core"]`) |
 | `exclude` | Rust item paths to exclude from translation |
 | `opaque` | Rust item paths to keep opaque |
 

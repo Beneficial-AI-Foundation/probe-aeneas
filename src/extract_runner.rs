@@ -459,9 +459,20 @@ pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<
         "--no-dedup-serialized-ast".to_string(),
     ];
 
+    if config.start_from_pub == Some(true) {
+        args.push("--start-from-pub".to_string());
+    }
+
     if let Some(ref start_from) = config.start_from {
         for item in start_from {
             args.push("--start-from".to_string());
+            args.push(item.clone());
+        }
+    }
+
+    if let Some(ref include) = config.include {
+        for item in include {
+            args.push("--include".to_string());
             args.push(item.clone());
         }
     }
