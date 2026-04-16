@@ -10,9 +10,10 @@ Install external tool dependencies (probe-rust, charon).
 probe-aeneas setup [--status]
 ```
 
-The `setup` command installs probe-rust (via `cargo install`) and charon
-(built from source into `~/.probe-rust/tools/`). These are global tools
-that only need to be installed once.
+The `setup` command installs probe-rust (via `cargo install`), rust-analyzer
+(via `rustup component add`), and charon (built from source into
+`~/.probe-rust/tools/`). These are global tools that only need to be
+installed once.
 
 probe-lean is **not** installed by `setup` because it must be
 version-matched to each target project's `lean-toolchain` file. It is

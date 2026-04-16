@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-probe-aeneas is a Rust CLI tool that bridges Rust and Lean call graphs for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects. It has three subcommands:
+probe-aeneas is a Rust CLI tool that bridges Rust and Lean call graphs for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects. It has four subcommands:
 - **extract**: Full pipeline -- point at an Aeneas project directory (containing `aeneas-config.yml`) to auto-detect Rust/Lean paths, extract atoms, generate translation mappings, and merge into a unified atom file. Also supports explicit `--rust-project`/`--lean-project` flags or pre-generated JSON files.
 - **translate**: Generate translation mappings between Rust and Lean code-names using `functions.json` as the bridge.
 - **listfuns**: Generate enriched `functions.json` with verification data (default), or delegate to `lake exe listfuns`, or produce a basic function list.
+- **setup**: Install external tool dependencies (probe-rust, rust-analyzer, charon). probe-lean is version-matched per project and auto-installed during `extract`.
 
 ## Build and Test Commands
 

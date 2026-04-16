@@ -16,6 +16,7 @@ pub fn run_probe_rust_extract(
     with_public_api: bool,
 ) -> Result<PathBuf, String> {
     let bin = find_or_install_probe_rust()?;
+    ensure_rust_analyzer_for_project(project);
     let output = output_path(output_dir, "rust_extract", ".json");
 
     println!("Running probe-rust extract on {}...", project.display());
@@ -536,6 +537,63 @@ pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<
 
     println!("  ✓ Charon LLBC generated at {}\n", llbc_path.display());
     Ok(())
+}
+
+/// Detect the Rust project's active toolchain and ensure `rust-analyzer` is
+/// installed for it. Falls back silently so extraction can still attempt to
+/// proceed (probe-rust may have its own fallback).
+fn ensure_rust_analyzer_for_project(project: &Path) {
+    let toolchain = detect_rust_toolchain(project);
+    if let Some(ref tc) = toolchain {
+        if let Err(e) = setup::ensure_rust_analyzer_component(Some(tc)) {
+            eprintln!("Warning: {e}");
+        }
+    } else if let Err(e) = setup::ensure_rust_analyzer_component(None) {
+        eprintln!("Warning: {e}");
+    }
+}
+
+/// Read the channel from `rust-toolchain.toml` or `rust-toolchain` in the
+/// project (or any ancestor up to the filesystem root).
+fn detect_rust_toolchain(project: &Path) -> Option<String> {
+    let abs = std::fs::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
+    let mut dir = abs.as_path();
+    loop {
+        if let Some(tc) = try_read_toolchain_toml(&dir.join("rust-toolchain.toml")) {
+            return Some(tc);
+        }
+        if let Some(tc) = try_read_toolchain_file(&dir.join("rust-toolchain")) {
+            return Some(tc);
+        }
+        dir = dir.parent()?;
+    }
+}
+
+/// Parse `rust-toolchain.toml` for `[toolchain] channel = "..."`.
+fn try_read_toolchain_toml(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("channel") {
+            if let Some(value) = trimmed.split('=').nth(1) {
+                let channel = value.trim().trim_matches('"').trim_matches('\'');
+                if !channel.is_empty() {
+                    return Some(channel.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Parse a bare `rust-toolchain` file (single line with toolchain name).
+fn try_read_toolchain_file(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let trimmed = content.trim();
+    if trimmed.is_empty() || trimmed.contains('[') {
+        return None;
+    }
+    Some(trimmed.to_string())
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-04-16
+
+### Fixed
+- **`setup` installs rust-analyzer for the default toolchain**: after
+  delegating to `probe-rust setup`, `probe-aeneas setup` now runs
+  `rustup component add rust-analyzer` directly as a fallback (probe-rust
+  setup previously only warned about a missing rust-analyzer without
+  installing it).
+- **`extract` installs rust-analyzer for the project's toolchain**: before
+  running `probe-rust extract`, probe-aeneas now detects the Rust project's
+  toolchain from `rust-toolchain.toml` or `rust-toolchain` and ensures
+  rust-analyzer is installed for that specific toolchain via
+  `rustup component add rust-analyzer --toolchain <channel>`. This fixes
+  Docker environments where the project uses a nightly toolchain (e.g.
+  `nightly-2026-03-23`) and rust-analyzer was only installed for the
+  default toolchain.
+
 ## [0.9.0] - 2026-04-14
 
 ### Added
@@ -162,7 +179,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.6.0...v0.7.0

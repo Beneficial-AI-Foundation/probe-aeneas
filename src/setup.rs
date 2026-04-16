@@ -136,6 +136,34 @@ pub fn resolve_charon() -> Option<PathBuf> {
     find_on_path("charon")
 }
 
+/// Ensure the `rust-analyzer` rustup component is installed.
+///
+/// When `toolchain` is `Some("nightly-2026-03-23")`, targets that specific
+/// toolchain; when `None`, targets the default toolchain.
+pub fn ensure_rust_analyzer_component(toolchain: Option<&str>) -> Result<(), String> {
+    let mut args = vec!["component", "add", "rust-analyzer"];
+    if let Some(tc) = toolchain {
+        args.push("--toolchain");
+        args.push(tc);
+    }
+    let label = toolchain.unwrap_or("default");
+    eprintln!("Ensuring rust-analyzer is installed for {label} toolchain...");
+
+    let output = Command::new("rustup")
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run rustup: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "rustup component add rust-analyzer failed for {label} toolchain: {stderr}"
+        ));
+    }
+    eprintln!("  ✓ rust-analyzer available for {label} toolchain");
+    Ok(())
+}
+
 /// Delegate to `probe-rust setup` to install probe-rust's own dependencies
 /// (rust-analyzer, scip). The `probe_rust_bin` must already be installed.
 fn run_probe_rust_setup(probe_rust_bin: &std::path::Path) -> Result<(), String> {
@@ -240,6 +268,13 @@ pub fn cmd_setup(status: bool) {
         if let Err(e) = run_probe_rust_setup(bin) {
             errors.push(e);
         }
+    }
+
+    // Ensure rust-analyzer is installed for the default toolchain.
+    // probe-rust setup only *checks* for it (warning, not error), so we
+    // install the rustup component directly as a fallback.
+    if let Err(e) = ensure_rust_analyzer_component(None) {
+        errors.push(e);
     }
 
     // charon
