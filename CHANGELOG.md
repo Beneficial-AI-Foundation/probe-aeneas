@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-04-16
+
+### Fixed
+- **Spec-based `verification-status` for Rust atoms**: translated functions
+  without a proven spec are now correctly marked `"unverified"` instead of
+  inheriting `"verified"` from the Lean definition. The status is derived
+  from the primary spec theorem (via `primary-spec` extension or `_spec`
+  naming convention). `"trusted"` and `"failed"` statuses are preserved
+  as-is. ([#5](https://github.com/Beneficial-AI-Foundation/probe-aeneas/issues/5))
+
 ## [0.9.1] - 2026-04-16
 
 ### Fixed

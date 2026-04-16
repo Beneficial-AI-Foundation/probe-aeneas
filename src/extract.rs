@@ -579,11 +579,40 @@ fn prefix_rust_code_paths(merged: &mut std::collections::BTreeMap<String, Atom>,
     }
 }
 
+/// Resolve the `verification-status` to propagate onto a Rust atom.
+///
+/// - `"trusted"` / `"failed"` on the Lean def are preserved as-is.
+/// - Otherwise, the primary spec theorem is looked up: if found, its
+///   `verification-status` is used; if absent, `"unverified"` is returned.
+fn resolve_verification_status(
+    lean_name: &str,
+    lean_atom: &Atom,
+    atoms: &std::collections::BTreeMap<String, Atom>,
+) -> serde_json::Value {
+    let lean_vs = lean_atom
+        .extensions
+        .get("verification-status")
+        .and_then(|v| v.as_str());
+
+    match lean_vs {
+        Some("trusted") | Some("failed") => lean_atom.extensions["verification-status"].clone(),
+        _ => {
+            let stripped = enrich::strip_prefix(lean_name);
+            let (_, spec_atom) = enrich::find_primary_spec(stripped, atoms);
+            match spec_atom.and_then(|s| s.extensions.get("verification-status")) {
+                Some(vs) => vs.clone(),
+                None => serde_json::json!("unverified"),
+            }
+        }
+    }
+}
+
 /// Add Aeneas-specific metadata to merged atoms.
 ///
 /// Two enrichment passes:
 /// 1. For each Rust atom with a Lean translation, set `translation-name`,
-///    `translation-path`, and `translation-text` from the Lean atom.
+///    `translation-path`, `translation-text`, and `verification-status`
+///    (spec-based) from the Lean atom and its primary spec.
 /// 2. For every Rust atom, set `is-disabled` to `false` when its
 ///    `rust-qualified-name` appears in `functions.json` **or** it already
 ///    has a `translation-name` from pass 1 (defensive: a translation found
@@ -603,13 +632,13 @@ fn enrich_with_aeneas_metadata(
                     lean_atom.code_path.clone(),
                     lean_atom.code_text.lines_start,
                     lean_atom.code_text.lines_end,
-                    lean_atom.extensions.get("verification-status").cloned(),
+                    resolve_verification_status(lean_name, lean_atom, merged),
                 )
             })
         })
         .collect();
 
-    for (rust_name, lean_name, path, start, end, lean_vs) in enrichments {
+    for (rust_name, lean_name, path, start, end, vs) in enrichments {
         if let Some(atom) = merged.get_mut(&rust_name) {
             atom.extensions
                 .insert("translation-name".to_string(), serde_json::json!(lean_name));
@@ -624,10 +653,8 @@ fn enrich_with_aeneas_metadata(
                     }),
                 );
             }
-            if let Some(vs) = lean_vs {
-                atom.extensions
-                    .insert("verification-status".to_string(), vs);
-            }
+            atom.extensions
+                .insert("verification-status".to_string(), vs);
         }
     }
 
@@ -1369,6 +1396,11 @@ charon:
             )),
             "translation-name should be set from Lean atom"
         );
+        assert_eq!(
+            atom.extensions.get("verification-status"),
+            Some(&serde_json::json!("unverified")),
+            "translated atom without spec should get unverified status"
+        );
     }
 
     #[test]
@@ -1404,6 +1436,144 @@ charon:
         assert_eq!(
             merged["probe:crate/1.0/stub()"].code_path, "",
             "Empty code-path (stdlib stubs) should not be prefixed"
+        );
+    }
+
+    fn make_spec_atom(name: &str, vs: &str) -> Atom {
+        let mut atom = Atom {
+            display_name: format!("{name}_spec"),
+            dependencies: std::collections::BTreeSet::new(),
+            code_module: "Module".to_string(),
+            code_path: "Module/Spec.lean".to_string(),
+            code_text: probe::types::CodeText {
+                lines_start: 200,
+                lines_end: 210,
+            },
+            kind: "theorem".to_string(),
+            language: "lean".to_string(),
+            extensions: std::collections::BTreeMap::new(),
+        };
+        atom.extensions
+            .insert("verification-status".to_string(), serde_json::json!(vs));
+        atom
+    }
+
+    fn setup_translation(
+        merged: &mut std::collections::BTreeMap<String, Atom>,
+        lean_vs: Option<&str>,
+        spec_vs: Option<&str>,
+    ) -> HashMap<String, String> {
+        let mut rust_atom = make_rust_atom("my_fn");
+        rust_atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("my_crate::my_fn"),
+        );
+        merged.insert("probe:my-crate/1.0/my_fn()".to_string(), rust_atom);
+
+        let mut lean_atom = make_lean_atom("my_fn");
+        if let Some(vs) = lean_vs {
+            lean_atom
+                .extensions
+                .insert("verification-status".to_string(), serde_json::json!(vs));
+        }
+        merged.insert("probe:my_crate.my_fn".to_string(), lean_atom);
+
+        if let Some(svs) = spec_vs {
+            merged.insert(
+                "probe:my_crate.my_fn_spec".to_string(),
+                make_spec_atom("my_crate.my_fn", svs),
+            );
+        }
+
+        let mut from_to = HashMap::new();
+        from_to.insert(
+            "probe:my-crate/1.0/my_fn()".to_string(),
+            "probe:my_crate.my_fn".to_string(),
+        );
+        from_to
+    }
+
+    #[test]
+    fn vs_verified_def_with_verified_spec() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, Some("verified"), Some("verified"));
+        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+
+        let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
+        assert_eq!(
+            atom.extensions.get("verification-status"),
+            Some(&serde_json::json!("verified")),
+            "def with verified spec should propagate verified"
+        );
+    }
+
+    #[test]
+    fn vs_verified_def_without_spec() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, Some("verified"), None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+
+        let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
+        assert_eq!(
+            atom.extensions.get("verification-status"),
+            Some(&serde_json::json!("unverified")),
+            "def without spec should be unverified even if lean def is verified"
+        );
+    }
+
+    #[test]
+    fn vs_trusted_def_preserved() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, Some("trusted"), Some("verified"));
+        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+
+        let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
+        assert_eq!(
+            atom.extensions.get("verification-status"),
+            Some(&serde_json::json!("trusted")),
+            "trusted status should be preserved regardless of spec"
+        );
+    }
+
+    #[test]
+    fn vs_failed_def_preserved() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, Some("failed"), Some("verified"));
+        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+
+        let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
+        assert_eq!(
+            atom.extensions.get("verification-status"),
+            Some(&serde_json::json!("failed")),
+            "failed status should be preserved regardless of spec"
+        );
+    }
+
+    #[test]
+    fn vs_verified_def_with_failed_spec() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, Some("verified"), Some("failed"));
+        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+
+        let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
+        assert_eq!(
+            atom.extensions.get("verification-status"),
+            Some(&serde_json::json!("failed")),
+            "spec's failed status should propagate to rust atom"
+        );
+    }
+
+    #[test]
+    fn vs_no_lean_status_no_spec() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, None, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+
+        let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
+        assert_eq!(
+            atom.extensions.get("verification-status"),
+            Some(&serde_json::json!("unverified")),
+            "lean def without status and no spec should be unverified"
         );
     }
 

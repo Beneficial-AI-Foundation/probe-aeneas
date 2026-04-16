@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.6
-Date: 2026-04-09
+Version: 2.7
+Date: 2026-04-16
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -238,7 +238,7 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `is-relevant` | bool | yes | Inverse of `is-disabled`. `true` when Aeneas transpiled this function. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
-| `verification-status` | string | no | Verification status of the Lean translation: `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. Propagated from the Lean atom referenced by `translation-name`. Absent when the Rust function has no Lean translation. Matches the semantics of `verification-status` on Lean atoms, enabling uniform queries across both languages (same key as used by probe-verus on Rust atoms). |
+| `verification-status` | string | no | Verification status derived from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is propagated directly. Otherwise, if a primary spec exists (via `primary-spec` extension or `<name>_spec` naming convention), the spec's `verification-status` is used; if no spec exists, the status is `"unverified"`. Always present when `translation-name` is set; absent when the Rust function has no Lean translation. |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
@@ -265,6 +265,8 @@ the enrichment pass:
 | `specs` | array of strings | no | Code-names of spec theorems (present on defs/abbrevs that have associated specs) |
 | `primary-spec` | string | no | Code-name of the primary spec theorem for this definition |
 | `is-primary-spec` | bool | no | Whether this atom is the primary spec for a function (present on spec theorems) |
+
+> **Note on spec discovery**: probe-aeneas resolves the primary spec via the `primary-spec` extension on the definition atom, falling back to the `<name>_spec` naming convention. It does not currently walk the `specs` array. Definitions whose specs do not match either pattern will be classified as `"unverified"` on the Rust side.
 | `rust-source` | string or null | no | Rust source reference from Aeneas docstring |
 
 ### `is-disabled` -- Aeneas Scope Indicator

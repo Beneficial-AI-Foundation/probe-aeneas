@@ -95,7 +95,14 @@ the merged atom map:
    translation, sets `translation-name`, `translation-path`, and
    `translation-text` from the corresponding Lean atom.
 
-2. **`is-disabled` flag**: for every Rust atom, `is-disabled` is `false`
+2. **Verification status**: for each translated Rust atom, derives
+   `verification-status` from the Lean definition's primary spec
+   theorem (via `primary-spec` extension or `_spec` naming convention).
+   If the Lean def is `"trusted"` or `"failed"`, that status is
+   propagated directly. Otherwise, the spec's status is used; if no
+   spec exists, the status is `"unverified"`.
+
+3. **`is-disabled` flag**: for every Rust atom, `is-disabled` is `false`
    when its `rust-qualified-name` appears as a `rust_name` in
    `functions.json` or the atom already has a `translation-name` from
    step 1. Otherwise it is out of scope (`is-disabled: true`).

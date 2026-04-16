@@ -383,7 +383,7 @@ fn hide_single_child_parents(results: &mut [EnrichedFunctionOutput]) {
 ///
 /// Checks the `primary-spec` extension first, then falls back to the
 /// `<name>_spec` naming convention.
-fn find_primary_spec<'a>(
+pub(crate) fn find_primary_spec<'a>(
     lean_name: &str,
     atoms: &'a BTreeMap<String, Atom>,
 ) -> (Option<String>, Option<&'a Atom>) {
