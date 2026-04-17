@@ -197,9 +197,27 @@ fn resolve_probe_lean() -> Option<PathBuf> {
 // Status reporting
 // ---------------------------------------------------------------------------
 
+fn query_tool_version(bin: &std::path::Path) -> Option<String> {
+    let output = Command::new(bin).arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().next()?.trim().to_string();
+    if line.is_empty() {
+        None
+    } else {
+        Some(line)
+    }
+}
+
 fn status_line(name: &str, location: &Option<PathBuf>, note: &str) {
     match location {
-        Some(p) => eprintln!("  {name:<16} {}", p.display()),
+        Some(p) => {
+            let version = query_tool_version(p).unwrap_or_else(|| "unknown version".to_string());
+            eprintln!("  {name:<16} {version}");
+            eprintln!("  {:<16} {}", "", p.display());
+        }
         None => eprintln!("  {name:<16} missing{note}"),
     }
 }
