@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-04-18
+
+### Fixed
+- **Workspace-root extraction for cross-crate translations**: when the Aeneas
+  project targets a workspace member crate (e.g. `signal-crypto` in libsignal),
+  `probe-rust extract` now runs at the **workspace root** instead of the
+  individual member directory. This produces Rust atoms for all workspace
+  members, enabling translation matching for functions from dependency crates
+  listed in `charon.include` (e.g. `libsignal_core`). Previously only the
+  target crate's functions were extracted, causing ~30 translatable functions
+  to get no `translation-name` link.
+  ([#7](https://github.com/Beneficial-AI-Foundation/probe-aeneas/issues/7))
+- **Charon `--package` backfill for workspace projects**: when the target
+  package is resolved from `crate.name` (rather than `charon.package` or
+  `-p` in `cargo_args`), the resolved name is now backfilled into
+  `charon_config.package`. This ensures `ensure_charon_llbc()` always emits
+  `--package` when running at the workspace root.
+
 ## [0.9.3] - 2026-04-17
 
 ### Added
@@ -202,7 +220,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.0...v0.9.1

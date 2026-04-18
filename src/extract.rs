@@ -63,9 +63,11 @@ pub struct ResolvedProject {
     pub rust_project: PathBuf,
     pub lean_project: PathBuf,
     pub functions_json: Option<PathBuf>,
-    /// The `crate.dir` value from `aeneas-config.yml`.
-    /// When not `"."`, Rust atoms need their `code-path` prefixed with this
-    /// directory so paths are relative to the repository root, not the crate.
+    /// Effective crate directory relative to the project root.
+    /// `"."` when the Rust project IS the project root (including workspace
+    /// layouts where probe-rust runs at the workspace root).
+    /// Non-`"."` for standalone subdirectory crates, where Rust atom
+    /// `code-path` values need prefixing to become project-relative.
     pub crate_dir: String,
     /// Charon configuration from `aeneas-config.yml`, used to pre-generate
     /// the LLBC file with the correct cargo args, start_from, and exclude lists.
@@ -113,11 +115,28 @@ fn resolve_target_package_name(
     crate_name.map(|n| n.replace('_', "-"))
 }
 
+/// Check whether `cargo_args` already contains `-p` or `--package`.
+fn has_package_in_cargo_args(config: &CharonConfig) -> bool {
+    let Some(ref args) = config.cargo_args else {
+        return false;
+    };
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if (arg == "-p" || arg == "--package") && iter.next().is_some() {
+            return true;
+        }
+        if arg.starts_with("-p=") || arg.starts_with("--package=") {
+            return true;
+        }
+    }
+    false
+}
+
 /// Resolve a workspace member crate directory using `cargo metadata`.
 ///
 /// Given a workspace root, finds the member matching the target package name
-/// and returns `(member_directory, relative_path_from_project_root)`. The
-/// relative path is used as `crate_dir` for code-path prefixing.
+/// and returns `(member_directory, relative_path_from_project_root)`. Used
+/// by `resolve_project()` for validation (confirming the package exists).
 fn resolve_workspace_member(
     project: &Path,
     crate_name: Option<&str>,
@@ -215,7 +234,7 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
 
     let content = std::fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read {}: {e}", config_path.display()))?;
-    let config: AeneasProjectConfig = serde_yaml::from_str(&content)
+    let mut config: AeneasProjectConfig = serde_yaml::from_str(&content)
         .map_err(|e| format!("Failed to parse {}: {e}", config_path.display()))?;
 
     let raw_crate_dir = &config.crate_config.dir;
@@ -228,12 +247,29 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
         } else if is_cargo_workspace(project) {
             // Workspace layout: crate.dir doesn't have its own Cargo.toml
             // (e.g. libsignal with crate.dir = "rust" and workspace root at
-            // project). Resolve the actual member crate via cargo metadata.
+            // project). Validate the member exists, but use the workspace
+            // root as rust_project so probe-rust indexes all crates.
             resolve_workspace_member(
                 project,
                 config.crate_config.name.as_deref(),
                 config.charon.as_ref(),
-            )?
+            )?;
+            // Backfill charon package so ensure_charon_llbc() emits
+            // --package when running at the workspace root.
+            if let Some(ref mut charon) = config.charon {
+                if charon.package.is_none() && !has_package_in_cargo_args(charon) {
+                    charon.package =
+                        resolve_target_package_name(config.crate_config.name.as_deref(), None);
+                }
+            } else if let Some(pkg) =
+                resolve_target_package_name(config.crate_config.name.as_deref(), None)
+            {
+                config.charon = Some(CharonConfig {
+                    package: Some(pkg),
+                    ..Default::default()
+                });
+            }
+            (project.to_path_buf(), ".".to_string())
         } else {
             return Err(format!(
                 "No Cargo.toml found at {} (derived from crate.dir = {:?} in aeneas-config.yml)",
@@ -1034,15 +1070,15 @@ mod tests {
 
         let resolved = resolve_project(&project).unwrap();
 
-        let expected_member = std::fs::canonicalize(project.join("rust/crypto")).unwrap();
-        let actual_member = std::fs::canonicalize(&resolved.rust_project).unwrap();
+        let expected_root = std::fs::canonicalize(&project).unwrap();
+        let actual = std::fs::canonicalize(&resolved.rust_project).unwrap();
         assert_eq!(
-            actual_member, expected_member,
-            "Should resolve to the member crate directory"
+            actual, expected_root,
+            "Should resolve to workspace root, not member crate"
         );
         assert_eq!(
-            resolved.crate_dir, "rust/crypto",
-            "crate_dir should be the relative path to the member"
+            resolved.crate_dir, ".",
+            "crate_dir should be '.' when running at workspace root"
         );
     }
 
@@ -1073,6 +1109,113 @@ mod tests {
         assert!(
             err.contains("Cargo.toml"),
             "Non-workspace root should still error: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_project_workspace_unknown_package_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("workspace");
+        fs::create_dir_all(project.join("rust/crypto")).unwrap();
+
+        fs::write(
+            project.join("Cargo.toml"),
+            "[workspace]\nresolver = \"2\"\nmembers = [\"rust/crypto\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            project.join("rust/crypto/Cargo.toml"),
+            "[package]\nname = \"signal-crypto\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        let src = project.join("rust/crypto/src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("lib.rs"), "").unwrap();
+        fs::write(
+            project.join("lakefile.toml"),
+            "name = \"T\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
+        // crate.name resolves to "nonexistent-crate" which doesn't match any member
+        fs::write(
+            project.join("aeneas-config.yml"),
+            "crate:\n  dir: \"rust\"\n  name: \"nonexistent_crate\"\n",
+        )
+        .unwrap();
+
+        let err = resolve_project(&project).unwrap_err();
+        assert!(
+            err.contains("not found"),
+            "Unknown package should error: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_project_workspace_backfills_charon_package() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("workspace");
+        fs::create_dir_all(project.join("rust/crypto")).unwrap();
+
+        fs::write(
+            project.join("Cargo.toml"),
+            "[workspace]\nresolver = \"2\"\nmembers = [\"rust/crypto\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            project.join("rust/crypto/Cargo.toml"),
+            "[package]\nname = \"signal-crypto\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        let src = project.join("rust/crypto/src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("lib.rs"), "").unwrap();
+        fs::write(
+            project.join("lakefile.toml"),
+            "name = \"T\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
+        // Only crate.name set, no charon.package or cargo_args -p
+        fs::write(
+            project.join("aeneas-config.yml"),
+            "crate:\n  dir: \"rust\"\n  name: \"signal_crypto\"\ncharon:\n  preset: aeneas\n",
+        )
+        .unwrap();
+
+        let resolved = resolve_project(&project).unwrap();
+
+        assert_eq!(
+            resolved
+                .charon_config
+                .as_ref()
+                .and_then(|c| c.package.as_deref()),
+            Some("signal-crypto"),
+            "charon.package should be backfilled from crate.name"
+        );
+    }
+
+    #[test]
+    fn resolve_project_workspace_preserves_existing_charon_package() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("workspace");
+        create_workspace_project(
+            &project,
+            "rust/crypto",
+            "signal-crypto",
+            "rust",
+            "signal_crypto",
+        );
+
+        let resolved = resolve_project(&project).unwrap();
+
+        // create_workspace_project sets cargo_args: ["-p", "signal-crypto"],
+        // so charon.package should NOT be backfilled (already in cargo_args).
+        assert!(
+            resolved
+                .charon_config
+                .as_ref()
+                .and_then(|c| c.package.as_deref())
+                .is_none(),
+            "charon.package should not be set when -p is already in cargo_args"
         );
     }
 

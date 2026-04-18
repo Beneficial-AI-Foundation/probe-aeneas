@@ -404,13 +404,20 @@ current directory. The `-o` flag always overrides the output location.
 ### Code paths
 
 Rust atom `code-path` values are relative to the repository root (the Aeneas
-project directory). When the Rust crate lives in a subdirectory
+project directory).
+
+When the Rust crate lives in a subdirectory with its own `Cargo.toml`
 (`crate.dir != "."` in `aeneas-config.yml`), probe-aeneas prefixes the
 crate-relative paths from probe-rust with the crate directory. For example,
 with `crate.dir = "curve25519-dalek"`:
 
 - probe-rust produces: `src/backend/mod.rs`
 - probe-aeneas emits: `curve25519-dalek/src/backend/mod.rs`
+
+When the project root is a Cargo workspace (and `crate.dir` lacks its own
+`Cargo.toml`), probe-rust runs at the workspace root and produces
+workspace-relative paths directly (e.g. `rust/crypto/src/foo.rs`). No
+prefixing is needed since the workspace root IS the project root.
 
 This ensures `code-path` matches file paths as stored when the full
 repository is ingested into a database.
