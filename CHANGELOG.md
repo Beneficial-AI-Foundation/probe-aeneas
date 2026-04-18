@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-04-18
+
+### Fixed
+- **`normalize_rust_name` handles nested generics and `{impl Trait}` format**:
+  the name normalization used for RQN-based translation matching (Strategy 1)
+  now correctly handles nested angle brackets (e.g.
+  `From<SpecificServiceId<KIND>>`), strips `impl ` prefixes from Charon's
+  `{impl Trait}` shorthand, and removes ` for Type` suffixes from expanded
+  `{Trait for Type}` notation. Previously, the regex-based approach failed on
+  nested generics (leaving stray `>` characters) and didn't normalize the two
+  trait-impl formats to the same form, causing 3 translations to fall back to
+  lower-confidence strategies (`file-and-name`, `file-and-lines`) instead of
+  matching as `exact`.
+  ([#8](https://github.com/Beneficial-AI-Foundation/probe-aeneas/issues/8))
+
 ## [0.9.4] - 2026-04-18
 
 ### Fixed
@@ -220,7 +235,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.1...v0.9.2

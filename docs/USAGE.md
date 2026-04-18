@@ -291,8 +291,9 @@ strategy, it is excluded from later ones.
 
 Matches via the `rust-qualified-name` extension field on Rust atoms (derived
 from Charon LLBC), joined with the `rust_name` field in `functions.json`.
-Names are normalized: lifetime parameters, reference markers, brace wrappers,
-and generics are stripped before comparison.
+Names are normalized: lifetime parameters, reference markers, generic
+parameters (at any nesting depth), `impl` prefixes, and `for Type` suffixes
+in trait-impl brace segments are all stripped before comparison.
 
 **Requires:** `probe-rust extract --with-charon` for the Rust atoms.
 

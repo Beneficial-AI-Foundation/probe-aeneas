@@ -18,9 +18,61 @@ fn normalize_source_path(p: &str) -> &str {
 }
 
 static RE_REF: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"&'?\w*\s*").expect("valid regex"));
-static RE_BRACE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{([^}]+)\}").expect("valid regex"));
-static RE_GENERIC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<[^>]*>").expect("valid regex"));
+/// Unwrap `{…}` segments in a Rust qualified name, normalizing trait-impl
+/// notation so that both Charon's `{impl Trait}` shorthand and the expanded
+/// `{Trait<Params> for Type}` form reduce to just the trait path.
+fn unwrap_braces(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            let mut content = String::new();
+            let mut depth = 1usize;
+            for c in chars.by_ref() {
+                match c {
+                    '{' => {
+                        depth += 1;
+                        content.push(c);
+                    }
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                        content.push(c);
+                    }
+                    _ => content.push(c),
+                }
+            }
+            let inner = content.strip_prefix("impl ").unwrap_or(&content);
+            let inner = match inner.find(" for ") {
+                Some(idx) => &inner[..idx],
+                None => inner,
+            };
+            result.push_str(inner);
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+/// Strip all generic parameters, handling arbitrary nesting depth.
+///
+/// `From<SpecificServiceId<KIND>>` → `From`
+/// `TryFrom<u8, TryFromReprError<u8>>` → `TryFrom`
+fn strip_generics(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut depth = 0usize;
+    for ch in s.chars() {
+        match ch {
+            '<' => depth += 1,
+            '>' if depth > 0 => depth -= 1,
+            _ if depth == 0 => result.push(ch),
+            _ => {}
+        }
+    }
+    result
+}
 
 /// Statistics from translation generation.
 pub struct TranslateStats {
@@ -120,11 +172,13 @@ pub fn build_functions_rust_names(functions: &[FunctionRecord]) -> HashSet<Strin
 
 /// Normalize a Rust qualified name for fuzzy matching.
 ///
-/// Strips lifetime parameters, reference markers, brace wrappers, and generics.
+/// Strips lifetime parameters, reference markers, brace wrappers (including
+/// `impl` prefixes and `for Type` suffixes), and generic parameters at any
+/// nesting depth.
 pub(crate) fn normalize_rust_name(name: &str) -> String {
     let s = RE_REF.replace_all(name, "");
-    let s = RE_BRACE.replace_all(&s, "$1");
-    let s = RE_GENERIC.replace_all(&s, "");
+    let s = unwrap_braces(&s);
+    let s = strip_generics(&s);
     s.replace(' ', "")
 }
 
@@ -508,6 +562,88 @@ mod tests {
     #[test]
     fn test_normalize_rust_name_identity_for_simple_names() {
         assert_eq!(normalize_rust_name("foo"), "foo");
+    }
+
+    // -- Regression-safety tests: pin output for inputs that already work --
+
+    #[test]
+    fn test_normalize_simple_brace_unwrap() {
+        assert_eq!(
+            normalize_rust_name("path::{Type}::method"),
+            "path::Type::method"
+        );
+    }
+
+    #[test]
+    fn test_normalize_no_braces_passthrough() {
+        assert_eq!(
+            normalize_rust_name("my_crate::module::func"),
+            "my_crate::module::func"
+        );
+    }
+
+    #[test]
+    fn test_normalize_single_level_generics() {
+        assert_eq!(normalize_rust_name("Vec<u8>"), "Vec");
+        assert_eq!(normalize_rust_name("HashMap<String, Vec<u8>>"), "HashMap");
+    }
+
+    // -- New-behavior tests: the three root causes from issue #8 --
+
+    #[test]
+    fn test_normalize_nested_generics() {
+        assert_eq!(normalize_rust_name("From<SpecificServiceId<KIND>>"), "From");
+        assert_eq!(
+            normalize_rust_name("TryFrom<u8, TryFromReprError<u8>>"),
+            "TryFrom"
+        );
+    }
+
+    #[test]
+    fn test_normalize_impl_and_for_type_match() {
+        let atom = normalize_rust_name("libsignal_core::address::{impl core::convert::From}::from");
+        let fj = normalize_rust_name(
+            "libsignal_core::address::{core::convert::From<libsignal_core::address::ServiceIdKind> for u8}::from",
+        );
+        assert_eq!(atom, fj);
+    }
+
+    #[test]
+    fn test_normalize_impl_stripped() {
+        assert_eq!(
+            normalize_rust_name("path::{impl core::convert::From}::method"),
+            "path::core::convert::From::method"
+        );
+    }
+
+    #[test]
+    fn test_normalize_for_type_stripped() {
+        assert_eq!(
+            normalize_rust_name("path::{core::convert::From<T> for u8}::method"),
+            "path::core::convert::From::method"
+        );
+    }
+
+    // -- Edge-case tests for unwrap_braces --
+
+    #[test]
+    fn test_unwrap_braces_multiple_segments() {
+        assert_eq!(unwrap_braces("{impl A}::{B for C}::m"), "A::B::m");
+    }
+
+    #[test]
+    fn test_unwrap_braces_no_braces() {
+        assert_eq!(unwrap_braces("plain::path"), "plain::path");
+    }
+
+    #[test]
+    fn test_unwrap_braces_impl_without_for() {
+        assert_eq!(unwrap_braces("{impl Trait}"), "Trait");
+    }
+
+    #[test]
+    fn test_unwrap_braces_for_without_impl() {
+        assert_eq!(unwrap_braces("{Trait for Type}"), "Trait");
     }
 
     #[test]
