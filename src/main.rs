@@ -162,7 +162,7 @@ fn resolve_and_extract(
     aeneas_config: Option<PathBuf>,
     lake: bool,
     with_public_api: bool,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let (rust, rust_project, lean_project, functions, rust_path_prefix, charon_config) =
         if let Some(ref proj) = project {
             let resolved = extract::resolve_project(proj)?;
@@ -200,13 +200,13 @@ fn resolve_and_extract(
         rust_path_prefix.as_deref(),
         with_public_api,
     )
-    .map_err(String::from)
+    .map_err(anyhow::Error::new)
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    let result = match cli.command {
+    let result: anyhow::Result<()> = match cli.command {
         Commands::Extract {
             project,
             rust,
@@ -236,7 +236,8 @@ fn main() {
             lean,
             functions,
             output,
-        } => extract::run_translate_only(&rust, &lean, &functions, &output).map_err(String::from),
+        } => extract::run_translate_only(&rust, &lean, &functions, &output)
+            .map_err(anyhow::Error::new),
 
         Commands::Listfuns {
             lean_project,
@@ -248,9 +249,10 @@ fn main() {
             aeneas_config,
         } => {
             if lake {
-                listfuns::run_listfuns(&lean_project, &output).map_err(String::from)
+                listfuns::run_listfuns(&lean_project, &output).map_err(anyhow::Error::new)
             } else if no_enrich {
-                gen_functions::generate_functions_json(&lean_project, &output).map_err(String::from)
+                gen_functions::generate_functions_json(&lean_project, &output)
+                    .map_err(anyhow::Error::new)
             } else {
                 listfuns::run_enriched_listfuns(
                     &lean_project,
@@ -259,7 +261,7 @@ fn main() {
                     module_prefix.as_deref(),
                     aeneas_config.as_deref(),
                 )
-                .map_err(String::from)
+                .map_err(anyhow::Error::new)
             }
         }
 

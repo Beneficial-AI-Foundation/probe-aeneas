@@ -6,8 +6,7 @@
 //! one typed variant (callers can match on it); IO and serialization errors flow
 //! through `Other(anyhow::Error)` via `.context("...")` chains.
 //!
-//! `impl From<GenFunctionsError> for String` at the bottom keeps `main.rs`
-//! working through `?` until it migrates to typed errors.
+//! Errors propagate to `main.rs` via `.map_err(anyhow::Error::new)`.
 
 use std::path::{Path, PathBuf};
 
@@ -332,29 +331,6 @@ impl From<&FunctionRecord> for FunctionOutputRecord {
 #[derive(Serialize)]
 struct FunctionsFileOutput {
     functions: Vec<FunctionOutputRecord>,
-}
-
-// ---------------------------------------------------------------------------
-// Boundary: String compatibility for callers not yet migrated
-// ---------------------------------------------------------------------------
-
-/// Convert a `GenFunctionsError` to a `String` so callers in `main.rs` that
-/// still return `Result<_, String>` can propagate via `?`.
-///
-/// Walks the `std::error::Error::source` chain so the resulting string captures
-/// context layers attached by anyhow. Remove this impl when `main.rs` migrates.
-impl From<GenFunctionsError> for String {
-    fn from(err: GenFunctionsError) -> Self {
-        use std::error::Error;
-        let mut msg = err.to_string();
-        let mut source: Option<&dyn Error> = err.source();
-        while let Some(s) = source {
-            msg.push_str(": ");
-            msg.push_str(&s.to_string());
-            source = s.source();
-        }
-        msg
-    }
 }
 
 #[cfg(test)]

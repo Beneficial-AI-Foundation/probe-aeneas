@@ -12,10 +12,7 @@
 //! `.context("...")?`. Errors from `extract_runner` propagate through the
 //! `ExtractRunner` variant via `#[from]`.
 //!
-//! Callers in `main.rs` still use `Result<_, String>`; the
-//! `From<ListfunsError> for String` impl at the bottom walks the source
-//! chain so they keep working through `?`. Remove that impl once `main.rs`
-//! migrates to typed errors.
+//! Errors propagate to `main.rs` via `.map_err(anyhow::Error::new)`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -188,30 +185,6 @@ fn detect_crate_name(records: &[crate::types::FunctionRecord]) -> String {
         }
     }
     String::new()
-}
-
-// ---------------------------------------------------------------------------
-// Boundary: String compatibility for callers not yet migrated
-// ---------------------------------------------------------------------------
-
-/// Convert a `ListfunsError` to a `String` so callers in `main.rs` that
-/// still return `Result<_, String>` can propagate via `?`.
-///
-/// Walks the `std::error::Error::source` chain so messages from
-/// `extract_runner` and `anyhow`-wrapped causes are included end-to-end.
-/// Remove this impl when every caller has migrated to typed errors.
-impl From<ListfunsError> for String {
-    fn from(err: ListfunsError) -> Self {
-        use std::error::Error;
-        let mut msg = err.to_string();
-        let mut source: Option<&dyn Error> = err.source();
-        while let Some(s) = source {
-            msg.push_str(": ");
-            msg.push_str(&s.to_string());
-            source = s.source();
-        }
-        msg
-    }
 }
 
 #[cfg(test)]

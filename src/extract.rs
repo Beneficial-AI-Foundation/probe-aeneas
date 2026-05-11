@@ -6,15 +6,12 @@
 //! lean — only `ThreadPanicked` carries structured info; everything else
 //! is either propagation from a submodule (`ExtractRunner`, `Listfuns`)
 //! or `Other(anyhow::Error)` for context-chained ad-hoc errors and the
-//! transitional `String` bridge from not-yet-migrated modules
-//! `merge_atom_files`).
+//! `String` bridge from `merge_atom_files` (upstream `probe` crate, not yet
+//! migrated) via `.map_err(anyhow::Error::msg)`.
 //!
 //! CLI input-validation messages and YAML/JSON parse errors flow through
 //! `.context("...")?` or `anyhow::anyhow!("...").into()` — the typed enum
 //! stays tight, anyhow does the heavy lifting for context.
-//!
-//! `impl From<ExtractError> for String` at the bottom keeps `main.rs`
-//! working through `?` until it migrates.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -62,7 +59,7 @@ pub enum ExtractError {
     /// Catch-all wrapping `anyhow::Error`. Used for:
     /// - io::Error / serde_json::Error / serde_yaml::Error via `.context()?`
     /// - ad-hoc CLI input validation messages via `anyhow::anyhow!(...).into()`
-    /// - the transitional `Result<_, String>` bridge from unmigrated modules
+    /// - `Result<_, String>` from `merge_atom_files` (upstream `probe` crate)
     ///   via `.map_err(anyhow::Error::msg)?`
     #[error(transparent)]
     Other(#[from] anyhow::Error),
@@ -983,32 +980,6 @@ pub fn run_translate_only(
 
     println!("\nWritten to {}", output_path.display());
     Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Boundary: String compatibility for callers not yet migrated
-// ---------------------------------------------------------------------------
-
-/// Convert an `ExtractError` to a `String` so callers in `main.rs` that
-/// still return `Result<_, String>` can propagate via `?`.
-///
-/// Walks the `std::error::Error::source` chain so the resulting string
-/// captures everything from the outer message down through anyhow's
-/// `.context()` layers and any io / serde / extract_runner / listfuns
-/// source attached underneath. Remove this impl when every caller has
-/// migrated to typed errors.
-impl From<ExtractError> for String {
-    fn from(err: ExtractError) -> Self {
-        use std::error::Error;
-        let mut msg = err.to_string();
-        let mut source: Option<&dyn Error> = err.source();
-        while let Some(s) = source {
-            msg.push_str(": ");
-            msg.push_str(&s.to_string());
-            source = s.source();
-        }
-        msg
-    }
 }
 
 #[cfg(test)]
