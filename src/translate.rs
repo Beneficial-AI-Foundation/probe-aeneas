@@ -6,13 +6,10 @@
 //!
 //! ## Error model
 //!
-//! Fallible functions return [`Result<T, TranslateError>`]. All errors are
-//! IO or JSON parse failures and flow through `Other(anyhow::Error)` via
-//! `.context("...")` chains. There are no typed variants beyond the catch-all.
-//!
-//! Callers in `extract` and `listfuns` bridge via `.map_err(anyhow::Error::new)?`
-//! so these errors propagate into `ExtractError::Other` / `ListfunsError::Other`
-//! with their full source chain preserved.
+//! Fallible functions return [`anyhow::Result<T>`] directly. All failures are
+//! IO or JSON parse errors, so no typed variants are needed. Callers in
+//! `extract` and `listfuns` use `?` to propagate these into their own
+//! `Other(anyhow::Error)` catch-all variants.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -23,27 +20,6 @@ use probe::types::{Atom, TranslationMapping};
 use regex::Regex;
 
 use crate::types::{FunctionRecord, FunctionsFile, LineRange};
-
-// ---------------------------------------------------------------------------
-// Typed error
-// ---------------------------------------------------------------------------
-
-/// Errors produced by the `translate` module.
-///
-/// The matching logic is pure and infallible; only the two I/O loaders
-/// ([`load_atoms`], [`load_functions`]) can fail. All failures flow through
-/// the `Other` catch-all via anyhow context chains.
-#[derive(Debug, thiserror::Error)]
-pub enum TranslateError {
-    /// Catch-all wrapping `anyhow::Error`. Covers `io::Error` from file reads,
-    /// `serde_json::Error` from JSON parsing, and the `String`-error bridge
-    /// from `probe::types::load_atom_file`.
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
-}
-
-/// Convenience alias used throughout this module.
-pub type Result<T> = std::result::Result<T, TranslateError>;
 
 /// Normalize a source path for matching: strip leading package-name component
 /// so `"curve25519-dalek/src/foo.rs"` and `"src/foo.rs"` both become `"src/foo.rs"`.
@@ -299,7 +275,7 @@ fn disambiguate_by_file_and_lines<'a>(
 ) -> Option<&'a String> {
     let func_source = func.source.as_deref()?;
     let norm_func_source = normalize_source_path(func_source);
-    let func_range = func.lines.as_deref().and_then(LineRange::parse);
+    let func_range = func.lines.as_deref().and_then(|s| LineRange::parse(s).ok());
 
     let mut file_matches: Vec<&String> = candidates
         .iter()
@@ -423,7 +399,7 @@ fn strategy_file_line_overlap(
                 continue;
             }
 
-            let func_range = match func.lines.as_deref().and_then(LineRange::parse) {
+            let func_range = match func.lines.as_deref().and_then(|s| LineRange::parse(s).ok()) {
                 Some(r) => r,
                 None => continue,
             };
@@ -454,7 +430,7 @@ fn strategy_file_line_overlap(
 }
 
 /// Load functions.json from disk.
-pub fn load_functions(path: &Path) -> Result<Vec<FunctionRecord>> {
+pub fn load_functions(path: &Path) -> anyhow::Result<Vec<FunctionRecord>> {
     let content =
         std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let file: FunctionsFile =
@@ -463,7 +439,7 @@ pub fn load_functions(path: &Path) -> Result<Vec<FunctionRecord>> {
 }
 
 /// Load atom data from a probe envelope JSON file.
-pub fn load_atoms(path: &Path) -> Result<BTreeMap<String, Atom>> {
+pub fn load_atoms(path: &Path) -> anyhow::Result<BTreeMap<String, Atom>> {
     let (data, _provenance) = probe::types::load_atom_file(path).map_err(anyhow::Error::msg)?;
     Ok(data)
 }
@@ -693,9 +669,9 @@ mod tests {
 
     #[test]
     fn test_line_range_parse_invalid() {
-        assert!(LineRange::parse("292-325").is_none());
-        assert!(LineRange::parse("").is_none());
-        assert!(LineRange::parse("L325-L292").is_none()); // start > end
+        assert!(LineRange::parse("292-325").is_err());
+        assert!(LineRange::parse("").is_err());
+        assert!(LineRange::parse("L325-L292").is_err()); // start > end
     }
 
     #[test]

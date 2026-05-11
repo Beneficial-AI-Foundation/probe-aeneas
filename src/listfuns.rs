@@ -111,9 +111,8 @@ pub fn run_enriched_listfuns(
     module_prefix: Option<&str>,
     aeneas_config_path: Option<&Path>,
 ) -> Result<()> {
-    let records = gen_functions::parse_aeneas_project(lean_project)
-        .map_err(anyhow::Error::new)
-        .context("parse Aeneas project")?;
+    let records =
+        gen_functions::parse_aeneas_project(lean_project).context("parse Aeneas project")?;
     println!(
         "Parsed {} function entries from Aeneas files",
         records.len()
@@ -122,9 +121,8 @@ pub fn run_enriched_listfuns(
     let atoms = load_atoms(lean_project, atoms_path, module_prefix)?;
     println!("Loaded {} atoms from probe-lean", atoms.len());
 
-    let config = AeneasConfig::load(aeneas_config_path, Some(lean_project))
-        .map_err(anyhow::Error::new)
-        .context("load aeneas config")?;
+    let config =
+        AeneasConfig::load(aeneas_config_path, Some(lean_project)).context("load aeneas config")?;
 
     let rust_crate_name = detect_crate_name(&records);
     println!("Detected crate name: {rust_crate_name:?}");
@@ -161,7 +159,6 @@ fn load_atoms(
     };
 
     let atoms = crate::translate::load_atoms(&json_path)
-        .map_err(anyhow::Error::new)
         .with_context(|| format!("load atoms from {}", json_path.display()))?;
     Ok(atoms)
 }

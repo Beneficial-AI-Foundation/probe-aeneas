@@ -450,9 +450,7 @@ pub fn run_extract(
     let functions_path = resolve_functions(functions_json, lean_project, use_lake)?;
 
     // --- Load Aeneas config (optional) ---
-    let config = AeneasConfig::load(aeneas_config, lean_project)
-        .map_err(anyhow::Error::new)
-        .context("load aeneas config")?;
+    let config = AeneasConfig::load(aeneas_config, lean_project).context("load aeneas config")?;
 
     // --- Generate translations ---
     let (translations_result, funs_rust_names) =
@@ -581,20 +579,16 @@ fn run_translate(
 ) -> Result<(TranslationMaps, HashSet<String>)> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
-        .map_err(anyhow::Error::new)
         .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
     println!("  {} atoms", rust_data.len());
 
     println!("Loading Lean atoms from {}...", lean_path.display());
     let lean_data = load_atoms(lean_path)
-        .map_err(anyhow::Error::new)
         .with_context(|| format!("load Lean atoms from {}", lean_path.display()))?;
     println!("  {} atoms", lean_data.len());
 
     println!("Loading functions from {}...", functions_path.display());
-    let functions = load_functions(functions_path)
-        .map_err(anyhow::Error::new)
-        .with_context(|| format!("load functions from {}", functions_path.display()))?;
+    let functions = load_functions(functions_path)?;
     println!("  {} entries", functions.len());
 
     let funs_rust_names = build_functions_rust_names(&functions);
@@ -938,20 +932,16 @@ pub fn run_translate_only(
 ) -> Result<()> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
-        .map_err(anyhow::Error::new)
         .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
     println!("  {} atoms", rust_data.len());
 
     println!("Loading Lean atoms from {}...", lean_path.display());
     let lean_data = load_atoms(lean_path)
-        .map_err(anyhow::Error::new)
         .with_context(|| format!("load Lean atoms from {}", lean_path.display()))?;
     println!("  {} atoms", lean_data.len());
 
     println!("Loading functions from {}...", functions_path.display());
-    let functions = load_functions(functions_path)
-        .map_err(anyhow::Error::new)
-        .with_context(|| format!("load functions from {}", functions_path.display()))?;
+    let functions = load_functions(functions_path)?;
     println!("  {} entries", functions.len());
 
     println!("\nGenerating translations...");

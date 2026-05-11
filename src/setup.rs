@@ -9,9 +9,9 @@
 //! ## Error model
 //!
 //! Library functions return [`Result<T, SetupError>`]. The `SetupError` enum
-//! (defined with `thiserror`) names the categorical failure modes; an `Io`
-//! variant captures the "operation X failed because of io::Error" cases with
-//! an attached context string.
+//! (defined with `thiserror`) names the categorical failure modes. Open-ended
+//! IO failures flow through `Other(#[from] anyhow::Error)` via `.with_context()`
+//! chains, consistent with every other module in this crate.
 //!
 //! The [`cmd_setup`] orchestrator uses `anyhow::Error` to aggregate errors
 //! from multiple subtasks with `.context()` labels, demonstrating the
@@ -66,29 +66,10 @@ pub enum SetupError {
     #[error("rustup component add rust-analyzer failed for {toolchain} toolchain: {stderr}")]
     RustupComponentFailed { toolchain: String, stderr: String },
 
-    /// IO-shaped failure with a human-readable context describing the operation.
-    ///
-    /// Display renders only `{context}`; the underlying `io::Error` is the
-    /// `#[source]`, so chain-walking formatters (anyhow's `{e:#}`, or the
-    /// `From<SetupError> for String` boundary impl below) assemble the full
-    /// "context: io message" string without double-printing.
-    #[error("{context}")]
-    Io {
-        context: String,
-        #[source]
-        source: std::io::Error,
-    },
-}
-
-impl SetupError {
-    /// Construct an [`SetupError::Io`] with a human-readable context describing
-    /// the failed operation (e.g. `"create directory /tmp/foo"`).
-    fn io(context: impl Into<String>, source: std::io::Error) -> Self {
-        SetupError::Io {
-            context: context.into(),
-            source,
-        }
-    }
+    /// Catch-all wrapping `anyhow::Error`. Covers `io::Error` from spawning
+    /// subprocesses and filesystem operations, chained via `.with_context()`.
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 /// Convenience alias used throughout this module.
@@ -106,7 +87,7 @@ pub type Result<T> = std::result::Result<T, SetupError>;
 pub fn install_charon() -> Result<()> {
     let tools_dir = home_dir()?.join(".probe-rust/tools");
     std::fs::create_dir_all(&tools_dir)
-        .map_err(|e| SetupError::io(format!("create directory {}", tools_dir.display()), e))?;
+        .with_context(|| format!("create directory {}", tools_dir.display()))?;
 
     let src_dir = tools_dir.join("charon-src");
 
@@ -121,7 +102,7 @@ pub fn install_charon() -> Result<()> {
                 &src_dir.to_string_lossy(),
             ])
             .status()
-            .map_err(|e| SetupError::io("spawn `git clone` for charon", e))?;
+            .context("spawn `git clone` for charon")?;
         if !status.success() {
             return Err(SetupError::CharonCloneFailed);
         }
@@ -132,7 +113,7 @@ pub fn install_charon() -> Result<()> {
         .args(["build", "--release"])
         .current_dir(src_dir.join("charon"))
         .status()
-        .map_err(|e| SetupError::io("spawn `cargo build --release` for charon", e))?;
+        .context("spawn `cargo build --release` for charon")?;
     if !status.success() {
         return Err(SetupError::CharonBuildFailed);
     }
@@ -141,14 +122,13 @@ pub fn install_charon() -> Result<()> {
     for binary in ["charon", "charon-driver"] {
         let src = release_dir.join(binary);
         let dst = tools_dir.join(binary);
-        std::fs::copy(&src, &dst)
-            .map_err(|e| SetupError::io(format!("copy {binary} to {}", dst.display()), e))?;
+        std::fs::copy(&src, &dst).with_context(|| format!("copy {binary} to {}", dst.display()))?;
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o755))
-                .map_err(|e| SetupError::io(format!("set permissions on {binary}"), e))?;
+                .with_context(|| format!("set permissions on {binary}"))?;
         }
     }
 
@@ -167,7 +147,7 @@ pub fn install_probe_rust() -> Result<PathBuf> {
     let status = Command::new("cargo")
         .args(["install", "--git", PROBE_RUST_GIT])
         .status()
-        .map_err(|e| SetupError::io("spawn `cargo install` for probe-rust", e))?;
+        .context("spawn `cargo install` for probe-rust")?;
 
     if !status.success() {
         return Err(SetupError::ProbeRustInstallFailed);
@@ -230,7 +210,7 @@ pub fn ensure_rust_analyzer_component(toolchain: Option<&str>) -> Result<()> {
     let output = Command::new("rustup")
         .args(&args)
         .output()
-        .map_err(|e| SetupError::io("spawn `rustup component add rust-analyzer`", e))?;
+        .context("spawn `rustup component add rust-analyzer`")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -250,7 +230,7 @@ fn run_probe_rust_setup(probe_rust_bin: &std::path::Path) -> Result<()> {
     let status = Command::new(probe_rust_bin)
         .arg("setup")
         .status()
-        .map_err(|e| SetupError::io("spawn `probe-rust setup`", e))?;
+        .context("spawn `probe-rust setup`")?;
     if !status.success() {
         return Err(SetupError::ProbeRustSetupFailed);
     }
