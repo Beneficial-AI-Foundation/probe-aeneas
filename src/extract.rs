@@ -1,21 +1,76 @@
+//! `extract` subcommand: orchestrates the full Rust-to-Lean pipeline.
+//!
+//! ## Error model
+//!
+//! Functions return [`Result<T, ExtractError>`]. The enum is deliberately
+//! lean — only `ThreadPanicked` carries structured info; everything else
+//! is either propagation from a submodule (`ExtractRunner`, `Listfuns`)
+//! or `Other(anyhow::Error)` for context-chained ad-hoc errors and the
+//! transitional `String` bridge from not-yet-migrated modules
+//! (`translate::load_atoms`, `translate::load_functions`,
+//! `merge_atom_files`, `aeneas_config::load`, `generate_functions_json`).
+//!
+//! CLI input-validation messages and YAML/JSON parse errors flow through
+//! `.context("...")?` or `anyhow::anyhow!("...").into()` — the typed enum
+//! stays tight, anyhow does the heavy lifting for context.
+//!
+//! `impl From<ExtractError> for String` at the bottom keeps `main.rs`
+//! working through `?` until it migrates.
+
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
 use probe::commands::merge::merge_atom_files;
 use probe::types::{Atom, InputProvenance, MergedAtomEnvelope, Tool};
 use serde::Deserialize;
 
 use crate::aeneas_config::AeneasConfig;
 use crate::enrich;
-use crate::extract_runner;
+use crate::extract_runner::{self, ExtractRunnerError};
 use crate::gen_functions::generate_functions_json;
-use crate::listfuns::run_listfuns;
+use crate::listfuns::{run_listfuns, ListfunsError};
 use crate::translate::{
     build_functions_rust_names, build_translations_json, generate_translations, load_atoms,
     load_functions, normalize_rust_name,
 };
 
 type TranslationMaps = (HashMap<String, String>, HashMap<String, String>);
+
+// ---------------------------------------------------------------------------
+// Typed error
+// ---------------------------------------------------------------------------
+
+/// Errors produced by the `extract` module.
+///
+/// Only `ThreadPanicked` carries structured fields. All other errors flow
+/// through `#[from]` propagation or the `Other(anyhow::Error)` catch-all,
+/// which lets `.context()` chains do the work of attaching messages.
+#[derive(Debug, thiserror::Error)]
+pub enum ExtractError {
+    /// A parallel extraction thread panicked while joining.
+    #[error("{language} extraction thread panicked")]
+    ThreadPanicked { language: &'static str },
+
+    /// Errors propagated from `extract_runner`.
+    #[error(transparent)]
+    ExtractRunner(#[from] ExtractRunnerError),
+
+    /// Errors propagated from `listfuns`.
+    #[error(transparent)]
+    Listfuns(#[from] ListfunsError),
+
+    /// Catch-all wrapping `anyhow::Error`. Used for:
+    /// - io::Error / serde_json::Error / serde_yaml::Error via `.context()?`
+    /// - ad-hoc CLI input validation messages via `anyhow::anyhow!(...).into()`
+    /// - the transitional `Result<_, String>` bridge from unmigrated modules
+    ///   via `.map_err(anyhow::Error::msg)?`
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+/// Convenience alias used throughout this module.
+pub type Result<T> = std::result::Result<T, ExtractError>;
 
 // ---------------------------------------------------------------------------
 // aeneas-config.yml parsing (minimal: only fields probe-aeneas needs)
@@ -141,9 +196,9 @@ fn resolve_workspace_member(
     project: &Path,
     crate_name: Option<&str>,
     charon_config: Option<&CharonConfig>,
-) -> Result<(PathBuf, String), String> {
+) -> Result<(PathBuf, String)> {
     let target = resolve_target_package_name(crate_name, charon_config).ok_or_else(|| {
-        format!(
+        anyhow::anyhow!(
             "Workspace at {} but cannot determine target package \
              (need crate.name, charon.package, or -p in charon.cargo_args)",
             project.display()
@@ -156,19 +211,19 @@ fn resolve_workspace_member(
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .output()
-        .map_err(|e| format!("Failed to run cargo metadata: {e}"))?;
+        .context("spawn `cargo metadata`")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("cargo metadata failed:\n{stderr}"));
+        return Err(anyhow::anyhow!("cargo metadata failed:\n{stderr}").into());
     }
 
-    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .map_err(|e| format!("Failed to parse cargo metadata: {e}"))?;
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&output.stdout).context("parse `cargo metadata` output")?;
 
     let packages = metadata["packages"]
         .as_array()
-        .ok_or("cargo metadata: missing 'packages' array")?;
+        .context("cargo metadata: missing 'packages' array")?;
 
     let normalized_target = target.replace('-', "_");
 
@@ -180,17 +235,17 @@ fn resolve_workspace_member(
 
         let manifest_path = pkg["manifest_path"]
             .as_str()
-            .ok_or("cargo metadata: package missing manifest_path")?;
+            .context("cargo metadata: package missing manifest_path")?;
         let member_dir = Path::new(manifest_path)
             .parent()
-            .ok_or("Invalid manifest_path")?;
+            .context("Invalid manifest_path")?;
 
         let project_abs = std::fs::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
         let member_abs =
             std::fs::canonicalize(member_dir).unwrap_or_else(|_| member_dir.to_path_buf());
 
         let rel = member_abs.strip_prefix(&project_abs).map_err(|_| {
-            format!(
+            anyhow::anyhow!(
                 "Workspace member {} is not under project root {}",
                 member_dir.display(),
                 project.display()
@@ -213,29 +268,31 @@ fn resolve_workspace_member(
         return Ok((member_dir.to_path_buf(), crate_dir));
     }
 
-    Err(format!(
+    Err(anyhow::anyhow!(
         "Package {target:?} not found in workspace at {}",
         project.display()
-    ))
+    )
+    .into())
 }
 
 /// Parse `aeneas-config.yml` in the given project directory and derive
 /// the Rust project path, Lean project path, and optional functions.json.
-pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
+pub fn resolve_project(project: &Path) -> Result<ResolvedProject> {
     let config_path = project.join("aeneas-config.yml");
     if !config_path.exists() {
-        return Err(format!(
+        return Err(anyhow::anyhow!(
             "No aeneas-config.yml found in {}\n\
              Expected an Aeneas project directory containing aeneas-config.yml.\n\
              Use --rust-project / --lean-project for manual input.",
             project.display()
-        ));
+        )
+        .into());
     }
 
     let content = std::fs::read_to_string(&config_path)
-        .map_err(|e| format!("Failed to read {}: {e}", config_path.display()))?;
+        .with_context(|| format!("read {}", config_path.display()))?;
     let mut config: AeneasProjectConfig = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Failed to parse {}: {e}", config_path.display()))?;
+        .with_context(|| format!("parse {}", config_path.display()))?;
 
     let raw_crate_dir = &config.crate_config.dir;
     let (rust_project, crate_dir) = if raw_crate_dir == "." {
@@ -271,30 +328,33 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject, String> {
             }
             (project.to_path_buf(), ".".to_string())
         } else {
-            return Err(format!(
+            return Err(anyhow::anyhow!(
                 "No Cargo.toml found at {} (derived from crate.dir = {:?} in aeneas-config.yml)",
                 candidate.display(),
                 raw_crate_dir,
-            ));
+            )
+            .into());
         }
     };
     let lean_project = project.to_path_buf();
 
     if !rust_project.join("Cargo.toml").exists() {
-        return Err(format!(
+        return Err(anyhow::anyhow!(
             "No Cargo.toml found at {} (derived from crate.dir = {:?} in aeneas-config.yml)",
             rust_project.display(),
             raw_crate_dir,
-        ));
+        )
+        .into());
     }
 
     if !lean_project.join("lakefile.toml").exists() && !lean_project.join("lakefile.lean").exists()
     {
-        return Err(format!(
+        return Err(anyhow::anyhow!(
             "No lakefile.toml or lakefile.lean found in {}\n\
              The project root should be a Lean/Lake project.",
             lean_project.display()
-        ));
+        )
+        .into());
     }
 
     if let Some(name) = &config.crate_config.name {
@@ -351,26 +411,32 @@ pub fn run_extract(
     use_lake: bool,
     rust_path_prefix: Option<&str>,
     with_public_api: bool,
-) -> Result<(), String> {
+) -> Result<()> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
-        return Err("No Rust input provided. Use one of:\n  \
+        return Err(anyhow::anyhow!(
+            "No Rust input provided. Use one of:\n  \
              probe-aeneas extract <project_path>          (auto-detect from aeneas-config.yml)\n  \
              probe-aeneas extract --rust-project <path>   (Rust project directory)\n  \
              probe-aeneas extract --rust <json>            (pre-generated atoms JSON)"
-            .to_string());
+        )
+        .into());
     }
     if lean_json.is_none() && lean_project.is_none() {
-        return Err("No Lean input provided. Use one of:\n  \
+        return Err(anyhow::anyhow!(
+            "No Lean input provided. Use one of:\n  \
              probe-aeneas extract <project_path>          (auto-detect from aeneas-config.yml)\n  \
              probe-aeneas extract --lean-project <path>   (Lean project directory)\n  \
              probe-aeneas extract --lean <json>            (pre-generated atoms JSON)"
-            .to_string());
+        )
+        .into());
     }
     if functions_json.is_none() && lean_project.is_none() {
-        return Err("--functions is required when --lean-project is not given \
+        return Err(anyhow::anyhow!(
+            "--functions is required when --lean-project is not given \
              (cannot auto-generate functions.json without a Lean project path)"
-            .to_string());
+        )
+        .into());
     }
 
     // --- Resolve inputs (extract if needed) ---
@@ -388,7 +454,10 @@ pub fn run_extract(
     let functions_path = resolve_functions(functions_json, lean_project, use_lake)?;
 
     // --- Load Aeneas config (optional) ---
-    let config = AeneasConfig::load(aeneas_config, lean_project)?;
+    // aeneas_config::load still returns Result<_, String>; bridge via anyhow.
+    let config = AeneasConfig::load(aeneas_config, lean_project)
+        .map_err(anyhow::Error::msg)
+        .context("load aeneas config")?;
 
     // --- Generate translations ---
     let (translations_result, funs_rust_names) =
@@ -418,7 +487,7 @@ fn resolve_inputs(
     lean_json: Option<&Path>,
     lean_project: Option<&Path>,
     with_public_api: bool,
-) -> Result<(PathBuf, PathBuf), String> {
+) -> Result<(PathBuf, PathBuf)> {
     let need_rust_extract = rust_json.is_none();
     // When --lean is given (pre-computed JSON), skip Lean extraction even if
     // --lean-project is also present.
@@ -433,7 +502,7 @@ fn resolve_inputs(
 
         if let Some(dir) = probes_dir_ref {
             std::fs::create_dir_all(dir)
-                .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
+                .with_context(|| format!("create {}", dir.display()))?;
         }
 
         println!("Extracting Rust and Lean atoms in parallel...\n");
@@ -446,10 +515,13 @@ fn resolve_inputs(
             (rust_handle.join(), lean_handle.join())
         });
 
-        let rust_path =
-            rust_result.map_err(|_| "Rust extraction thread panicked".to_string())??;
-        let lean_path =
-            lean_result.map_err(|_| "Lean extraction thread panicked".to_string())??;
+        // The first `?` handles the panic (Result<_, Box<dyn Any>>) by
+        // mapping it to a typed ThreadPanicked. The second `?` propagates
+        // the inner ExtractRunnerError via #[from].
+        let rust_path = rust_result
+            .map_err(|_| ExtractError::ThreadPanicked { language: "Rust" })??;
+        let lean_path = lean_result
+            .map_err(|_| ExtractError::ThreadPanicked { language: "Lean" })??;
         Ok((rust_path, lean_path))
     } else {
         let rust_path = if let Some(json) = rust_json {
@@ -457,7 +529,7 @@ fn resolve_inputs(
         } else {
             if let Some(dir) = probes_dir_ref {
                 std::fs::create_dir_all(dir)
-                    .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
+                    .with_context(|| format!("create {}", dir.display()))?;
             }
             extract_runner::run_probe_rust_extract(
                 rust_project.unwrap(),
@@ -471,7 +543,7 @@ fn resolve_inputs(
         } else {
             if let Some(dir) = probes_dir_ref {
                 std::fs::create_dir_all(dir)
-                    .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
+                    .with_context(|| format!("create {}", dir.display()))?;
             }
             extract_runner::run_probe_lean_extract(lean_project.unwrap(), probes_dir_ref)?
         };
@@ -486,19 +558,23 @@ fn resolve_functions(
     functions_json: Option<&Path>,
     lean_project: Option<&Path>,
     use_lake: bool,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf> {
     if let Some(path) = functions_json {
         return Ok(path.to_path_buf());
     }
 
-    let lean_proj =
-        lean_project.ok_or("Cannot auto-generate functions.json without --lean-project")?;
+    let lean_proj = lean_project
+        .context("Cannot auto-generate functions.json without --lean-project")?;
     let functions_path = lean_proj.join("functions.json");
 
     if use_lake {
+        // ListfunsError -> ExtractError::Listfuns via #[from].
         run_listfuns(lean_proj, &functions_path)?;
     } else {
-        generate_functions_json(lean_proj, &functions_path)?;
+        // generate_functions_json still returns Result<_, String>.
+        generate_functions_json(lean_proj, &functions_path)
+            .map_err(anyhow::Error::msg)
+            .context("generate functions.json")?;
     }
     Ok(functions_path)
 }
@@ -509,17 +585,25 @@ fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
     functions_path: &Path,
-) -> Result<(TranslationMaps, HashSet<String>), String> {
+) -> Result<(TranslationMaps, HashSet<String>)> {
+    // translate::load_atoms and load_functions still return Result<_, String>;
+    // bridge via anyhow so `?` converts to ExtractError::Other.
     println!("Loading Rust atoms from {}...", rust_path.display());
-    let rust_data = load_atoms(rust_path)?;
+    let rust_data = load_atoms(rust_path)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
     println!("  {} atoms", rust_data.len());
 
     println!("Loading Lean atoms from {}...", lean_path.display());
-    let lean_data = load_atoms(lean_path)?;
+    let lean_data = load_atoms(lean_path)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("load Lean atoms from {}", lean_path.display()))?;
     println!("  {} atoms", lean_data.len());
 
     println!("Loading functions from {}...", functions_path.display());
-    let functions = load_functions(functions_path)?;
+    let functions = load_functions(functions_path)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("load functions from {}", functions_path.display()))?;
     println!("  {} entries", functions.len());
 
     let funs_rust_names = build_functions_rust_names(&functions);
@@ -563,11 +647,13 @@ fn run_extract_with_translations(
     config: &AeneasConfig,
     rust_path_prefix: Option<&str>,
     project_root: Option<&Path>,
-) -> Result<(), String> {
+) -> Result<()> {
     // Phase 1: Merge (generic probe operation)
+    // merge_atom_files still returns Result<_, String>; bridge via anyhow.
     println!("\nMerging atoms with translations...");
-    let (mut merged, provenance, stats) =
-        merge_atom_files(&[rust_path, lean_path], Some(translations))?;
+    let (mut merged, provenance, stats) = merge_atom_files(&[rust_path, lean_path], Some(translations))
+        .map_err(anyhow::Error::msg)
+        .context("merge atom files")?;
 
     let output_path_buf;
     let output_path = match output_path {
@@ -725,7 +811,7 @@ fn write_aeneas_envelope(
     provenance: Vec<InputProvenance>,
     output_path: &Path,
     stats: &probe::commands::merge::MergeStats,
-) -> Result<(), String> {
+) -> Result<()> {
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     print_public_api_coverage(&merged);
@@ -743,16 +829,15 @@ fn write_aeneas_envelope(
         data: merged,
     };
 
-    let json = serde_json::to_string_pretty(&envelope)
-        .map_err(|e| format!("Failed to serialize output: {e}"))?;
+    let json = serde_json::to_string_pretty(&envelope).context("serialize output")?;
 
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
+            .with_context(|| format!("create {}", parent.display()))?;
     }
 
     std::fs::write(output_path, format!("{json}\n"))
-        .map_err(|e| format!("Failed to write {}: {e}", output_path.display()))?;
+        .with_context(|| format!("write {}", output_path.display()))?;
 
     println!("\nOutput: {}", output_path.display());
     println!("  Total entries:    {}", stats.total_entries);
@@ -859,17 +944,24 @@ pub fn run_translate_only(
     lean_path: &Path,
     functions_path: &Path,
     output_path: &Path,
-) -> Result<(), String> {
+) -> Result<()> {
+    // translate::load_atoms / load_functions still return Result<_, String>.
     println!("Loading Rust atoms from {}...", rust_path.display());
-    let rust_data = load_atoms(rust_path)?;
+    let rust_data = load_atoms(rust_path)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
     println!("  {} atoms", rust_data.len());
 
     println!("Loading Lean atoms from {}...", lean_path.display());
-    let lean_data = load_atoms(lean_path)?;
+    let lean_data = load_atoms(lean_path)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("load Lean atoms from {}", lean_path.display()))?;
     println!("  {} atoms", lean_data.len());
 
     println!("Loading functions from {}...", functions_path.display());
-    let functions = load_functions(functions_path)?;
+    let functions = load_functions(functions_path)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("load functions from {}", functions_path.display()))?;
     println!("  {} entries", functions.len());
 
     println!("\nGenerating translations...");
@@ -882,25 +974,50 @@ pub fn run_translate_only(
 
     let rust_raw: serde_json::Value = {
         let content = std::fs::read_to_string(rust_path)
-            .map_err(|e| format!("Failed to read {}: {e}", rust_path.display()))?;
+            .with_context(|| format!("read {}", rust_path.display()))?;
         serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse {}: {e}", rust_path.display()))?
+            .with_context(|| format!("parse {}", rust_path.display()))?
     };
     let lean_raw: serde_json::Value = {
         let content = std::fs::read_to_string(lean_path)
-            .map_err(|e| format!("Failed to read {}: {e}", lean_path.display()))?;
+            .with_context(|| format!("read {}", lean_path.display()))?;
         serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse {}: {e}", lean_path.display()))?
+            .with_context(|| format!("parse {}", lean_path.display()))?
     };
 
     let json_value = build_translations_json(&mappings, &rust_raw, &lean_raw);
-    let json = serde_json::to_string_pretty(&json_value)
-        .map_err(|e| format!("Failed to serialize translations: {e}"))?;
+    let json = serde_json::to_string_pretty(&json_value).context("serialize translations")?;
     std::fs::write(output_path, format!("{json}\n"))
-        .map_err(|e| format!("Failed to write {}: {e}", output_path.display()))?;
+        .with_context(|| format!("write {}", output_path.display()))?;
 
     println!("\nWritten to {}", output_path.display());
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Boundary: String compatibility for callers not yet migrated
+// ---------------------------------------------------------------------------
+
+/// Convert an `ExtractError` to a `String` so callers in `main.rs` that
+/// still return `Result<_, String>` can propagate via `?`.
+///
+/// Walks the `std::error::Error::source` chain so the resulting string
+/// captures everything from the outer message down through anyhow's
+/// `.context()` layers and any io / serde / extract_runner / listfuns
+/// source attached underneath. Remove this impl when every caller has
+/// migrated to typed errors.
+impl From<ExtractError> for String {
+    fn from(err: ExtractError) -> Self {
+        use std::error::Error;
+        let mut msg = err.to_string();
+        let mut source: Option<&dyn Error> = err.source();
+        while let Some(s) = source {
+            msg.push_str(": ");
+            msg.push_str(&s.to_string());
+            source = s.source();
+        }
+        msg
+    }
 }
 
 #[cfg(test)]
@@ -982,7 +1099,7 @@ mod tests {
     #[test]
     fn resolve_project_missing_config() {
         let tmp = tempfile::tempdir().unwrap();
-        let err = resolve_project(tmp.path()).unwrap_err();
+        let err = resolve_project(tmp.path()).unwrap_err().to_string();
         assert!(err.contains("aeneas-config.yml"), "Error: {err}");
     }
 
@@ -1002,7 +1119,7 @@ mod tests {
         )
         .unwrap();
 
-        let err = resolve_project(&project).unwrap_err();
+        let err = resolve_project(&project).unwrap_err().to_string();
         assert!(err.contains("Cargo.toml"), "Error: {err}");
     }
 
@@ -1105,7 +1222,7 @@ mod tests {
         )
         .unwrap();
 
-        let err = resolve_project(&project).unwrap_err();
+        let err = resolve_project(&project).unwrap_err().to_string();
         assert!(
             err.contains("Cargo.toml"),
             "Non-workspace root should still error: {err}"
@@ -1143,7 +1260,7 @@ mod tests {
         )
         .unwrap();
 
-        let err = resolve_project(&project).unwrap_err();
+        let err = resolve_project(&project).unwrap_err().to_string();
         assert!(
             err.contains("not found"),
             "Unknown package should error: {err}"
@@ -1272,7 +1389,7 @@ mod tests {
         fs::write(project.join("Cargo.toml"), "[package]\nname = \"t\"").unwrap();
         fs::write(project.join("aeneas-config.yml"), "crate:\n  dir: \".\"\n").unwrap();
 
-        let err = resolve_project(&project).unwrap_err();
+        let err = resolve_project(&project).unwrap_err().to_string();
         assert!(err.contains("lakefile"), "Error: {err}");
     }
 

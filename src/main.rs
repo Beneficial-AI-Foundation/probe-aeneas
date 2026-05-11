@@ -200,6 +200,7 @@ fn resolve_and_extract(
         rust_path_prefix.as_deref(),
         with_public_api,
     )
+    .map_err(String::from)
 }
 
 fn main() {
@@ -235,7 +236,7 @@ fn main() {
             lean,
             functions,
             output,
-        } => extract::run_translate_only(&rust, &lean, &functions, &output),
+        } => extract::run_translate_only(&rust, &lean, &functions, &output).map_err(String::from),
 
         Commands::Listfuns {
             lean_project,
@@ -247,7 +248,7 @@ fn main() {
             aeneas_config,
         } => {
             if lake {
-                listfuns::run_listfuns(&lean_project, &output)
+                listfuns::run_listfuns(&lean_project, &output).map_err(String::from)
             } else if no_enrich {
                 gen_functions::generate_functions_json(&lean_project, &output)
             } else {
@@ -258,6 +259,7 @@ fn main() {
                     module_prefix.as_deref(),
                     aeneas_config.as_deref(),
                 )
+                .map_err(String::from)
             }
         }
 

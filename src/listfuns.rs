@@ -1,19 +1,79 @@
+//! `listfuns` subcommand: generate `functions.json` from a Lean project.
+//!
+//! Either delegates to `lake exe listfuns` directly ([`run_listfuns`]) or
+//! parses Aeneas-generated Lean sources and enriches them with verification
+//! data from `probe-lean` ([`run_enriched_listfuns`]).
+//!
+//! ## Error model
+//!
+//! Functions return [`Result<T, ListfunsError>`]. Categorical failures
+//! (subprocess exit, missing output, non-UTF-8 path) are typed variants.
+//! Open-ended errors flow through `Other(#[from] anyhow::Error)` via
+//! `.context("...")?`. Errors from `extract_runner` propagate through the
+//! `ExtractRunner` variant via `#[from]`.
+//!
+//! Callers in `main.rs` still use `Result<_, String>`; the
+//! `From<ListfunsError> for String` impl at the bottom walks the source
+//! chain so they keep working through `?`. Remove that impl once `main.rs`
+//! migrates to typed errors.
+
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use anyhow::Context as _;
 use probe::types::Atom;
 
 use crate::aeneas_config::AeneasConfig;
 use crate::enrich::{self, EnrichedFunctionsFile};
-use crate::extract_runner;
+use crate::extract_runner::{self, ExtractRunnerError};
 use crate::gen_functions;
 
+// ---------------------------------------------------------------------------
+// Typed error
+// ---------------------------------------------------------------------------
+
+/// Errors produced by the `listfuns` module.
+#[derive(Debug, thiserror::Error)]
+pub enum ListfunsError {
+    /// A subprocess exited with a non-zero status code.
+    #[error("{command} exited with status {code}")]
+    SubprocessFailed { command: String, code: i32 },
+
+    /// A subprocess completed but the expected output file is missing.
+    #[error("{command} completed but {} was not created", path.display())]
+    MissingOutput { command: String, path: PathBuf },
+
+    /// A path could not be represented as UTF-8.
+    #[error("{label} path is not valid UTF-8")]
+    NonUtf8Path { label: &'static str },
+
+    /// Errors propagated from `extract_runner`.
+    #[error(transparent)]
+    ExtractRunner(#[from] ExtractRunnerError),
+
+    /// Catch-all for context-chained errors built via `anyhow`.
+    ///
+    /// Used for io::Error, serde_json::Error, and the transitional
+    /// `.map_err(anyhow::Error::msg)?` bridge that wraps `Result<_, String>`
+    /// returned by not-yet-migrated modules (`gen_functions`,
+    /// `aeneas_config`, `translate::load_atoms`).
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+/// Convenience alias used throughout this module.
+pub type Result<T> = std::result::Result<T, ListfunsError>;
+
+// ---------------------------------------------------------------------------
+// Public entry points
+// ---------------------------------------------------------------------------
+
 /// Run `lake exe listfuns <output>` in the given Lean project directory.
-pub fn run_listfuns(lean_project: &Path, output: &Path) -> Result<(), String> {
+pub fn run_listfuns(lean_project: &Path, output: &Path) -> Result<()> {
     let output_str = output
         .to_str()
-        .ok_or_else(|| "Output path is not valid UTF-8".to_string())?;
+        .ok_or(ListfunsError::NonUtf8Path { label: "Output" })?;
 
     println!(
         "Running `lake exe listfuns {output_str}` in {}...",
@@ -24,20 +84,20 @@ pub fn run_listfuns(lean_project: &Path, output: &Path) -> Result<(), String> {
         .args(["exe", "listfuns", output_str])
         .current_dir(lean_project)
         .status()
-        .map_err(|e| format!("Failed to run `lake exe listfuns`: {e}"))?;
+        .context("spawn `lake exe listfuns`")?;
 
     if !status.success() {
-        return Err(format!(
-            "`lake exe listfuns` exited with status {}",
-            status.code().unwrap_or(-1)
-        ));
+        return Err(ListfunsError::SubprocessFailed {
+            command: "lake exe listfuns".to_string(),
+            code: status.code().unwrap_or(-1),
+        });
     }
 
     if !output.exists() {
-        return Err(format!(
-            "`lake exe listfuns` completed but {} was not created",
-            output.display()
-        ));
+        return Err(ListfunsError::MissingOutput {
+            command: "lake exe listfuns".to_string(),
+            path: output.to_path_buf(),
+        });
     }
 
     println!("  Generated {}", output.display());
@@ -55,8 +115,12 @@ pub fn run_enriched_listfuns(
     atoms_path: Option<&Path>,
     module_prefix: Option<&str>,
     aeneas_config_path: Option<&Path>,
-) -> Result<(), String> {
-    let records = gen_functions::parse_aeneas_project(lean_project)?;
+) -> Result<()> {
+    // gen_functions still returns Result<_, String>; bridge through anyhow
+    // so `?` converts to ListfunsError::Other.
+    let records = gen_functions::parse_aeneas_project(lean_project)
+        .map_err(anyhow::Error::msg)
+        .context("parse Aeneas project")?;
     println!(
         "Parsed {} function entries from Aeneas files",
         records.len()
@@ -65,7 +129,9 @@ pub fn run_enriched_listfuns(
     let atoms = load_atoms(lean_project, atoms_path, module_prefix)?;
     println!("Loaded {} atoms from probe-lean", atoms.len());
 
-    let config = AeneasConfig::load(aeneas_config_path, Some(lean_project))?;
+    let config = AeneasConfig::load(aeneas_config_path, Some(lean_project))
+        .map_err(anyhow::Error::msg)
+        .context("load aeneas config")?;
 
     let rust_crate_name = detect_crate_name(&records);
     println!("Detected crate name: {rust_crate_name:?}");
@@ -76,9 +142,9 @@ pub fn run_enriched_listfuns(
         functions: enriched,
     };
     let json = serde_json::to_string_pretty(&output_json)
-        .map_err(|e| format!("Failed to serialize enriched functions.json: {e}"))?;
+        .context("serialize enriched functions.json")?;
     std::fs::write(output, format!("{json}\n"))
-        .map_err(|e| format!("Failed to write {}: {e}", output.display()))?;
+        .with_context(|| format!("write {}", output.display()))?;
 
     println!("\nWritten to {}", output.display());
     Ok(())
@@ -89,18 +155,24 @@ fn load_atoms(
     lean_project: &Path,
     atoms_path: Option<&Path>,
     module_prefix: Option<&str>,
-) -> Result<BTreeMap<String, Atom>, String> {
+) -> Result<BTreeMap<String, Atom>> {
     let json_path = match atoms_path {
         Some(p) => {
             println!("Using pre-computed atoms from {}", p.display());
             p.to_path_buf()
         }
         None => {
+            // ExtractRunnerError -> ListfunsError::ExtractRunner via #[from].
             extract_runner::run_probe_lean_extract_with_opts(lean_project, module_prefix, None)?
         }
     };
 
-    crate::translate::load_atoms(&json_path)
+    // translate::load_atoms still returns Result<_, String>; bridge through
+    // anyhow so `?` converts to ListfunsError::Other via #[from].
+    let atoms = crate::translate::load_atoms(&json_path)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("load atoms from {}", json_path.display()))?;
+    Ok(atoms)
 }
 
 /// Heuristically detect the Rust crate name from function records' source paths.
@@ -122,6 +194,30 @@ fn detect_crate_name(records: &[crate::types::FunctionRecord]) -> String {
         }
     }
     String::new()
+}
+
+// ---------------------------------------------------------------------------
+// Boundary: String compatibility for callers not yet migrated
+// ---------------------------------------------------------------------------
+
+/// Convert a `ListfunsError` to a `String` so callers in `main.rs` that
+/// still return `Result<_, String>` can propagate via `?`.
+///
+/// Walks the `std::error::Error::source` chain so messages from
+/// `extract_runner` and `anyhow`-wrapped causes are included end-to-end.
+/// Remove this impl when every caller has migrated to typed errors.
+impl From<ListfunsError> for String {
+    fn from(err: ListfunsError) -> Self {
+        use std::error::Error;
+        let mut msg = err.to_string();
+        let mut source: Option<&dyn Error> = err.source();
+        while let Some(s) = source {
+            msg.push_str(": ");
+            msg.push_str(&s.to_string());
+            source = s.source();
+        }
+        msg
+    }
 }
 
 #[cfg(test)]
