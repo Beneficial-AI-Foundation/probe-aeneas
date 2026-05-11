@@ -8,7 +8,7 @@
 //! or `Other(anyhow::Error)` for context-chained ad-hoc errors and the
 //! transitional `String` bridge from not-yet-migrated modules
 //! (`translate::load_atoms`, `translate::load_functions`,
-//! `merge_atom_files`, `aeneas_config::load`, `generate_functions_json`).
+//! `merge_atom_files`, `aeneas_config::load`).
 //!
 //! CLI input-validation messages and YAML/JSON parse errors flow through
 //! `.context("...")?` or `anyhow::anyhow!("...").into()` — the typed enum
@@ -501,8 +501,7 @@ fn resolve_inputs(
         let lean_proj = lean_project.unwrap();
 
         if let Some(dir) = probes_dir_ref {
-            std::fs::create_dir_all(dir)
-                .with_context(|| format!("create {}", dir.display()))?;
+            std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
         }
 
         println!("Extracting Rust and Lean atoms in parallel...\n");
@@ -518,10 +517,10 @@ fn resolve_inputs(
         // The first `?` handles the panic (Result<_, Box<dyn Any>>) by
         // mapping it to a typed ThreadPanicked. The second `?` propagates
         // the inner ExtractRunnerError via #[from].
-        let rust_path = rust_result
-            .map_err(|_| ExtractError::ThreadPanicked { language: "Rust" })??;
-        let lean_path = lean_result
-            .map_err(|_| ExtractError::ThreadPanicked { language: "Lean" })??;
+        let rust_path =
+            rust_result.map_err(|_| ExtractError::ThreadPanicked { language: "Rust" })??;
+        let lean_path =
+            lean_result.map_err(|_| ExtractError::ThreadPanicked { language: "Lean" })??;
         Ok((rust_path, lean_path))
     } else {
         let rust_path = if let Some(json) = rust_json {
@@ -563,17 +562,16 @@ fn resolve_functions(
         return Ok(path.to_path_buf());
     }
 
-    let lean_proj = lean_project
-        .context("Cannot auto-generate functions.json without --lean-project")?;
+    let lean_proj =
+        lean_project.context("Cannot auto-generate functions.json without --lean-project")?;
     let functions_path = lean_proj.join("functions.json");
 
     if use_lake {
         // ListfunsError -> ExtractError::Listfuns via #[from].
         run_listfuns(lean_proj, &functions_path)?;
     } else {
-        // generate_functions_json still returns Result<_, String>.
         generate_functions_json(lean_proj, &functions_path)
-            .map_err(anyhow::Error::msg)
+            .map_err(anyhow::Error::new)
             .context("generate functions.json")?;
     }
     Ok(functions_path)
@@ -651,9 +649,10 @@ fn run_extract_with_translations(
     // Phase 1: Merge (generic probe operation)
     // merge_atom_files still returns Result<_, String>; bridge via anyhow.
     println!("\nMerging atoms with translations...");
-    let (mut merged, provenance, stats) = merge_atom_files(&[rust_path, lean_path], Some(translations))
-        .map_err(anyhow::Error::msg)
-        .context("merge atom files")?;
+    let (mut merged, provenance, stats) =
+        merge_atom_files(&[rust_path, lean_path], Some(translations))
+            .map_err(anyhow::Error::msg)
+            .context("merge atom files")?;
 
     let output_path_buf;
     let output_path = match output_path {
@@ -832,8 +831,7 @@ fn write_aeneas_envelope(
     let json = serde_json::to_string_pretty(&envelope).context("serialize output")?;
 
     if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("create {}", parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
 
     std::fs::write(output_path, format!("{json}\n"))
@@ -975,14 +973,12 @@ pub fn run_translate_only(
     let rust_raw: serde_json::Value = {
         let content = std::fs::read_to_string(rust_path)
             .with_context(|| format!("read {}", rust_path.display()))?;
-        serde_json::from_str(&content)
-            .with_context(|| format!("parse {}", rust_path.display()))?
+        serde_json::from_str(&content).with_context(|| format!("parse {}", rust_path.display()))?
     };
     let lean_raw: serde_json::Value = {
         let content = std::fs::read_to_string(lean_path)
             .with_context(|| format!("read {}", lean_path.display()))?;
-        serde_json::from_str(&content)
-            .with_context(|| format!("parse {}", lean_path.display()))?
+        serde_json::from_str(&content).with_context(|| format!("parse {}", lean_path.display()))?
     };
 
     let json_value = build_translations_json(&mappings, &rust_raw, &lean_raw);

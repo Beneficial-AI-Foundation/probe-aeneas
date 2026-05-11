@@ -56,8 +56,8 @@ pub enum ListfunsError {
     ///
     /// Used for io::Error, serde_json::Error, and the transitional
     /// `.map_err(anyhow::Error::msg)?` bridge that wraps `Result<_, String>`
-    /// returned by not-yet-migrated modules (`gen_functions`,
-    /// `aeneas_config`, `translate::load_atoms`).
+    /// returned by not-yet-migrated modules (`aeneas_config`,
+    /// `translate::load_atoms`).
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -116,10 +116,8 @@ pub fn run_enriched_listfuns(
     module_prefix: Option<&str>,
     aeneas_config_path: Option<&Path>,
 ) -> Result<()> {
-    // gen_functions still returns Result<_, String>; bridge through anyhow
-    // so `?` converts to ListfunsError::Other.
     let records = gen_functions::parse_aeneas_project(lean_project)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .context("parse Aeneas project")?;
     println!(
         "Parsed {} function entries from Aeneas files",
@@ -141,8 +139,8 @@ pub fn run_enriched_listfuns(
     let output_json = EnrichedFunctionsFile {
         functions: enriched,
     };
-    let json = serde_json::to_string_pretty(&output_json)
-        .context("serialize enriched functions.json")?;
+    let json =
+        serde_json::to_string_pretty(&output_json).context("serialize enriched functions.json")?;
     std::fs::write(output, format!("{json}\n"))
         .with_context(|| format!("write {}", output.display()))?;
 

@@ -250,7 +250,7 @@ fn main() {
             if lake {
                 listfuns::run_listfuns(&lean_project, &output).map_err(String::from)
             } else if no_enrich {
-                gen_functions::generate_functions_json(&lean_project, &output)
+                gen_functions::generate_functions_json(&lean_project, &output).map_err(String::from)
             } else {
                 listfuns::run_enriched_listfuns(
                     &lean_project,
