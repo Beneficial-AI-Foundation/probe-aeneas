@@ -7,8 +7,7 @@
 //! is either propagation from a submodule (`ExtractRunner`, `Listfuns`)
 //! or `Other(anyhow::Error)` for context-chained ad-hoc errors and the
 //! transitional `String` bridge from not-yet-migrated modules
-//! (`translate::load_atoms`, `translate::load_functions`,
-//! `merge_atom_files`, `aeneas_config::load`).
+//! `merge_atom_files`).
 //!
 //! CLI input-validation messages and YAML/JSON parse errors flow through
 //! `.context("...")?` or `anyhow::anyhow!("...").into()` — the typed enum
@@ -454,9 +453,8 @@ pub fn run_extract(
     let functions_path = resolve_functions(functions_json, lean_project, use_lake)?;
 
     // --- Load Aeneas config (optional) ---
-    // aeneas_config::load still returns Result<_, String>; bridge via anyhow.
     let config = AeneasConfig::load(aeneas_config, lean_project)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .context("load aeneas config")?;
 
     // --- Generate translations ---
@@ -584,23 +582,21 @@ fn run_translate(
     lean_path: &Path,
     functions_path: &Path,
 ) -> Result<(TranslationMaps, HashSet<String>)> {
-    // translate::load_atoms and load_functions still return Result<_, String>;
-    // bridge via anyhow so `?` converts to ExtractError::Other.
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
     println!("  {} atoms", rust_data.len());
 
     println!("Loading Lean atoms from {}...", lean_path.display());
     let lean_data = load_atoms(lean_path)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .with_context(|| format!("load Lean atoms from {}", lean_path.display()))?;
     println!("  {} atoms", lean_data.len());
 
     println!("Loading functions from {}...", functions_path.display());
     let functions = load_functions(functions_path)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .with_context(|| format!("load functions from {}", functions_path.display()))?;
     println!("  {} entries", functions.len());
 
@@ -943,22 +939,21 @@ pub fn run_translate_only(
     functions_path: &Path,
     output_path: &Path,
 ) -> Result<()> {
-    // translate::load_atoms / load_functions still return Result<_, String>.
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
     println!("  {} atoms", rust_data.len());
 
     println!("Loading Lean atoms from {}...", lean_path.display());
     let lean_data = load_atoms(lean_path)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .with_context(|| format!("load Lean atoms from {}", lean_path.display()))?;
     println!("  {} atoms", lean_data.len());
 
     println!("Loading functions from {}...", functions_path.display());
     let functions = load_functions(functions_path)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .with_context(|| format!("load functions from {}", functions_path.display()))?;
     println!("  {} entries", functions.len());
 

@@ -1,6 +1,35 @@
+//! `aeneas_config` module: load optional per-project Aeneas enrichment config.
+//!
+//! ## Error model
+//!
+//! [`AeneasConfig::load`] returns [`Result<AeneasConfig, AeneasConfigError>`].
+//! All failures are IO or JSON parse errors and flow through
+//! `Other(anyhow::Error)` via `.context("...")` chains.
+//!
+//! Callers in `extract` and `listfuns` bridge via `.map_err(anyhow::Error::new)?`
+//! so errors propagate into `ExtractError::Other` / `ListfunsError::Other`
+//! with their full source chain preserved.
+
+use anyhow::Context as _;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::path::Path;
+
+// ---------------------------------------------------------------------------
+// Typed error
+// ---------------------------------------------------------------------------
+
+/// Errors produced by [`AeneasConfig::load`].
+#[derive(Debug, thiserror::Error)]
+pub enum AeneasConfigError {
+    /// Catch-all wrapping `anyhow::Error`. Covers `io::Error` from file reads
+    /// and `serde_json::Error` from JSON parsing.
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+/// Convenience alias used throughout this module.
+pub type Result<T> = std::result::Result<T, AeneasConfigError>;
 
 /// Aeneas project configuration for fields that cannot be auto-detected.
 ///
@@ -30,7 +59,7 @@ pub struct AeneasConfig {
 impl AeneasConfig {
     /// Load config from an explicit path, or try `.verilib/aeneas.json`
     /// relative to the Lean project directory. Missing files are not errors.
-    pub fn load(explicit_path: Option<&Path>, lean_project: Option<&Path>) -> Result<Self, String> {
+    pub fn load(explicit_path: Option<&Path>, lean_project: Option<&Path>) -> Result<Self> {
         let path = explicit_path
             .map(|p| p.to_path_buf())
             .or_else(|| lean_project.map(|lp| lp.join(".verilib").join("aeneas.json")));
@@ -43,10 +72,10 @@ impl AeneasConfig {
             return Ok(Self::default());
         }
 
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-        let file: AeneasConfigFile = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
+        let content =
+            std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        let file: AeneasConfigFile =
+            serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))?;
 
         println!("Loaded Aeneas config from {}", path.display());
         if !file.is_hidden.is_empty() {

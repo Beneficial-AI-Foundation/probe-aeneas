@@ -1,11 +1,49 @@
+//! `translate` module: generate translation mappings between Rust and Lean atoms.
+//!
+//! The matching logic ([`generate_translations`] and the `strategy_*` helpers)
+//! is pure and infallible. Only the two I/O loaders ([`load_atoms`],
+//! [`load_functions`]) are fallible.
+//!
+//! ## Error model
+//!
+//! Fallible functions return [`Result<T, TranslateError>`]. All errors are
+//! IO or JSON parse failures and flow through `Other(anyhow::Error)` via
+//! `.context("...")` chains. There are no typed variants beyond the catch-all.
+//!
+//! Callers in `extract` and `listfuns` bridge via `.map_err(anyhow::Error::new)?`
+//! so these errors propagate into `ExtractError::Other` / `ListfunsError::Other`
+//! with their full source chain preserved.
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::sync::LazyLock;
 
+use anyhow::Context as _;
 use probe::types::{Atom, TranslationMapping};
 use regex::Regex;
 
 use crate::types::{FunctionRecord, FunctionsFile, LineRange};
+
+// ---------------------------------------------------------------------------
+// Typed error
+// ---------------------------------------------------------------------------
+
+/// Errors produced by the `translate` module.
+///
+/// The matching logic is pure and infallible; only the two I/O loaders
+/// ([`load_atoms`], [`load_functions`]) can fail. All failures flow through
+/// the `Other` catch-all via anyhow context chains.
+#[derive(Debug, thiserror::Error)]
+pub enum TranslateError {
+    /// Catch-all wrapping `anyhow::Error`. Covers `io::Error` from file reads,
+    /// `serde_json::Error` from JSON parsing, and the `String`-error bridge
+    /// from `probe::types::load_atom_file`.
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+/// Convenience alias used throughout this module.
+pub type Result<T> = std::result::Result<T, TranslateError>;
 
 /// Normalize a source path for matching: strip leading package-name component
 /// so `"curve25519-dalek/src/foo.rs"` and `"src/foo.rs"` both become `"src/foo.rs"`.
@@ -416,17 +454,17 @@ fn strategy_file_line_overlap(
 }
 
 /// Load functions.json from disk.
-pub fn load_functions(path: &Path) -> Result<Vec<FunctionRecord>, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-    let file: FunctionsFile = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
+pub fn load_functions(path: &Path) -> Result<Vec<FunctionRecord>> {
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    let file: FunctionsFile =
+        serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))?;
     Ok(file.functions)
 }
 
 /// Load atom data from a probe envelope JSON file.
-pub fn load_atoms(path: &Path) -> Result<BTreeMap<String, Atom>, String> {
-    let (data, _provenance) = probe::types::load_atom_file(path)?;
+pub fn load_atoms(path: &Path) -> Result<BTreeMap<String, Atom>> {
+    let (data, _provenance) = probe::types::load_atom_file(path).map_err(anyhow::Error::msg)?;
     Ok(data)
 }
 

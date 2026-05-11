@@ -54,10 +54,8 @@ pub enum ListfunsError {
 
     /// Catch-all for context-chained errors built via `anyhow`.
     ///
-    /// Used for io::Error, serde_json::Error, and the transitional
-    /// `.map_err(anyhow::Error::msg)?` bridge that wraps `Result<_, String>`
-    /// returned by not-yet-migrated modules (`aeneas_config`,
-    /// `translate::load_atoms`).
+    /// Used for io::Error, serde_json::Error, and the `String`-error bridge
+    /// from `probe::commands::merge::merge_atom_files` (not yet migrated).
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -128,7 +126,7 @@ pub fn run_enriched_listfuns(
     println!("Loaded {} atoms from probe-lean", atoms.len());
 
     let config = AeneasConfig::load(aeneas_config_path, Some(lean_project))
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .context("load aeneas config")?;
 
     let rust_crate_name = detect_crate_name(&records);
@@ -165,10 +163,8 @@ fn load_atoms(
         }
     };
 
-    // translate::load_atoms still returns Result<_, String>; bridge through
-    // anyhow so `?` converts to ListfunsError::Other via #[from].
     let atoms = crate::translate::load_atoms(&json_path)
-        .map_err(anyhow::Error::msg)
+        .map_err(anyhow::Error::new)
         .with_context(|| format!("load atoms from {}", json_path.display()))?;
     Ok(atoms)
 }
