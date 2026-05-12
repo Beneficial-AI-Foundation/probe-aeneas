@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+- **`unwrap_braces` preserves qualified implementing types in `{Trait for Type}`**
+  (issue #9): previously all implementing types were stripped, causing different
+  `From` impls in the same module (e.g., `LookupTable::from` vs
+  `NafLookupTable5::from`) to normalize to the same string and produce false
+  `is-disabled: false`. Now types containing `::` are preserved; bare types
+  (generic params, primitives) are still stripped to avoid Charon numbering
+  mismatches.
+
 ### Changed
 - **CI: auto-tag uses `RELEASE_PAT`** so pushed tags trigger the release workflow
   (aligns with probe-lean; previously tags pushed by `GITHUB_TOKEN` were silently

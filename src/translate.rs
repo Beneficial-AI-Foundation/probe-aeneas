@@ -19,8 +19,12 @@ fn normalize_source_path(p: &str) -> &str {
 
 static RE_REF: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"&'?\w*\s*").expect("valid regex"));
 /// Unwrap `{…}` segments in a Rust qualified name, normalizing trait-impl
-/// notation so that both Charon's `{impl Trait}` shorthand and the expanded
-/// `{Trait<Params> for Type}` form reduce to just the trait path.
+/// notation. Charon's `{impl Trait}` shorthand reduces to `Trait`. The
+/// expanded `{Trait<Params> for Type}` form preserves the implementing type
+/// only when it is fully qualified (contains `::`), producing
+/// `Trait<Params>::Type`. Bare names (generic parameters like `T`/`T0`,
+/// primitives like `u8`) are stripped to avoid mismatches from Charon's
+/// type-parameter numbering.
 fn unwrap_braces(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
@@ -45,11 +49,18 @@ fn unwrap_braces(s: &str) -> String {
                 }
             }
             let inner = content.strip_prefix("impl ").unwrap_or(&content);
-            let inner = match inner.find(" for ") {
-                Some(idx) => &inner[..idx],
-                None => inner,
-            };
-            result.push_str(inner);
+            match inner.find(" for ") {
+                Some(idx) => {
+                    let trait_part = &inner[..idx];
+                    let type_part = inner[idx + 5..].trim();
+                    result.push_str(trait_part);
+                    if !type_part.is_empty() && type_part.contains("::") {
+                        result.push_str("::");
+                        result.push_str(type_part);
+                    }
+                }
+                None => result.push_str(inner),
+            }
         } else {
             result.push(ch);
         }
@@ -186,6 +197,16 @@ fn extract_base_name(display_name: &str) -> &str {
     display_name.rsplit("::").next().unwrap_or(display_name)
 }
 
+/// Match Rust atoms to Lean translations via normalized `rust-qualified-name`.
+///
+/// `normalize_rust_name` preserves the implementing type in `{Trait for Type}`
+/// segments only when the type is fully qualified (contains `::`), e.g.
+/// `{From for my_crate::MyType}` → `From::my_crate::MyType`. Bare types
+/// (generic parameters like `T`/`T0`, primitives like `u8`) are stripped to
+/// avoid mismatches from Charon's type-parameter numbering. This means
+/// `{impl From}` and `{From for u8}` normalize identically (both → `From`),
+/// while `{From for crate::LookupTable}` and `{From for crate::NafTable}`
+/// remain distinct.
 fn strategy_rust_qualified_name(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
@@ -600,7 +621,9 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_impl_and_for_type_match() {
+    fn test_normalize_impl_and_bare_for_type_match() {
+        // {impl Trait} and {Trait for BareType} both strip the type (bare = no `::`)
+        // so they normalize identically.
         let atom = normalize_rust_name("libsignal_core::address::{impl core::convert::From}::from");
         let fj = normalize_rust_name(
             "libsignal_core::address::{core::convert::From<libsignal_core::address::ServiceIdKind> for u8}::from",
@@ -617,10 +640,20 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_for_type_stripped() {
+    fn test_normalize_for_bare_type_stripped() {
+        // Bare types (no `::`) are stripped to avoid generic-parameter mismatches.
         assert_eq!(
             normalize_rust_name("path::{core::convert::From<T> for u8}::method"),
             "path::core::convert::From::method"
+        );
+    }
+
+    #[test]
+    fn test_normalize_for_qualified_type_preserved() {
+        // Fully qualified types (with `::`) are preserved to distinguish impls.
+        assert_eq!(
+            normalize_rust_name("path::{core::convert::From<T> for my::module::MyType}::method"),
+            "path::core::convert::From::my::module::MyType::method"
         );
     }
 
@@ -644,6 +677,39 @@ mod tests {
     #[test]
     fn test_unwrap_braces_for_without_impl() {
         assert_eq!(unwrap_braces("{Trait for Type}"), "Trait");
+    }
+
+    #[test]
+    fn test_unwrap_braces_for_qualified_type_kept() {
+        assert_eq!(
+            unwrap_braces("{Trait for my::module::Type}"),
+            "Trait::my::module::Type"
+        );
+    }
+
+    #[test]
+    fn test_unwrap_braces_for_empty_type() {
+        assert_eq!(unwrap_braces("{Trait for }"), "Trait");
+    }
+
+    // -- Regression test for issue #9: different From impls must not collide --
+
+    #[test]
+    fn test_normalize_different_from_impls_are_distinct() {
+        let lookup = normalize_rust_name(
+            "curve25519_dalek::window::{core::convert::From<&'a \
+             (curve25519_dalek::edwards::EdwardsPoint)> for \
+             curve25519_dalek::window::LookupTable<curve25519_dalek::backend::\
+             serial::u64::field::FieldElement51>}::from",
+        );
+        let naf = normalize_rust_name(
+            "curve25519_dalek::window::{core::convert::From<&'0 \
+             (curve25519_dalek::edwards::EdwardsPoint)> for \
+             curve25519_dalek::window::NafLookupTable5}::from",
+        );
+        assert_ne!(lookup, naf, "different From impls must not collide");
+        assert!(lookup.contains("LookupTable"));
+        assert!(naf.contains("NafLookupTable5"));
     }
 
     #[test]
