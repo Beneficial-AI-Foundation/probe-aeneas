@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+- **CI: auto-tag uses `RELEASE_PAT`** so pushed tags trigger the release workflow
+  (aligns with probe-lean; previously tags pushed by `GITHUB_TOKEN` were silently
+  ignored by `release.yml`).
+- **Cursor rule split into commit vs release paths**: "commit" no longer forces a
+  version bump; version bumps only happen on explicit "release" requests.
+- **Added Versioning Policy to `CLAUDE.md`**: documents bump-level criteria and the
+  CI auto-tag mechanism.
+
 ## [0.9.5] - 2026-04-18
 
 ### Fixed

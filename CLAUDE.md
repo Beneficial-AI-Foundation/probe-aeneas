@@ -133,3 +133,12 @@ cargo fmt --all && cargo clippy --all-targets -- -D warnings && cargo test
 ## Commit Message Style
 
 Use conventional commits: `feat(module):`, `fix(module):`, `perf(module):`, `refactor(module):`
+
+## Versioning Policy
+
+The version is defined in `Cargo.toml`. CI auto-tags `v<version>` on pushes to `main` when the tag doesn't already exist, which triggers the release workflow.
+
+Bump levels:
+- **major**: breaking CLI or output-schema changes (e.g., renamed flags, removed fields, changed JSON structure)
+- **minor**: new additive features (e.g., new subcommand, new output field, new matching strategy)
+- **patch**: bug fixes, documentation, performance improvements
