@@ -6,9 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-05-13
+
 ### Fixed
 - **`unwrap_braces` preserves qualified implementing types in `{Trait for Type}`**
-  (issue #9): previously all implementing types were stripped, causing different
+  ([#9](https://github.com/Beneficial-AI-Foundation/probe-aeneas/issues/9)):
+  previously all implementing types were stripped, causing different
   `From` impls in the same module (e.g., `LookupTable::from` vs
   `NafLookupTable5::from`) to normalize to the same string and produce false
   `is-disabled: false`. Now types containing `::` are preserved; bare types
@@ -19,10 +22,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **CI: auto-tag uses `RELEASE_PAT`** so pushed tags trigger the release workflow
   (aligns with probe-lean; previously tags pushed by `GITHUB_TOKEN` were silently
   ignored by `release.yml`).
-- **Cursor rule split into commit vs release paths**: "commit" no longer forces a
-  version bump; version bumps only happen on explicit "release" requests.
-- **Added Versioning Policy to `CLAUDE.md`**: documents bump-level criteria and the
-  CI auto-tag mechanism.
 
 ## [0.9.5] - 2026-04-18
 
@@ -253,7 +252,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.5...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.6...HEAD
+[0.9.6]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.2...v0.9.3
