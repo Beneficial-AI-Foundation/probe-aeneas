@@ -157,23 +157,27 @@ could be matched exactly.
 cargo test
 ```
 
-29 tests passing (translate module):
+33 tests passing (translate module):
 - `test_normalize_rust_name` -- brace unwrapping for simple `{Type}` segments
 - `test_normalize_strips_generics_and_refs` -- lifetime/reference removal
 - `test_normalize_simple_brace_unwrap` -- minimal `{Type}` unwrapping
 - `test_normalize_no_braces_passthrough` -- plain paths unchanged
 - `test_normalize_single_level_generics` -- `Vec<u8>` → `Vec`
 - `test_normalize_nested_generics` -- `From<SpecificServiceId<KIND>>` → `From`
-- `test_normalize_impl_and_for_type_match` -- `{impl Trait}` and `{Trait for Type}` produce same output
+- `test_normalize_impl_and_bare_for_type_match` -- `{impl Trait}` and `{Trait for BareType}` produce same output
 - `test_normalize_impl_stripped` -- `{impl Trait}` prefix removal
-- `test_normalize_for_type_stripped` -- `{Trait for Type}` suffix removal
+- `test_normalize_for_bare_type_stripped` -- `{Trait for BareType}` bare type stripped
+- `test_normalize_for_qualified_type_preserved` -- `{Trait for mod::Type}` preserves type
+- `test_normalize_different_from_impls_are_distinct` -- issue #9 regression
 - `test_normalize_rust_name_deterministic_strips_generics` -- behavioral contract: no `<`/`>` in output
 - `test_normalize_rust_name_strips_refs_and_lifetimes` -- behavioral contract: no `&`/`'` in output
 - `test_normalize_rust_name_identity_for_simple_names` -- `foo` → `foo`
 - `test_unwrap_braces_multiple_segments` -- `{impl A}::{B for C}::m` → `A::B::m`
 - `test_unwrap_braces_no_braces` -- passthrough
 - `test_unwrap_braces_impl_without_for` -- `{impl Trait}` → `Trait`
-- `test_unwrap_braces_for_without_impl` -- `{Trait for Type}` → `Trait`
+- `test_unwrap_braces_for_without_impl` -- `{Trait for BareType}` → `Trait`
+- `test_unwrap_braces_for_qualified_type_kept` -- `{Trait for mod::Type}` → `Trait::mod::Type`
+- `test_unwrap_braces_for_empty_type` -- `{Trait for }` → `Trait`
 - `test_line_range_parse` / `test_line_range_parse_invalid` -- "L292-L325" parsing
 - `test_line_range_overlap` / `test_line_range_no_overlap` -- range geometry
 - `test_strategy_file_display_name` -- strategy 2 matching
