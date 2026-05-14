@@ -1,4 +1,29 @@
+//! `types` module: shared data types for `functions.json` parsing and atom-file loading.
+//!
+//! ## Error model
+//!
+//! [`LineRange::parse`] returns [`Result<LineRange, ParseError>`]. The
+//! `ParseError` enum names categorical failure modes for line-range string
+//! parsing. Callers that treat parse failure as optional use `.ok()`.
+
 use serde::Deserialize;
+
+// ---------------------------------------------------------------------------
+// Typed error
+// ---------------------------------------------------------------------------
+
+/// Errors produced when parsing a `"L<start>-L<end>"` line-range string.
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error("invalid line-range format '{0}': expected 'L<start>-L<end>'")]
+    InvalidFormat(String),
+
+    #[error("inverted range: start {start} > end {end}")]
+    InvertedRange { start: usize, end: usize },
+
+    #[error("line number is not a valid integer: {0}")]
+    InvalidNumber(#[from] std::num::ParseIntError),
+}
 
 /// A single entry from `functions.json`, produced by `lake exe listfuns`.
 #[derive(Debug, Clone, Deserialize)]
@@ -30,18 +55,24 @@ pub struct LineRange {
 }
 
 impl LineRange {
-    /// Parse "L292-L325" into LineRange { start: 292, end: 325 }.
-    pub fn parse(s: &str) -> Option<Self> {
+    /// Parse `"L292-L325"` into `LineRange { start: 292, end: 325 }`.
+    pub fn parse(s: &str) -> Result<Self, ParseError> {
         let s = s.trim();
-        let rest = s.strip_prefix('L')?;
-        let (start_str, end_part) = rest.split_once('-')?;
-        let end_str = end_part.strip_prefix('L')?;
-        let start = start_str.parse().ok()?;
-        let end = end_str.parse().ok()?;
+        let rest = s
+            .strip_prefix('L')
+            .ok_or_else(|| ParseError::InvalidFormat(s.to_string()))?;
+        let (start_str, end_part) = rest
+            .split_once('-')
+            .ok_or_else(|| ParseError::InvalidFormat(s.to_string()))?;
+        let end_str = end_part
+            .strip_prefix('L')
+            .ok_or_else(|| ParseError::InvalidFormat(s.to_string()))?;
+        let start: usize = start_str.parse()?;
+        let end: usize = end_str.parse()?;
         if start > end {
-            return None;
+            return Err(ParseError::InvertedRange { start, end });
         }
-        Some(LineRange { start, end })
+        Ok(LineRange { start, end })
     }
 
     pub fn overlaps(&self, other: &LineRange, tolerance: usize) -> bool {
@@ -61,7 +92,7 @@ mod tests {
 
     #[test]
     fn line_range_rejects_inverted_range() {
-        assert!(LineRange::parse("L100-L50").is_none());
+        assert!(LineRange::parse("L100-L50").is_err());
     }
 
     #[test]

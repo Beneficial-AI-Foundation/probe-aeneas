@@ -5,12 +5,75 @@
 //! probe-lean is version-matched to each target project's `lean-toolchain`
 //! and is auto-installed per-project during `extract`, so it is not handled
 //! here.
+//!
+//! ## Error model
+//!
+//! Library functions return [`Result<T, SetupError>`]. The `SetupError` enum
+//! (defined with `thiserror`) names the categorical failure modes. Open-ended
+//! IO failures flow through `Other(#[from] anyhow::Error)` via `.with_context()`
+//! chains, consistent with every other module in this crate.
+//!
+//! The [`cmd_setup`] orchestrator uses `anyhow::Error` to aggregate errors
+//! from multiple subtasks with `.context()` labels, demonstrating the
+//! typical `thiserror`-for-leaves / `anyhow`-for-context split.
 
 use std::path::PathBuf;
 use std::process::Command;
 
+use anyhow::Context as _;
+
 const PROBE_RUST_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-rust.git";
 const CHARON_REPO: &str = "https://github.com/AeneasVerif/charon.git";
+
+// ---------------------------------------------------------------------------
+// Typed error
+// ---------------------------------------------------------------------------
+
+/// Errors produced by the `setup` module.
+///
+/// Variants are categorical (callers can match on them); the catch-all
+/// [`SetupError::Io`] carries a context string plus the underlying
+/// `io::Error` as its `#[source]`.
+#[derive(Debug, thiserror::Error)]
+pub enum SetupError {
+    #[error("could not determine home directory")]
+    HomeDirUnavailable,
+
+    #[error(
+        "charon not found. Install it with: probe-aeneas setup\n  \
+         Charon is needed for rust-qualified-name enrichment (Aeneas integration)."
+    )]
+    CharonNotFound,
+
+    #[error("cargo install succeeded but probe-rust binary not found in ~/.cargo/bin/")]
+    ProbeRustNotFound,
+
+    #[error(
+        "cargo install probe-rust failed. Please install manually:\n  \
+         cargo install --git https://github.com/Beneficial-AI-Foundation/probe-rust.git"
+    )]
+    ProbeRustInstallFailed,
+
+    #[error("git clone charon failed")]
+    CharonCloneFailed,
+
+    #[error("cargo build --release charon failed")]
+    CharonBuildFailed,
+
+    #[error("probe-rust setup failed. Run it manually for details:\n  probe-rust setup")]
+    ProbeRustSetupFailed,
+
+    #[error("rustup component add rust-analyzer failed for {toolchain} toolchain: {stderr}")]
+    RustupComponentFailed { toolchain: String, stderr: String },
+
+    /// Catch-all wrapping `anyhow::Error`. Covers `io::Error` from spawning
+    /// subprocesses and filesystem operations, chained via `.with_context()`.
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+/// Convenience alias used throughout this module.
+pub type Result<T> = std::result::Result<T, SetupError>;
 
 // ---------------------------------------------------------------------------
 // Public installation functions
@@ -21,10 +84,10 @@ const CHARON_REPO: &str = "https://github.com/AeneasVerif/charon.git";
 /// Mirrors probe-rust's `tool_manager::build_charon` so both tools share the
 /// same managed binary. Both `charon` and `charon-driver` are installed.
 /// Reuses existing source checkout if present.
-pub fn install_charon() -> Result<(), String> {
+pub fn install_charon() -> Result<()> {
     let tools_dir = home_dir()?.join(".probe-rust/tools");
     std::fs::create_dir_all(&tools_dir)
-        .map_err(|e| format!("Failed to create {}: {e}", tools_dir.display()))?;
+        .with_context(|| format!("create directory {}", tools_dir.display()))?;
 
     let src_dir = tools_dir.join("charon-src");
 
@@ -39,9 +102,9 @@ pub fn install_charon() -> Result<(), String> {
                 &src_dir.to_string_lossy(),
             ])
             .status()
-            .map_err(|e| format!("Failed to clone charon: {e}"))?;
+            .context("spawn `git clone` for charon")?;
         if !status.success() {
-            return Err("git clone charon failed".to_string());
+            return Err(SetupError::CharonCloneFailed);
         }
     }
 
@@ -50,23 +113,22 @@ pub fn install_charon() -> Result<(), String> {
         .args(["build", "--release"])
         .current_dir(src_dir.join("charon"))
         .status()
-        .map_err(|e| format!("Failed to build charon: {e}"))?;
+        .context("spawn `cargo build --release` for charon")?;
     if !status.success() {
-        return Err("cargo build --release charon failed".to_string());
+        return Err(SetupError::CharonBuildFailed);
     }
 
     let release_dir = src_dir.join("charon/target/release");
     for binary in ["charon", "charon-driver"] {
         let src = release_dir.join(binary);
         let dst = tools_dir.join(binary);
-        std::fs::copy(&src, &dst)
-            .map_err(|e| format!("Failed to copy {binary} to {}: {e}", dst.display()))?;
+        std::fs::copy(&src, &dst).with_context(|| format!("copy {binary} to {}", dst.display()))?;
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o755))
-                .map_err(|e| format!("Failed to set permissions on {binary}: {e}"))?;
+                .with_context(|| format!("set permissions on {binary}"))?;
         }
     }
 
@@ -75,7 +137,7 @@ pub fn install_charon() -> Result<(), String> {
 }
 
 /// Install probe-rust via `cargo install --git`.
-pub fn install_probe_rust() -> Result<PathBuf, String> {
+pub fn install_probe_rust() -> Result<PathBuf> {
     let cargo_bin = home_dir()?.join(".cargo/bin/probe-rust");
     if cargo_bin.exists() {
         return Ok(cargo_bin);
@@ -85,20 +147,16 @@ pub fn install_probe_rust() -> Result<PathBuf, String> {
     let status = Command::new("cargo")
         .args(["install", "--git", PROBE_RUST_GIT])
         .status()
-        .map_err(|e| format!("Failed to run cargo install: {e}"))?;
+        .context("spawn `cargo install` for probe-rust")?;
 
     if !status.success() {
-        return Err(
-            "cargo install probe-rust failed. Please install manually:\n  \
-             cargo install --git https://github.com/Beneficial-AI-Foundation/probe-rust.git"
-                .to_string(),
-        );
+        return Err(SetupError::ProbeRustInstallFailed);
     }
 
     if cargo_bin.exists() {
         Ok(cargo_bin)
     } else {
-        Err("cargo install succeeded but probe-rust binary not found in ~/.cargo/bin/".to_string())
+        Err(SetupError::ProbeRustNotFound)
     }
 }
 
@@ -110,8 +168,8 @@ pub fn find_on_path(name: &str) -> Option<PathBuf> {
     which::which(name).ok()
 }
 
-pub fn home_dir() -> Result<PathBuf, String> {
-    dirs::home_dir().ok_or_else(|| "Could not determine home directory".to_string())
+pub fn home_dir() -> Result<PathBuf> {
+    dirs::home_dir().ok_or(SetupError::HomeDirUnavailable)
 }
 
 /// Resolve probe-rust binary: PATH then `~/.cargo/bin/`.
@@ -140,7 +198,7 @@ pub fn resolve_charon() -> Option<PathBuf> {
 ///
 /// When `toolchain` is `Some("nightly-2026-03-23")`, targets that specific
 /// toolchain; when `None`, targets the default toolchain.
-pub fn ensure_rust_analyzer_component(toolchain: Option<&str>) -> Result<(), String> {
+pub fn ensure_rust_analyzer_component(toolchain: Option<&str>) -> Result<()> {
     let mut args = vec!["component", "add", "rust-analyzer"];
     if let Some(tc) = toolchain {
         args.push("--toolchain");
@@ -152,13 +210,14 @@ pub fn ensure_rust_analyzer_component(toolchain: Option<&str>) -> Result<(), Str
     let output = Command::new("rustup")
         .args(&args)
         .output()
-        .map_err(|e| format!("Failed to run rustup: {e}"))?;
+        .context("spawn `rustup component add rust-analyzer`")?;
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "rustup component add rust-analyzer failed for {label} toolchain: {stderr}"
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        return Err(SetupError::RustupComponentFailed {
+            toolchain: label.to_string(),
+            stderr,
+        });
     }
     eprintln!("  ✓ rust-analyzer available for {label} toolchain");
     Ok(())
@@ -166,16 +225,14 @@ pub fn ensure_rust_analyzer_component(toolchain: Option<&str>) -> Result<(), Str
 
 /// Delegate to `probe-rust setup` to install probe-rust's own dependencies
 /// (rust-analyzer, scip). The `probe_rust_bin` must already be installed.
-fn run_probe_rust_setup(probe_rust_bin: &std::path::Path) -> Result<(), String> {
+fn run_probe_rust_setup(probe_rust_bin: &std::path::Path) -> Result<()> {
     eprintln!("\nRunning probe-rust setup to install its dependencies...\n");
     let status = Command::new(probe_rust_bin)
         .arg("setup")
         .status()
-        .map_err(|e| format!("Failed to run probe-rust setup: {e}"))?;
+        .context("spawn `probe-rust setup`")?;
     if !status.success() {
-        return Err("probe-rust setup failed. Run it manually for details:\n  \
-                     probe-rust setup"
-            .to_string());
+        return Err(SetupError::ProbeRustSetupFailed);
     }
     Ok(())
 }
@@ -256,6 +313,11 @@ pub fn print_status() {
 // ---------------------------------------------------------------------------
 
 /// Entry point for the `setup` subcommand.
+///
+/// Stays infallible at the function level (calls `process::exit(1)` on
+/// failures) so `main.rs` doesn't need to change. Internally uses
+/// `anyhow::Error` to aggregate errors from independent subtasks with
+/// `.context()` labels — installing one tool shouldn't abort the rest.
 pub fn cmd_setup(status: bool) {
     if status {
         print_status();
@@ -264,7 +326,7 @@ pub fn cmd_setup(status: bool) {
 
     eprintln!("Installing external tools for probe-aeneas...\n");
 
-    let mut errors: Vec<String> = Vec::new();
+    let mut errors: Vec<anyhow::Error> = Vec::new();
 
     // probe-rust (install if needed, then delegate to its setup for deps)
     let probe_rust_bin = match resolve_probe_rust() {
@@ -272,10 +334,10 @@ pub fn cmd_setup(status: bool) {
             eprintln!("probe-rust: already available at {}", p.display());
             Some(p)
         }
-        None => match install_probe_rust() {
+        None => match install_probe_rust().context("probe-rust") {
             Ok(p) => Some(p),
             Err(e) => {
-                errors.push(format!("probe-rust: {e}"));
+                errors.push(e);
                 None
             }
         },
@@ -283,7 +345,7 @@ pub fn cmd_setup(status: bool) {
 
     // rust-analyzer + scip (delegated to probe-rust setup)
     if let Some(ref bin) = probe_rust_bin {
-        if let Err(e) = run_probe_rust_setup(bin) {
+        if let Err(e) = run_probe_rust_setup(bin).context("probe-rust dependencies") {
             errors.push(e);
         }
     }
@@ -291,7 +353,7 @@ pub fn cmd_setup(status: bool) {
     // Ensure rust-analyzer is installed for the default toolchain.
     // probe-rust setup only *checks* for it (warning, not error), so we
     // install the rustup component directly as a fallback.
-    if let Err(e) = ensure_rust_analyzer_component(None) {
+    if let Err(e) = ensure_rust_analyzer_component(None).context("rust-analyzer") {
         errors.push(e);
     }
 
@@ -299,15 +361,18 @@ pub fn cmd_setup(status: bool) {
     match resolve_charon() {
         Some(p) => eprintln!("charon: already available at {}", p.display()),
         None => {
-            if let Err(e) = install_charon() {
-                errors.push(format!("charon: {e}"));
+            if let Err(e) = install_charon().context("charon") {
+                errors.push(e);
             }
         }
     }
 
     if !errors.is_empty() {
         for e in &errors {
-            eprintln!("Error: {e}");
+            // `{:#}` walks the anyhow context chain (and the underlying
+            // SetupError's `#[source]`) so the operator sees the full
+            // cause, not just the top-level label.
+            eprintln!("Error: {e:#}");
         }
         eprintln!(
             "\n{} tool(s) failed to install. See errors above.",
@@ -324,17 +389,14 @@ pub fn cmd_setup(status: bool) {
 // Helpers used by extract_runner
 // ---------------------------------------------------------------------------
 
-/// Resolve charon binary, returning a `Result` for use in `ensure_charon_llbc`.
-pub fn resolve_charon_or_err() -> Result<PathBuf, String> {
-    resolve_charon().ok_or_else(|| {
-        "charon not found. Install it with: probe-aeneas setup\n  \
-         Charon is needed for rust-qualified-name enrichment (Aeneas integration)."
-            .to_string()
-    })
+/// Resolve charon binary, returning a typed error for use in
+/// `ensure_charon_llbc`.
+pub fn resolve_charon_or_err() -> Result<PathBuf> {
+    resolve_charon().ok_or(SetupError::CharonNotFound)
 }
 
 /// Find probe-rust on PATH or in `~/.cargo/bin/`, installing if not found.
-pub fn find_or_install_probe_rust() -> Result<PathBuf, String> {
+pub fn find_or_install_probe_rust() -> Result<PathBuf> {
     if let Some(p) = resolve_probe_rust() {
         return Ok(p);
     }

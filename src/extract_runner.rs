@@ -1,10 +1,91 @@
+//! Runs the external `probe-rust` and `probe-lean` extractors, installs them
+//! on demand, and pre-generates the Charon LLBC for Aeneas projects.
+//!
+//! ## Error model
+//!
+//! Public and internal functions return [`Result<T, ExtractRunnerError>`].
+//! Categorical failure modes (subprocess exit, missing output file, non-UTF-8
+//! path, etc.) are typed variants so callers can inspect them. Open-ended
+//! io-shaped failures use `.context("...")?` from `anyhow::Context` and are
+//! captured by the `Other(#[from] anyhow::Error)` variant — this is where
+//! `anyhow` carries its weight inside this module.
+//!
+//! Errors from the `setup` module propagate through the `Setup` variant via
+//! `#[from]`, so `setup::install_charon()?` and similar calls work directly.
+//!
+//! An `impl From<ExtractRunnerError> for String` at the bottom walks the
+//! source chain so callers in `extract.rs`, `main.rs`, and `listfuns.rs`
+//! that still return `Result<_, String>` keep working through `?`. It will
+//! be removed once those callers migrate.
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use anyhow::Context as _;
 
 use crate::extract::CharonConfig;
 use crate::setup;
 
 const PROBE_LEAN_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-lean.git";
+
+// ---------------------------------------------------------------------------
+// Typed error
+// ---------------------------------------------------------------------------
+
+/// Errors produced by the `extract_runner` module.
+///
+/// Categorical variants (`SubprocessFailed`, `MissingOutput`, …) carry the
+/// structured fields callers might want to inspect. Generic io-shaped
+/// failures flow through `Other(anyhow::Error)` via `.context("...")?`.
+#[derive(Debug, thiserror::Error)]
+pub enum ExtractRunnerError {
+    /// A subprocess exited with a non-zero status code.
+    #[error("{command} exited with status {code}")]
+    SubprocessFailed { command: String, code: i32 },
+
+    /// A subprocess completed but the expected output file is missing.
+    #[error("{command} completed but {} was not created", path.display())]
+    MissingOutput { command: String, path: PathBuf },
+
+    /// A path could not be represented as UTF-8.
+    #[error("{label} path is not valid UTF-8")]
+    NonUtf8Path { label: &'static str },
+
+    /// `lean-toolchain` file is empty.
+    #[error("lean-toolchain file is empty")]
+    LeanToolchainEmpty,
+
+    /// No pre-built binary available for the requested platform/version.
+    /// Callers should fall back to building from source.
+    #[error("No pre-built binary available, falling back to source build")]
+    NoPrebuiltAvailable,
+
+    /// `lake build` failed during source installation of probe-lean.
+    #[error(
+        "lake build failed. Make sure elan/lean4 and lake are installed.\n  \
+         See: https://github.com/leanprover/elan"
+    )]
+    LakeBuildFailed,
+
+    /// Errors propagated from the `setup` module.
+    #[error(transparent)]
+    Setup(#[from] setup::SetupError),
+
+    /// Catch-all for context-chained internal errors built via `anyhow`.
+    ///
+    /// Any `Result<_, io::Error>` (or `Option<T>`) can be turned into this
+    /// variant by calling `.context("...")?` from the `anyhow::Context`
+    /// trait — `?` converts the resulting `anyhow::Error` through `#[from]`.
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+/// Convenience alias used throughout this module.
+pub type Result<T> = std::result::Result<T, ExtractRunnerError>;
+
+// ---------------------------------------------------------------------------
+// Public extractor entry points
+// ---------------------------------------------------------------------------
 
 /// Run `probe-rust extract` on a project and return the path to the generated JSON.
 ///
@@ -14,7 +95,7 @@ pub fn run_probe_rust_extract(
     project: &Path,
     output_dir: Option<&Path>,
     with_public_api: bool,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf> {
     let bin = find_or_install_probe_rust()?;
     ensure_rust_analyzer_for_project(project);
     let output = output_path(output_dir, "rust_extract", ".json");
@@ -24,12 +105,12 @@ pub fn run_probe_rust_extract(
         "extract".to_string(),
         project
             .to_str()
-            .ok_or_else(|| "Project path is not valid UTF-8".to_string())?
+            .ok_or(ExtractRunnerError::NonUtf8Path { label: "Project" })?
             .to_string(),
         "-o".to_string(),
         output
             .to_str()
-            .ok_or_else(|| "Output path is not valid UTF-8".to_string())?
+            .ok_or(ExtractRunnerError::NonUtf8Path { label: "Output" })?
             .to_string(),
         "--auto-install".to_string(),
         "--with-charon".to_string(),
@@ -40,20 +121,20 @@ pub fn run_probe_rust_extract(
     let status = Command::new(&bin)
         .args(&args)
         .status()
-        .map_err(|e| format!("Failed to run probe-rust: {e}"))?;
+        .context("spawn `probe-rust`")?;
 
     if !status.success() {
-        return Err(format!(
-            "probe-rust extract exited with status {}",
-            status.code().unwrap_or(-1)
-        ));
+        return Err(ExtractRunnerError::SubprocessFailed {
+            command: "probe-rust extract".to_string(),
+            code: status.code().unwrap_or(-1),
+        });
     }
 
     if !output.exists() {
-        return Err(format!(
-            "probe-rust extract completed but {} was not created",
-            output.display()
-        ));
+        return Err(ExtractRunnerError::MissingOutput {
+            command: "probe-rust extract".to_string(),
+            path: output,
+        });
     }
 
     println!("  ✓ Rust atoms: {}", output.display());
@@ -64,10 +145,7 @@ pub fn run_probe_rust_extract(
 ///
 /// When `output_dir` is provided, the output file is written there
 /// (e.g. `.verilib/probes/`); otherwise a temp file is used.
-pub fn run_probe_lean_extract(
-    project: &Path,
-    output_dir: Option<&Path>,
-) -> Result<PathBuf, String> {
+pub fn run_probe_lean_extract(project: &Path, output_dir: Option<&Path>) -> Result<PathBuf> {
     run_probe_lean_extract_with_opts(project, None, output_dir)
 }
 
@@ -76,16 +154,16 @@ pub fn run_probe_lean_extract_with_opts(
     project: &Path,
     module_prefix: Option<&str>,
     output_dir: Option<&Path>,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf> {
     let bin = find_or_install_probe_lean(Some(project))?;
     let output = output_path(output_dir, "lean_extract", ".json");
 
     let project_str = project
         .to_str()
-        .ok_or_else(|| "Project path is not valid UTF-8".to_string())?;
+        .ok_or(ExtractRunnerError::NonUtf8Path { label: "Project" })?;
     let output_str = output
         .to_str()
-        .ok_or_else(|| "Output path is not valid UTF-8".to_string())?;
+        .ok_or(ExtractRunnerError::NonUtf8Path { label: "Output" })?;
 
     let mut args = vec!["extract", project_str, "-o", output_str];
     let module_flag;
@@ -99,31 +177,36 @@ pub fn run_probe_lean_extract_with_opts(
     let status = Command::new(&bin)
         .args(&args)
         .status()
-        .map_err(|e| format!("Failed to run probe-lean: {e}"))?;
+        .context("spawn `probe-lean`")?;
 
     if !status.success() {
-        return Err(format!(
-            "probe-lean extract exited with status {}",
-            status.code().unwrap_or(-1)
-        ));
+        return Err(ExtractRunnerError::SubprocessFailed {
+            command: "probe-lean extract".to_string(),
+            code: status.code().unwrap_or(-1),
+        });
     }
 
     if !output.exists() {
-        return Err(format!(
-            "probe-lean extract completed but {} was not created",
-            output.display()
-        ));
+        return Err(ExtractRunnerError::MissingOutput {
+            command: "probe-lean extract".to_string(),
+            path: output,
+        });
     }
 
     println!("  ✓ Lean atoms: {}", output.display());
     Ok(output)
 }
 
-fn find_or_install_probe_rust() -> Result<PathBuf, String> {
-    setup::find_or_install_probe_rust()
+// ---------------------------------------------------------------------------
+// Installer plumbing
+// ---------------------------------------------------------------------------
+
+fn find_or_install_probe_rust() -> Result<PathBuf> {
+    // SetupError -> ExtractRunnerError::Setup via #[from].
+    Ok(setup::find_or_install_probe_rust()?)
 }
 
-fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf, String> {
+fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf> {
     let lean_version = lean_project.and_then(|p| detect_lean_version(p).ok());
 
     if let Some(ref ver) = lean_version {
@@ -149,8 +232,7 @@ fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf, St
     println!("probe-lean not found for Lean {version}, installing...");
 
     let dest_dir = home_dir()?.join(".local/bin");
-    std::fs::create_dir_all(&dest_dir)
-        .map_err(|e| format!("Failed to create ~/.local/bin: {e}"))?;
+    std::fs::create_dir_all(&dest_dir).context("create ~/.local/bin")?;
 
     if version != "latest" {
         if let Ok(bin) = try_prebuilt_download(&version) {
@@ -163,10 +245,10 @@ fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf, St
 }
 
 /// Read the Lean version from a project's `lean-toolchain` file.
-fn detect_lean_version(project: &Path) -> Result<String, String> {
+fn detect_lean_version(project: &Path) -> Result<String> {
     let toolchain_path = project.join("lean-toolchain");
     let content = std::fs::read_to_string(&toolchain_path)
-        .map_err(|e| format!("Failed to read lean-toolchain: {e}"))?;
+        .with_context(|| format!("read lean-toolchain at {}", toolchain_path.display()))?;
     let trimmed = content.trim();
     let version = if let Some(after_colon) = trimmed.split(':').nth(1) {
         after_colon.trim().to_string()
@@ -174,7 +256,7 @@ fn detect_lean_version(project: &Path) -> Result<String, String> {
         trimmed.to_string()
     };
     if version.is_empty() {
-        return Err("lean-toolchain file is empty".to_string());
+        return Err(ExtractRunnerError::LeanToolchainEmpty);
     }
     Ok(version)
 }
@@ -199,7 +281,7 @@ fn detect_platform() -> String {
 }
 
 /// Try downloading a pre-built probe-lean binary from GitHub Releases.
-fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf, String> {
+fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf> {
     let platform = detect_platform();
     let artifact = format!("probe-lean-{lean_version}-{platform}.tar.gz");
     println!("Checking for pre-built binary: {artifact}...");
@@ -210,10 +292,10 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf, String> {
             "https://api.github.com/repos/Beneficial-AI-Foundation/probe-lean/releases",
         ])
         .output()
-        .map_err(|e| format!("Failed to query GitHub releases: {e}"))?;
+        .context("query GitHub releases via curl")?;
 
     if !output.status.success() {
-        return Err("GitHub API request failed".to_string());
+        return Err(anyhow::anyhow!("GitHub API request failed").into());
     }
 
     let body = String::from_utf8_lossy(&output.stdout);
@@ -231,8 +313,7 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf, String> {
         })
         .next();
 
-    let url = download_url
-        .ok_or_else(|| "No pre-built binary available, falling back to source build".to_string())?;
+    let url = download_url.ok_or(ExtractRunnerError::NoPrebuiltAvailable)?;
 
     println!("Downloading pre-built binary...");
 
@@ -240,7 +321,8 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf, String> {
     if tmpdir.exists() {
         std::fs::remove_dir_all(&tmpdir).ok();
     }
-    std::fs::create_dir_all(&tmpdir).map_err(|e| format!("Failed to create temp dir: {e}"))?;
+    std::fs::create_dir_all(&tmpdir)
+        .with_context(|| format!("create temp dir {}", tmpdir.display()))?;
 
     let status = Command::new("bash")
         .args([
@@ -248,37 +330,41 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf, String> {
             &format!("curl -sL '{}' | tar -xz -C '{}'", url, tmpdir.display()),
         ])
         .status()
-        .map_err(|e| format!("Failed to download/extract binary: {e}"))?;
+        .context("spawn curl|tar pipeline to download probe-lean")?;
 
     if !status.success() {
-        return Err("Download/extraction failed".to_string());
+        return Err(anyhow::anyhow!("Download/extraction failed").into());
     }
 
     let dest_dir = home_dir()?.join(".local/bin");
-    std::fs::create_dir_all(&dest_dir)
-        .map_err(|e| format!("Failed to create ~/.local/bin: {e}"))?;
+    std::fs::create_dir_all(&dest_dir).context("create ~/.local/bin")?;
 
     let versioned_bin = dest_dir.join(format!("probe-lean-{lean_version}"));
     let downloaded_bin = tmpdir.join("bin/probe-lean");
     if !downloaded_bin.exists() {
-        return Err("Downloaded archive does not contain bin/probe-lean".to_string());
+        return Err(anyhow::anyhow!("Downloaded archive does not contain bin/probe-lean").into());
     }
 
-    std::fs::copy(&downloaded_bin, &versioned_bin)
-        .map_err(|e| format!("Failed to install binary: {e}"))?;
+    std::fs::copy(&downloaded_bin, &versioned_bin).with_context(|| {
+        format!(
+            "copy {} to {}",
+            downloaded_bin.display(),
+            versioned_bin.display()
+        )
+    })?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&versioned_bin, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Failed to set executable permission: {e}"))?;
+            .with_context(|| format!("set +x on {}", versioned_bin.display()))?;
     }
 
     let versioned_lib = home_dir()?.join(format!(".local/lib/probe-lean-{lean_version}"));
     let downloaded_lib = tmpdir.join("lib");
     if downloaded_lib.exists() {
         std::fs::create_dir_all(&versioned_lib)
-            .map_err(|e| format!("Failed to create lib dir: {e}"))?;
+            .with_context(|| format!("create lib dir {}", versioned_lib.display()))?;
         copy_dir_contents(&downloaded_lib, &versioned_lib)?;
     }
 
@@ -289,29 +375,29 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf, String> {
 }
 
 /// Build probe-lean from source for a specific Lean version.
-fn build_from_source(lean_version: &str) -> Result<PathBuf, String> {
+fn build_from_source(lean_version: &str) -> Result<PathBuf> {
     println!("Building probe-lean from source for Lean {lean_version}...");
 
     let build_dir = std::env::temp_dir().join("probe-lean-build");
     if build_dir.exists() {
         std::fs::remove_dir_all(&build_dir)
-            .map_err(|e| format!("Failed to clean build dir: {e}"))?;
+            .with_context(|| format!("clean build dir {}", build_dir.display()))?;
     }
 
     let status = Command::new("git")
         .args(["clone", "--depth", "1", PROBE_LEAN_GIT])
         .arg(&build_dir)
         .status()
-        .map_err(|e| format!("Failed to clone probe-lean: {e}"))?;
+        .context("spawn `git clone` for probe-lean")?;
 
     if !status.success() {
-        return Err("git clone probe-lean failed".to_string());
+        return Err(anyhow::anyhow!("git clone probe-lean failed").into());
     }
 
     if lean_version != "latest" {
         let toolchain_content = format!("leanprover/lean4:{lean_version}\n");
         std::fs::write(build_dir.join("lean-toolchain"), &toolchain_content)
-            .map_err(|e| format!("Failed to write lean-toolchain: {e}"))?;
+            .context("write lean-toolchain pin")?;
 
         let lake_manifest = build_dir.join("lake-manifest.json");
         if lake_manifest.exists() {
@@ -327,24 +413,22 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf, String> {
         .arg("build")
         .current_dir(&build_dir)
         .status()
-        .map_err(|e| format!("Failed to build probe-lean with lake: {e}"))?;
+        .context("spawn `lake build`")?;
 
     if !status.success() {
-        return Err(
-            "lake build failed. Make sure elan/lean4 and lake are installed.\n  \
-             See: https://github.com/leanprover/elan"
-                .to_string(),
-        );
+        return Err(ExtractRunnerError::LakeBuildFailed);
     }
 
     let built_bin = build_dir.join(".lake/build/bin/probe-lean");
     if !built_bin.exists() {
-        return Err("lake build succeeded but .lake/build/bin/probe-lean not found".to_string());
+        return Err(ExtractRunnerError::MissingOutput {
+            command: "lake build".to_string(),
+            path: built_bin,
+        });
     }
 
     let dest_dir = home_dir()?.join(".local/bin");
-    std::fs::create_dir_all(&dest_dir)
-        .map_err(|e| format!("Failed to create ~/.local/bin: {e}"))?;
+    std::fs::create_dir_all(&dest_dir).context("create ~/.local/bin")?;
 
     let (dest_bin, label) = if lean_version != "latest" {
         let versioned = dest_dir.join(format!("probe-lean-{lean_version}"));
@@ -354,13 +438,13 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf, String> {
     };
 
     std::fs::copy(&built_bin, &dest_bin)
-        .map_err(|e| format!("Failed to copy probe-lean to ~/.local/bin: {e}"))?;
+        .with_context(|| format!("copy {} to {}", built_bin.display(), dest_bin.display()))?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&dest_bin, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Failed to set executable permission: {e}"))?;
+            .with_context(|| format!("set +x on {}", dest_bin.display()))?;
     }
 
     if lean_version != "latest" {
@@ -372,10 +456,10 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf, String> {
 }
 
 /// Update the `~/.local/bin/probe-lean` symlink to point at a versioned binary.
-fn update_symlink(versioned_bin: &Path) -> Result<(), String> {
+fn update_symlink(versioned_bin: &Path) -> Result<()> {
     let symlink = versioned_bin
         .parent()
-        .ok_or("Invalid binary path")?
+        .context("versioned binary has no parent directory")?
         .join("probe-lean");
 
     if symlink.exists() || symlink.symlink_metadata().is_ok() {
@@ -386,35 +470,41 @@ fn update_symlink(versioned_bin: &Path) -> Result<(), String> {
     {
         let target = versioned_bin
             .file_name()
-            .ok_or("Invalid versioned binary filename")?;
+            .context("versioned binary has no filename")?;
         std::os::unix::fs::symlink(target, &symlink)
-            .map_err(|e| format!("Failed to create symlink: {e}"))?;
+            .with_context(|| format!("create symlink at {}", symlink.display()))?;
     }
     #[cfg(not(unix))]
     {
         std::fs::copy(versioned_bin, &symlink)
-            .map_err(|e| format!("Failed to create probe-lean copy: {e}"))?;
+            .with_context(|| format!("copy probe-lean to {}", symlink.display()))?;
     }
     Ok(())
 }
 
 /// Recursively copy directory contents from `src` to `dst`.
-fn copy_dir_contents(src: &Path, dst: &Path) -> Result<(), String> {
-    let entries =
-        std::fs::read_dir(src).map_err(|e| format!("Failed to read dir {}: {e}", src.display()))?;
+fn copy_dir_contents(src: &Path, dst: &Path) -> Result<()> {
+    let entries = std::fs::read_dir(src).with_context(|| format!("read dir {}", src.display()))?;
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read dir entry: {e}"))?;
+        let entry = entry.with_context(|| format!("read entry in {}", src.display()))?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
         if src_path.is_dir() {
-            std::fs::create_dir_all(&dst_path).map_err(|e| format!("Failed to create dir: {e}"))?;
+            std::fs::create_dir_all(&dst_path)
+                .with_context(|| format!("create dir {}", dst_path.display()))?;
             copy_dir_contents(&src_path, &dst_path)?;
         } else {
-            std::fs::copy(&src_path, &dst_path).map_err(|e| format!("Failed to copy file: {e}"))?;
+            std::fs::copy(&src_path, &dst_path).with_context(|| {
+                format!("copy {} to {}", src_path.display(), dst_path.display())
+            })?;
         }
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Charon LLBC pre-generation
+// ---------------------------------------------------------------------------
 
 /// Pre-generate the Charon LLBC file using config from `aeneas-config.yml`.
 ///
@@ -423,7 +513,7 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<(), String> {
 /// `--start-from` filters, and `--exclude` lists. This function runs charon
 /// directly with the full configuration so the LLBC is cached at
 /// `<rust_project>/data/charon.llbc` before `probe-rust` needs it.
-pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<(), String> {
+pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<()> {
     let data_dir = rust_project.join("data");
     let llbc_path = data_dir.join("charon.llbc");
 
@@ -441,13 +531,12 @@ pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<
         }
     };
 
-    std::fs::create_dir_all(&data_dir)
-        .map_err(|e| format!("Failed to create {}: {e}", data_dir.display()))?;
+    std::fs::create_dir_all(&data_dir).with_context(|| format!("create {}", data_dir.display()))?;
 
     // Canonicalize to absolute path: charon resolves --dest-file relative to
     // its own cwd (rust_project), not probe-aeneas's cwd.
     let abs_llbc = std::fs::canonicalize(&data_dir)
-        .map_err(|e| format!("Failed to canonicalize {}: {e}", data_dir.display()))?
+        .with_context(|| format!("canonicalize {}", data_dir.display()))?
         .join("charon.llbc");
     let llbc_str = abs_llbc.to_string_lossy();
 
@@ -519,7 +608,7 @@ pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .output()
-        .map_err(|e| format!("Failed to run charon: {e}"))?;
+        .context("spawn `charon`")?;
 
     if !output.status.success() {
         eprintln!(
@@ -539,17 +628,24 @@ pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Rust toolchain detection
+// ---------------------------------------------------------------------------
+
 /// Detect the Rust project's active toolchain and ensure `rust-analyzer` is
 /// installed for it. Falls back silently so extraction can still attempt to
 /// proceed (probe-rust may have its own fallback).
 fn ensure_rust_analyzer_for_project(project: &Path) {
     let toolchain = detect_rust_toolchain(project);
-    if let Some(ref tc) = toolchain {
-        if let Err(e) = setup::ensure_rust_analyzer_component(Some(tc)) {
-            eprintln!("Warning: {e}");
-        }
-    } else if let Err(e) = setup::ensure_rust_analyzer_component(None) {
-        eprintln!("Warning: {e}");
+    let result = match toolchain {
+        Some(ref tc) => setup::ensure_rust_analyzer_component(Some(tc)),
+        None => setup::ensure_rust_analyzer_component(None),
+    };
+    if let Err(e) = result {
+        // Wrap into anyhow::Error so `{:#}` walks the SetupError source
+        // chain — `e` itself only Displays the top-level context, which
+        // hides the underlying io::Error for `SetupError::Io` variants.
+        eprintln!("Warning: {:#}", anyhow::Error::new(e));
     }
 }
 
@@ -596,13 +692,21 @@ fn try_read_toolchain_file(path: &Path) -> Option<String> {
     Some(trimmed.to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Small helpers re-exported from `setup`
+// ---------------------------------------------------------------------------
+
 fn find_on_path(name: &str) -> Option<PathBuf> {
     setup::find_on_path(name)
 }
 
-fn home_dir() -> Result<PathBuf, String> {
-    setup::home_dir()
+fn home_dir() -> Result<PathBuf> {
+    Ok(setup::home_dir()?)
 }
+
+// ---------------------------------------------------------------------------
+// Output path resolution
+// ---------------------------------------------------------------------------
 
 /// Compute the output path for an extractor. When `output_dir` is given, writes
 /// a stable-named file there (e.g. `.verilib/probes/rust_extract.json`);
@@ -621,4 +725,29 @@ fn tempfile(prefix: &str, suffix: &str) -> PathBuf {
         .as_millis();
     let pid = std::process::id();
     std::env::temp_dir().join(format!("{prefix}_{ts}_{pid}{suffix}"))
+}
+
+// ---------------------------------------------------------------------------
+// Boundary: String compatibility for callers not yet migrated
+// ---------------------------------------------------------------------------
+
+/// Convert an `ExtractRunnerError` to a `String` so callers in `extract.rs`,
+/// `main.rs`, and `listfuns.rs` that still return `Result<_, String>` can
+/// propagate via `?`.
+///
+/// Walks the `std::error::Error::source` chain so the resulting string
+/// matches the pre-migration `format!("Failed to X: {e}")` shape, including
+/// for `Other(anyhow::Error)` whose own chain is walked.
+impl From<ExtractRunnerError> for String {
+    fn from(err: ExtractRunnerError) -> Self {
+        use std::error::Error;
+        let mut msg = err.to_string();
+        let mut source: Option<&dyn Error> = err.source();
+        while let Some(s) = source {
+            msg.push_str(": ");
+            msg.push_str(&s.to_string());
+            source = s.source();
+        }
+        msg
+    }
 }

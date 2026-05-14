@@ -1,7 +1,21 @@
+//! `translate` module: generate translation mappings between Rust and Lean atoms.
+//!
+//! The matching logic ([`generate_translations`] and the `strategy_*` helpers)
+//! is pure and infallible. Only the two I/O loaders ([`load_atoms`],
+//! [`load_functions`]) are fallible.
+//!
+//! ## Error model
+//!
+//! Fallible functions return [`anyhow::Result<T>`] directly. All failures are
+//! IO or JSON parse errors, so no typed variants are needed. Callers in
+//! `extract` and `listfuns` use `?` to propagate these into their own
+//! `Other(anyhow::Error)` catch-all variants.
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::sync::LazyLock;
 
+use anyhow::Context as _;
 use probe::types::{Atom, TranslationMapping};
 use regex::Regex;
 
@@ -282,7 +296,7 @@ fn disambiguate_by_file_and_lines<'a>(
 ) -> Option<&'a String> {
     let func_source = func.source.as_deref()?;
     let norm_func_source = normalize_source_path(func_source);
-    let func_range = func.lines.as_deref().and_then(LineRange::parse);
+    let func_range = func.lines.as_deref().and_then(|s| LineRange::parse(s).ok());
 
     let mut file_matches: Vec<&String> = candidates
         .iter()
@@ -406,7 +420,7 @@ fn strategy_file_line_overlap(
                 continue;
             }
 
-            let func_range = match func.lines.as_deref().and_then(LineRange::parse) {
+            let func_range = match func.lines.as_deref().and_then(|s| LineRange::parse(s).ok()) {
                 Some(r) => r,
                 None => continue,
             };
@@ -437,17 +451,17 @@ fn strategy_file_line_overlap(
 }
 
 /// Load functions.json from disk.
-pub fn load_functions(path: &Path) -> Result<Vec<FunctionRecord>, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-    let file: FunctionsFile = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
+pub fn load_functions(path: &Path) -> anyhow::Result<Vec<FunctionRecord>> {
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    let file: FunctionsFile =
+        serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))?;
     Ok(file.functions)
 }
 
 /// Load atom data from a probe envelope JSON file.
-pub fn load_atoms(path: &Path) -> Result<BTreeMap<String, Atom>, String> {
-    let (data, _provenance) = probe::types::load_atom_file(path)?;
+pub fn load_atoms(path: &Path) -> anyhow::Result<BTreeMap<String, Atom>> {
+    let (data, _provenance) = probe::types::load_atom_file(path).map_err(anyhow::Error::msg)?;
     Ok(data)
 }
 
@@ -721,9 +735,9 @@ mod tests {
 
     #[test]
     fn test_line_range_parse_invalid() {
-        assert!(LineRange::parse("292-325").is_none());
-        assert!(LineRange::parse("").is_none());
-        assert!(LineRange::parse("L325-L292").is_none()); // start > end
+        assert!(LineRange::parse("292-325").is_err());
+        assert!(LineRange::parse("").is_err());
+        assert!(LineRange::parse("L325-L292").is_err()); // start > end
     }
 
     #[test]

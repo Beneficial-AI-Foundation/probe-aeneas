@@ -1,3 +1,13 @@
+//! `aeneas_config` module: load optional per-project Aeneas enrichment config.
+//!
+//! ## Error model
+//!
+//! [`AeneasConfig::load`] returns [`anyhow::Result<AeneasConfig>`]. All
+//! failures are IO or JSON parse errors, so no typed variants are needed.
+//! Callers in `extract` and `listfuns` use `?` to propagate these into their
+//! own `Other(anyhow::Error)` catch-all variants.
+
+use anyhow::Context as _;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::path::Path;
@@ -30,7 +40,7 @@ pub struct AeneasConfig {
 impl AeneasConfig {
     /// Load config from an explicit path, or try `.verilib/aeneas.json`
     /// relative to the Lean project directory. Missing files are not errors.
-    pub fn load(explicit_path: Option<&Path>, lean_project: Option<&Path>) -> Result<Self, String> {
+    pub fn load(explicit_path: Option<&Path>, lean_project: Option<&Path>) -> anyhow::Result<Self> {
         let path = explicit_path
             .map(|p| p.to_path_buf())
             .or_else(|| lean_project.map(|lp| lp.join(".verilib").join("aeneas.json")));
@@ -43,10 +53,10 @@ impl AeneasConfig {
             return Ok(Self::default());
         }
 
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-        let file: AeneasConfigFile = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
+        let content =
+            std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        let file: AeneasConfigFile =
+            serde_json::from_str(&content).with_context(|| format!("parse {}", path.display()))?;
 
         println!("Loaded Aeneas config from {}", path.display());
         if !file.is_hidden.is_empty() {
