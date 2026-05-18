@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-05-18
+
+### Changed
+- **Updates error handling**: Start using thiserror+anyhow instead of returning Result<_, String> for error paths in the repository
+
 ## [0.9.6] - 2026-05-13
 
 ### Fixed
