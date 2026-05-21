@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Added
 - Verification status enrichment: `extract` now runs transitive verification propagation (P23) as its final step, upgrading `verification-status` from `"verified"` to `"transitively-verified"` on atoms whose entire transitive closure is verified or trusted
 - `--skip-enrich` flag for `extract` to skip the enrichment step
+- "Supported Projects" section in README documenting project requirements, supported layouts, and known limitations
 
 ## [0.9.7] - 2026-05-18
 
@@ -263,7 +264,9 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.7...v0.10.0
+[0.9.7]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.3...v0.9.4
