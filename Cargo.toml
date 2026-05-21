@@ -33,9 +33,6 @@ which = "8.0.2"
 serde_json = "1"
 tempfile = "3"
 
-[patch."https://github.com/Beneficial-AI-Foundation/probe"]
-probe = { path = "../probe" }
-
 [profile.release]
 lto = true
 codegen-units = 1

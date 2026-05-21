@@ -30,9 +30,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Check out probe for path dependency
-        run: git clone --depth 1 https://github.com/Beneficial-AI-Foundation/probe.git ../probe
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -58,9 +55,6 @@ jobs:
     needs: [fmt, clippy]
     steps:
       - uses: actions/checkout@v6
-
-      - name: Check out probe for path dependency
-        run: git clone --depth 1 https://github.com/Beneficial-AI-Foundation/probe.git ../probe
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
