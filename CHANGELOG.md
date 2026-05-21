@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-21
+
+### Added
+- Verification status enrichment: `extract` now runs transitive verification propagation (P23) as its final step, upgrading `verification-status` from `"verified"` to `"transitively-verified"` on atoms whose entire transitive closure is verified or trusted
+- `--skip-enrich` flag for `extract` to skip the enrichment step
+
 ## [0.9.7] - 2026-05-18
 
 ### Changed

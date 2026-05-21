@@ -238,7 +238,7 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `is-relevant` | bool | yes | Inverse of `is-disabled`. `true` when Aeneas transpiled this function. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
-| `verification-status` | string | no | Verification status derived from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is propagated directly. Otherwise, if a primary spec exists (via `primary-spec` extension or `<name>_spec` naming convention), the spec's `verification-status` is used; if no spec exists, the status is `"unverified"`. Always present when `translation-name` is set; absent when the Rust function has no Lean translation. |
+| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Derived from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is propagated directly. Otherwise, if a primary spec exists, the spec's status is used; if no spec exists, the status is `"unverified"`. After enrichment (default, `--skip-enrich` to disable): `"verified"` is upgraded to `"transitively-verified"` when all transitive deps are verified/trusted. |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
@@ -251,7 +251,7 @@ the enrichment pass:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `verification-status` | string | yes | `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. `"trusted"` indicates the declaration belongs to the trust base (axioms or `*External.lean` files). |
+| `verification-status` | string | yes | `"transitively-verified"`, `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. `"trusted"` indicates the declaration belongs to the trust base (axioms or `*External.lean` files). After enrichment: `"transitively-verified"` means all transitive deps are verified/trusted. |
 | `trusted-reason` | string | no | Why the atom is trusted: `"axiom"` (axiomatic declaration) or `"external"` (defined in an `*External.lean` file). Present only when `verification-status` is `"trusted"`. |
 | `type-dependencies` | array of strings | yes | Code-names of dependencies used in the type signature |
 | `term-dependencies` | array of strings | yes | Code-names of dependencies used in the definition body |

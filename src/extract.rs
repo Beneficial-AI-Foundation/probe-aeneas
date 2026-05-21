@@ -407,6 +407,7 @@ pub fn run_extract(
     use_lake: bool,
     rust_path_prefix: Option<&str>,
     with_public_api: bool,
+    skip_enrich: bool,
 ) -> Result<()> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
@@ -466,6 +467,7 @@ pub fn run_extract(
         &config,
         rust_path_prefix,
         lean_project,
+        skip_enrich,
     )
 }
 
@@ -632,6 +634,7 @@ fn run_extract_with_translations(
     config: &AeneasConfig,
     rust_path_prefix: Option<&str>,
     project_root: Option<&Path>,
+    skip_enrich: bool,
 ) -> Result<()> {
     // Phase 1: Merge (generic probe operation)
     // merge_atom_files still returns Result<_, String>; bridge via anyhow.
@@ -666,6 +669,13 @@ fn run_extract_with_translations(
     // Phase 2: Enrich (Aeneas-specific)
     enrich_with_aeneas_metadata(&mut merged, &translations.0, funs_rust_names);
     enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config);
+
+    // Phase 2.5: Enrich verification status (transitive propagation, P23)
+    if !skip_enrich {
+        let (transitive, local, _) =
+            probe::commands::propagate::enrich_verification_status(&mut merged);
+        println!("  enrich: ✓ {transitive} transitively-verified, {local} locally verified");
+    }
 
     // Phase 3: Write envelope
     write_aeneas_envelope(merged, provenance, output_path, &stats)

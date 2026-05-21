@@ -424,8 +424,7 @@ dependencies = [
 
 [[package]]
 name = "probe"
-version = "0.1.0"
-source = "git+https://github.com/Beneficial-AI-Foundation/probe#fcb4bc3a005f8aed6b83bded39a0d8da671cc400"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "clap",
@@ -435,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "probe-aeneas"
-version = "0.9.7"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "chrono",

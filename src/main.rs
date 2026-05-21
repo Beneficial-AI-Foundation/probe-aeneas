@@ -76,6 +76,10 @@ enum Commands {
         /// Requires `cargo-public-api` installed and a nightly toolchain.
         #[arg(long)]
         with_public_api: bool,
+
+        /// Skip the verification status enrichment step (transitive verification propagation)
+        #[arg(long)]
+        skip_enrich: bool,
     },
 
     /// Generate a translations file mapping Rust code-names to Lean code-names.
@@ -162,6 +166,7 @@ fn resolve_and_extract(
     aeneas_config: Option<PathBuf>,
     lake: bool,
     with_public_api: bool,
+    skip_enrich: bool,
 ) -> anyhow::Result<()> {
     let (rust, rust_project, lean_project, functions, rust_path_prefix, charon_config) =
         if let Some(ref proj) = project {
@@ -199,6 +204,7 @@ fn resolve_and_extract(
         lake,
         rust_path_prefix.as_deref(),
         with_public_api,
+        skip_enrich,
     )
     .map_err(anyhow::Error::new)
 }
@@ -218,6 +224,7 @@ fn main() {
             aeneas_config,
             lake,
             with_public_api,
+            skip_enrich,
         } => resolve_and_extract(
             project,
             rust,
@@ -229,6 +236,7 @@ fn main() {
             aeneas_config,
             lake,
             with_public_api,
+            skip_enrich,
         ),
 
         Commands::Translate {
