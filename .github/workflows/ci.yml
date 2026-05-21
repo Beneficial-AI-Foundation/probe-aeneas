@@ -30,6 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: actions/checkout@v6
+        with:
+          repository: Beneficial-AI-Foundation/probe
+          path: ../probe
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -55,6 +60,11 @@ jobs:
     needs: [fmt, clippy]
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Beneficial-AI-Foundation/probe
+          path: ../probe
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
