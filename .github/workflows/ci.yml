@@ -30,10 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/checkout@v6
-        with:
-          repository: Beneficial-AI-Foundation/probe
-          path: ../probe
+      - name: Check out probe for path dependency
+        run: git clone --depth 1 https://github.com/Beneficial-AI-Foundation/probe.git ../probe
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -61,10 +59,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/checkout@v6
-        with:
-          repository: Beneficial-AI-Foundation/probe
-          path: ../probe
+      - name: Check out probe for path dependency
+        run: git clone --depth 1 https://github.com/Beneficial-AI-Foundation/probe.git ../probe
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
