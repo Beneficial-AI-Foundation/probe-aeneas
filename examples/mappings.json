@@ -973,7 +973,7 @@
       "to": "probe:curve25519_dalek.window.LookupTableProjectiveNielsPoint.Insts.CoreConvertFromSharedAEdwardsPoint.from"
     }
   ],
-  "schema": "probe/translations",
+  "schema": "probe/mappings",
   "schema-version": "2.0",
   "sources": {
     "from": {

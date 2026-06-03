@@ -31,7 +31,7 @@ use crate::translate::{
     load_functions, normalize_rust_name,
 };
 
-type TranslationMaps = (HashMap<String, String>, HashMap<String, String>);
+type MappingMaps = (HashMap<String, Vec<String>>, HashMap<String, Vec<String>>);
 
 // ---------------------------------------------------------------------------
 // Typed error
@@ -578,7 +578,7 @@ fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
     functions_path: &Path,
-) -> Result<(TranslationMaps, HashSet<String>)> {
+) -> Result<(MappingMaps, HashSet<String>)> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
         .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
@@ -603,11 +603,17 @@ fn run_translate(
         println!("    {conf}: {count}");
     }
 
-    let mut from_to = HashMap::new();
-    let mut to_from = HashMap::new();
+    let mut from_to: HashMap<String, Vec<String>> = HashMap::new();
+    let mut to_from: HashMap<String, Vec<String>> = HashMap::new();
     for m in &mappings {
-        from_to.insert(m.from.clone(), m.to.clone());
-        to_from.insert(m.to.clone(), m.from.clone());
+        from_to
+            .entry(m.from.clone())
+            .or_default()
+            .push(m.to.clone());
+        to_from
+            .entry(m.to.clone())
+            .or_default()
+            .push(m.from.clone());
     }
 
     Ok(((from_to, to_from), funs_rust_names))
@@ -628,7 +634,7 @@ fn run_translate(
 fn run_extract_with_translations(
     rust_path: &Path,
     lean_path: &Path,
-    translations: &TranslationMaps,
+    translations: &MappingMaps,
     funs_rust_names: &HashSet<String>,
     output_path: Option<&Path>,
     config: &AeneasConfig,
@@ -737,21 +743,23 @@ fn resolve_verification_status(
 ///    by any strategy means Aeneas processed the function).
 fn enrich_with_aeneas_metadata(
     merged: &mut std::collections::BTreeMap<String, Atom>,
-    from_to: &HashMap<String, String>,
+    from_to: &HashMap<String, Vec<String>>,
     funs_rust_names: &HashSet<String>,
 ) {
     let enrichments: Vec<_> = from_to
         .iter()
-        .filter_map(|(rust_name, lean_name)| {
-            merged.get(lean_name).map(|lean_atom| {
-                (
-                    rust_name.clone(),
-                    lean_name.clone(),
-                    lean_atom.code_path.clone(),
-                    lean_atom.code_text.lines_start,
-                    lean_atom.code_text.lines_end,
-                    resolve_verification_status(lean_name, lean_atom, merged),
-                )
+        .flat_map(|(rust_name, lean_names)| {
+            lean_names.iter().filter_map(|lean_name| {
+                merged.get(lean_name).map(|lean_atom| {
+                    (
+                        rust_name.clone(),
+                        lean_name.clone(),
+                        lean_atom.code_path.clone(),
+                        lean_atom.code_text.lines_start,
+                        lean_atom.code_text.lines_end,
+                        resolve_verification_status(lean_name, lean_atom, merged),
+                    )
+                })
             })
         })
         .collect();
@@ -838,7 +846,7 @@ fn write_aeneas_envelope(
     println!("  Total entries:    {}", stats.total_entries);
     println!("  Stubs remaining:  {}", stats.stubs_remaining);
     println!("  New entries added: {}", stats.entries_added);
-    println!("  Cross-lang edges: {}", stats.translations_applied);
+    println!("  Cross-lang edges: {}", stats.mappings_applied);
 
     Ok(())
 }
@@ -1588,11 +1596,11 @@ charon:
             make_lean_atom("step_2"),
         );
 
-        let mut from_to = HashMap::new();
-        from_to.insert(
-            "probe:my-crate/1.0/ristretto/decompress/step_2()".to_string(),
-            "probe:my_crate.ristretto.decompress.step_2".to_string(),
-        );
+        let mut from_to: HashMap<String, Vec<String>> = HashMap::new();
+        from_to
+            .entry("probe:my-crate/1.0/ristretto/decompress/step_2()".to_string())
+            .or_default()
+            .push("probe:my_crate.ristretto.decompress.step_2".to_string());
         // The rust-qualified-name does NOT appear in funs_rust_names (name mismatch).
         let funs_rust_names = HashSet::new();
 
@@ -1684,7 +1692,7 @@ charon:
         merged: &mut std::collections::BTreeMap<String, Atom>,
         lean_vs: Option<&str>,
         spec_vs: Option<&str>,
-    ) -> HashMap<String, String> {
+    ) -> HashMap<String, Vec<String>> {
         let mut rust_atom = make_rust_atom("my_fn");
         rust_atom.extensions.insert(
             "rust-qualified-name".to_string(),
@@ -1707,11 +1715,11 @@ charon:
             );
         }
 
-        let mut from_to = HashMap::new();
-        from_to.insert(
-            "probe:my-crate/1.0/my_fn()".to_string(),
-            "probe:my_crate.my_fn".to_string(),
-        );
+        let mut from_to: HashMap<String, Vec<String>> = HashMap::new();
+        from_to
+            .entry("probe:my-crate/1.0/my_fn()".to_string())
+            .or_default()
+            .push("probe:my_crate.my_fn".to_string());
         from_to
     }
 

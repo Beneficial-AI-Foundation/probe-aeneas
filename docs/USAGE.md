@@ -329,7 +329,7 @@ translations exist.
 
 ### Translations
 
-The `translate` command produces a JSON file with `"probe/translations"`
+The `translate` command produces a JSON file with `"probe/mappings"`
 schema containing an array of `{from, to, confidence, method}` mappings.
 
 ---

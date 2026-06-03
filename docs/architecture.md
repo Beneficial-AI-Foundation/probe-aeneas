@@ -37,7 +37,7 @@ merge engine from the probe crate.
 
 Uses `functions.json` (produced by `lake exe listfuns`) as the bridge
 between Rust and Lean namespaces. Three matching strategies, applied in
-priority order, produce `TranslationMapping` entries:
+priority order, produce `Mapping` entries:
 
 1. **`rust-qualified-name`** -- exact match via Charon-derived qualified
    names joined with `functions.json` `rust_name` entries. Confidence:
@@ -77,7 +77,7 @@ The generic engine performs three operations:
 - **Stub accounting**: counts stubs remaining, entries added, and
   cross-language edges applied.
 
-This step is identical to what `probe merge --translations` does from
+This step is identical to what `probe merge --mappings` does from
 the command line. probe-aeneas simply calls the library function
 directly.
 
@@ -127,7 +127,7 @@ probe-aeneas depends on the `probe` crate for:
 |--------|--------|------|
 | `merge_atom_files` | `probe::commands::merge` | Load + merge atom files with provenance flattening (phase 2) |
 | `Atom` | `probe::types` | Core atom representation |
-| `TranslationMapping` | `probe::types` | Translation entry type |
+| `Mapping` | `probe::types` | Cross-language mapping entry type |
 | `MergedAtomEnvelope` | `probe::types` | Output envelope (multi-input variant) |
 | `InputProvenance` | `probe::types` | Per-input provenance metadata |
 | `Tool` | `probe::types` | Tool metadata in the envelope |
@@ -142,7 +142,7 @@ The pattern -- generate translations, merge, enrich -- is not specific
 to Aeneas. Any cross-language bridge that can produce a bidirectional
 code-name mapping can follow the same architecture:
 
-1. Produce `TranslationMapping`s by whatever means the bridge provides.
+1. Produce `Mapping` entries by whatever means the bridge provides.
 2. Call `merge_atom_maps` with the two atom files and the translations.
 3. Add domain-specific metadata to the merged output.
 

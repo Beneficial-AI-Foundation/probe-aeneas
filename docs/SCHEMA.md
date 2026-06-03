@@ -415,16 +415,16 @@ entries with:
 
 ---
 
-## 2. `probe/translations` -- Translation Mappings
+## 2. `probe/mappings` -- Translation Mappings
 
 **Produced by:** `translate`
-**Envelope schema:** `"probe/translations"`
+**Envelope schema:** `"probe/mappings"`
 
 ### Envelope Shape
 
 ```json
 {
-  "schema": "probe/translations",
+  "schema": "probe/mappings",
   "schema-version": "2.0",
   "tool": {
     "name": "probe-aeneas",
@@ -454,7 +454,7 @@ entries with:
 |-------|------|-------------|
 | `sources.from` | object | Metadata about the "from" (Rust) input |
 | `sources.to` | object | Metadata about the "to" (Lean) input |
-| `mappings` | array of TranslationMapping | The translation entries |
+| `mappings` | array of Mapping | The mapping entries |
 
 ### Source Entry
 
@@ -464,7 +464,7 @@ entries with:
 | `package` | string | Package name |
 | `package-version` | string | Package version |
 
-### TranslationMapping
+### Mapping
 
 ```json
 {
@@ -625,7 +625,7 @@ the Aeneas Rust-to-Lean case. The `extract` command generates
 Aeneas-specific translations, calls `merge_atom_maps` from
 `probe::commands::merge` for the combine + cross-language-edge step, then
 enriches the result with Aeneas metadata (`translation-*`, `is-disabled`).
-Shared types (`Atom`, `TranslationMapping`, `MergedAtomEnvelope`,
+Shared types (`Atom`, `Mapping`, `MergedAtomEnvelope`,
 `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
 See [architecture.md](architecture.md) for the full architectural
 description.

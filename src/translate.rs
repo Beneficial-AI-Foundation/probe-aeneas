@@ -16,7 +16,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use anyhow::Context as _;
-use probe::types::{Atom, TranslationMapping};
+use probe::types::{Atom, Mapping};
 use regex::Regex;
 
 use crate::types::{FunctionRecord, FunctionsFile, LineRange};
@@ -110,7 +110,7 @@ pub fn generate_translations(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     functions: &[FunctionRecord],
-) -> (Vec<TranslationMapping>, TranslateStats) {
+) -> (Vec<Mapping>, TranslateStats) {
     let mut mappings = Vec::new();
     let mut matched_rust: HashSet<String> = HashSet::new();
     let mut matched_lean: HashSet<String> = HashSet::new();
@@ -225,7 +225,7 @@ fn strategy_rust_qualified_name(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     functions: &[FunctionRecord],
-    mappings: &mut Vec<TranslationMapping>,
+    mappings: &mut Vec<Mapping>,
     matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
@@ -275,7 +275,7 @@ fn strategy_rust_qualified_name(
             } else {
                 "exact-disambiguated"
             };
-            mappings.push(TranslationMapping {
+            mappings.push(Mapping {
                 from: rust_code_name.clone(),
                 to: lean_code_name.clone(),
                 confidence: confidence.to_string(),
@@ -346,7 +346,7 @@ fn strategy_file_display_name(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     file_name_to_funcs: &HashMap<(String, String), Vec<&FunctionRecord>>,
-    mappings: &mut Vec<TranslationMapping>,
+    mappings: &mut Vec<Mapping>,
     matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
@@ -370,7 +370,7 @@ fn strategy_file_display_name(
         let func = candidates[0];
         let lean_code_name = format!("probe:{}", func.lean_name);
         if lean_data.contains_key(&lean_code_name) && !matched_lean.contains(&lean_code_name) {
-            mappings.push(TranslationMapping {
+            mappings.push(Mapping {
                 from: code_name.clone(),
                 to: lean_code_name.clone(),
                 confidence: "file-and-name".to_string(),
@@ -386,7 +386,7 @@ fn strategy_file_line_overlap(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     file_to_funcs: &HashMap<String, Vec<&FunctionRecord>>,
-    mappings: &mut Vec<TranslationMapping>,
+    mappings: &mut Vec<Mapping>,
     matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
@@ -437,7 +437,7 @@ fn strategy_file_line_overlap(
         if let Some(func) = best_match {
             let lean_code_name = format!("probe:{}", func.lean_name);
             if lean_data.contains_key(&lean_code_name) && !matched_lean.contains(&lean_code_name) {
-                mappings.push(TranslationMapping {
+                mappings.push(Mapping {
                     from: code_name.clone(),
                     to: lean_code_name.clone(),
                     confidence: "file-and-lines".to_string(),
@@ -471,7 +471,7 @@ pub fn load_atoms(path: &Path) -> anyhow::Result<BTreeMap<String, Atom>> {
 /// package metadata. Does not support merged envelopes, which use `"inputs"`
 /// instead of `"source"`.
 pub fn build_translations_json(
-    mappings: &[TranslationMapping],
+    mappings: &[Mapping],
     rust_envelope: &serde_json::Value,
     lean_envelope: &serde_json::Value,
 ) -> serde_json::Value {
@@ -487,7 +487,7 @@ pub fn build_translations_json(
         .unwrap_or(serde_json::json!({}));
 
     serde_json::json!({
-        "schema": "probe/translations",
+        "schema": "probe/mappings",
         "schema-version": "2.0",
         "tool": {
             "name": "probe-aeneas",
