@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-04
+
+### Changed
+- **Adapt to probe hub "mapping" rename**: `TranslationMapping` → `Mapping`, `translations_applied` → `mappings_applied`, and mapping value type changed from `HashMap<String, String>` to `HashMap<String, Vec<String>>` (1-to-many). Fixes install-from-source breakage when building against the latest probe hub.
+
 ## [0.10.0] - 2026-05-21
 
 ### Added
@@ -264,7 +269,8 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.7...v0.10.0
 [0.9.7]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.5...v0.9.6
