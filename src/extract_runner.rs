@@ -62,10 +62,11 @@ pub enum ExtractRunnerError {
 
     /// `lake build` failed during source installation of probe-lean.
     #[error(
-        "lake build failed. Make sure elan/lean4 and lake are installed.\n  \
-         See: https://github.com/leanprover/elan"
+        "lake build failed (exit {code}).\n  \
+         Make sure elan/lean4 and lake are installed: https://github.com/leanprover/elan\n  \
+         stderr: {stderr}"
     )]
-    LakeBuildFailed,
+    LakeBuildFailed { code: i32, stderr: String },
 
     /// Errors propagated from the `setup` module.
     #[error(transparent)]
@@ -409,14 +410,18 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf> {
         }
     }
 
-    let status = Command::new("lake")
+    let output = Command::new("lake")
         .arg("build")
         .current_dir(&build_dir)
-        .status()
+        .output()
         .context("spawn `lake build`")?;
 
-    if !status.success() {
-        return Err(ExtractRunnerError::LakeBuildFailed);
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        return Err(ExtractRunnerError::LakeBuildFailed {
+            code: output.status.code().unwrap_or(-1),
+            stderr,
+        });
     }
 
     let built_bin = build_dir.join(".lake/build/bin/probe-lean");

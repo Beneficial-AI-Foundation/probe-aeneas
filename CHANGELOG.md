@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-06-08
+
+### Fixed
+- **`lake build` failure now reports actual stderr** instead of the generic "make sure elan is installed" message, making Docker/CI failures diagnosable without guessing
+
 ## [0.11.0] - 2026-06-04
 
 ### Changed
