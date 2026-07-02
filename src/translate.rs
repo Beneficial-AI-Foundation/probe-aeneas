@@ -1101,8 +1101,7 @@ mod tests {
 
         assert_eq!(mappings.len(), 1);
         assert_eq!(
-            mappings[0].to,
-            "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_assign_shared",
+            mappings[0].to, "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_assign_shared",
             "visible &T entry must win over the hidden macro-generated owned variant"
         );
     }
