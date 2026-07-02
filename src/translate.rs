@@ -19,6 +19,7 @@ use anyhow::Context as _;
 use probe::types::{Atom, Mapping};
 use regex::Regex;
 
+use crate::enrich;
 use crate::types::{FunctionRecord, FunctionsFile, LineRange};
 
 /// Normalize a source path for matching: strip leading package-name component
@@ -211,6 +212,27 @@ fn extract_base_name(display_name: &str) -> &str {
     display_name.rsplit("::").next().unwrap_or(display_name)
 }
 
+/// Classify a `functions.json` entry as deferred for RQN matching.
+///
+/// Hidden entries (macro-generated trait-impl variants, `.mutual`, closures)
+/// and extraction artifacts (`_loop`, `.body` defs) share their `rust_name`
+/// with the primary definition, so matching them first shadows the real def
+/// and binds the Rust atom to a spec-less Lean atom (issue #16, and the SPQR
+/// `parallel_mult` → `parallel_mult_loop.body` case).
+///
+/// Both the `functions.json` flags and the name heuristics are consulted, so
+/// files with incomplete flags (issue #2) are still classified correctly.
+///
+/// Deferral is never exclusion: a deferred entry (including a false positive
+/// from the name heuristic, e.g. a real function named `foo_loop`) still
+/// binds in the second pass if its Rust atom is otherwise unmatched.
+fn is_deferred_entry(func: &FunctionRecord) -> bool {
+    func.is_hidden
+        || func.is_extraction_artifact
+        || enrich::is_extraction_artifact(&func.lean_name)
+        || enrich::is_hidden_by_name(&func.lean_name)
+}
+
 /// Match Rust atoms to Lean translations via normalized `rust-qualified-name`.
 ///
 /// `normalize_rust_name` preserves the implementing type in `{Trait for Type}`
@@ -221,6 +243,11 @@ fn extract_base_name(display_name: &str) -> &str {
 /// `{impl From}` and `{From for u8}` normalize identically (both → `From`),
 /// while `{From for crate::LookupTable}` and `{From for crate::NafTable}`
 /// remain distinct.
+///
+/// Runs in two passes: visible, non-artifact entries first, then deferred
+/// entries ([`is_deferred_entry`]) as a fallback for Rust atoms nothing else
+/// claimed. This makes the outcome independent of the order Aeneas emits
+/// defs in `Funs.lean` when several entries share a normalized `rust_name`.
 fn strategy_rust_qualified_name(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
@@ -239,7 +266,12 @@ fn strategy_rust_qualified_name(
         }
     }
 
-    for func in functions {
+    // Pass 1: visible, non-artifact entries. Pass 2: deferred entries, which
+    // only bind Rust atoms still unmatched after pass 1 (`matched_rust`).
+    let (preferred, deferred): (Vec<&FunctionRecord>, Vec<&FunctionRecord>) =
+        functions.iter().partition(|f| !is_deferred_entry(f));
+
+    for func in preferred.into_iter().chain(deferred) {
         let rn = match func.rust_name.as_deref() {
             Some(rn) if !rn.is_empty() => rn,
             _ => continue,
@@ -559,6 +591,21 @@ mod tests {
             lines: Some(lines.to_string()),
             is_hidden: false,
             is_extraction_artifact: false,
+        }
+    }
+
+    fn make_func_flagged(
+        lean_name: &str,
+        rust_name: Option<&str>,
+        source: &str,
+        lines: &str,
+        is_hidden: bool,
+        is_extraction_artifact: bool,
+    ) -> FunctionRecord {
+        FunctionRecord {
+            is_hidden,
+            is_extraction_artifact,
+            ..make_func(lean_name, rust_name, source, lines)
         }
     }
 
@@ -938,6 +985,163 @@ mod tests {
         assert_eq!(mappings[0].from, "probe:crate/1.0/add_assign()");
         assert_eq!(mappings[0].confidence, "exact");
         assert_eq!(mappings[0].method.as_deref(), Some("rust-qualified-name"));
+    }
+
+    /// SPQR `parallel_mult` shape: Aeneas emits the loop-body and loop defs
+    /// BEFORE the primary def, all sharing the same `rust_name`. The artifact
+    /// entries must not shadow the primary Lean def.
+    #[test]
+    fn artifact_entries_do_not_shadow_primary() {
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom("parallel_mult", "src/encoding/gf.rs", 201, 214);
+        atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("spqr::encoding::gf::parallel_mult"),
+        );
+        rust_atoms.insert("probe:spqr/1.5.0/parallel_mult()".to_string(), atom);
+
+        let mut lean = BTreeMap::new();
+        for name in [
+            "spqr.encoding.gf.parallel_mult_loop.body",
+            "spqr.encoding.gf.parallel_mult_loop",
+            "spqr.encoding.gf.parallel_mult",
+        ] {
+            lean.insert(
+                format!("probe:{name}"),
+                make_lean_atom(name.rsplit('.').next().unwrap(), "Funs.lean"),
+            );
+        }
+
+        // Emission order as in real Aeneas output: body, loop, then primary.
+        let funcs = vec![
+            make_func_flagged(
+                "spqr.encoding.gf.parallel_mult_loop.body",
+                Some("spqr::encoding::gf::parallel_mult"),
+                "src/encoding/gf.rs",
+                "L205-L210",
+                false,
+                true,
+            ),
+            make_func_flagged(
+                "spqr.encoding.gf.parallel_mult_loop",
+                Some("spqr::encoding::gf::parallel_mult"),
+                "src/encoding/gf.rs",
+                "L205-L210",
+                false,
+                true,
+            ),
+            make_func(
+                "spqr.encoding.gf.parallel_mult",
+                Some("spqr::encoding::gf::parallel_mult"),
+                "src/encoding/gf.rs",
+                "L201-L214",
+            ),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(
+            mappings[0].to, "probe:spqr.encoding.gf.parallel_mult",
+            "primary def must win over loop artifacts regardless of emission order"
+        );
+        assert_eq!(mappings[0].confidence, "exact");
+    }
+
+    /// Issue #16 shape: a hidden macro-generated owned-variant entry precedes
+    /// the visible `&T` entry; both collapse to the same normalized rust_name.
+    /// The visible entry must win.
+    #[test]
+    fn hidden_entry_does_not_shadow_visible() {
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom(
+            "MontgomeryPoint::mul_assign",
+            "curve25519-dalek/src/montgomery.rs",
+            455,
+            457,
+        );
+        atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!(
+                "curve25519_dalek::montgomery::{core::ops::arith::MulAssign<&'0 (curve25519_dalek::scalar::Scalar)> for curve25519_dalek::montgomery::MontgomeryPoint}::mul_assign"
+            ),
+        );
+        rust_atoms.insert("probe:dalek/4.2.0/mul_assign()".to_string(), atom);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_assign_owned".to_string(),
+            make_lean_atom("mul_assign_owned", "Funs.lean"),
+        );
+        lean.insert(
+            "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_assign_shared".to_string(),
+            make_lean_atom("mul_assign_shared", "Funs.lean"),
+        );
+
+        // Hidden owned variant first (macros.rs), visible &Scalar variant second.
+        // Both rust_names normalize to the same key because RE_REF strips `&'0`.
+        let funcs = vec![
+            make_func_flagged(
+                "curve25519_dalek.montgomery.MontgomeryPoint.mul_assign_owned",
+                Some("curve25519_dalek::montgomery::{core::ops::arith::MulAssign<curve25519_dalek::scalar::Scalar> for curve25519_dalek::montgomery::MontgomeryPoint}::mul_assign"),
+                "curve25519-dalek/src/macros.rs",
+                "L118-L120",
+                true,
+                false,
+            ),
+            make_func(
+                "curve25519_dalek.montgomery.MontgomeryPoint.mul_assign_shared",
+                Some("curve25519_dalek::montgomery::{core::ops::arith::MulAssign<&'0 (curve25519_dalek::scalar::Scalar)> for curve25519_dalek::montgomery::MontgomeryPoint}::mul_assign"),
+                "curve25519-dalek/src/montgomery.rs",
+                "L455-L457",
+            ),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(
+            mappings[0].to, "probe:curve25519_dalek.montgomery.MontgomeryPoint.mul_assign_shared",
+            "visible &T entry must win over the hidden macro-generated owned variant"
+        );
+    }
+
+    /// Deferral is never exclusion: a Rust atom whose ONLY functions.json
+    /// entry is hidden must still get a mapping via the pass-2 fallback.
+    #[test]
+    fn hidden_only_entry_still_binds() {
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom("clone", "crate/src/lib.rs", 10, 12);
+        atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("my_crate::lib::clone"),
+        );
+        rust_atoms.insert("probe:crate/1.0/clone()".to_string(), atom);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:my_crate.lib.clone".to_string(),
+            make_lean_atom("clone", "Funs.lean"),
+        );
+
+        let funcs = vec![make_func_flagged(
+            "my_crate.lib.clone",
+            Some("my_crate::lib::clone"),
+            "crate/src/lib.rs",
+            "L10-L12",
+            true,
+            false,
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+
+        assert_eq!(
+            mappings.len(),
+            1,
+            "hidden-only entry must still bind in pass 2 (no regression vs pre-fix behavior)"
+        );
+        assert_eq!(mappings[0].to, "probe:my_crate.lib.clone");
+        assert_eq!(mappings[0].from, "probe:crate/1.0/clone()");
     }
 
     #[test]
