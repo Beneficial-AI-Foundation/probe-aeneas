@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-07-02
+
 ### Fixed
 - **Hidden/artifact `functions.json` entries no longer shadow the primary definition in RQN matching**
   ([#16](https://github.com/Beneficial-AI-Foundation/probe-aeneas/issues/16)):
@@ -289,7 +291,9 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.2...HEAD
+[0.11.2]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.1...v0.11.2
+[0.11.1]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.7...v0.10.0
 [0.9.7]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.9.6...v0.9.7
