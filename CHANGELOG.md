@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+- **Hidden/artifact `functions.json` entries no longer shadow the primary definition in RQN matching**
+  ([#16](https://github.com/Beneficial-AI-Foundation/probe-aeneas/issues/16)):
+  Strategy 1 (`strategy_rust_qualified_name`) processed entries in file order
+  without filtering `is_hidden` / `is_extraction_artifact` records. When such
+  an entry shared its `rust_name` with the real definition and appeared first
+  (e.g. Aeneas `_loop`/`.body` defs, or macro-generated owned trait-impl
+  variants), it claimed the Rust atom and the real definition was skipped,
+  leaving the Rust atom pointing at a spec-less Lean atom with a false
+  `unverified` status. Strategy 1 now runs in two passes: visible,
+  non-artifact entries match first; hidden/artifact entries only bind Rust
+  atoms that are still unmatched, so no mapping is lost relative to the
+  previous behavior. Fixes `MulAssign<&Scalar>` in curve25519-dalek (#16) and
+  `parallel_mult` in SPQR mapping to the loop-body def.
+
 ## [0.11.1] - 2026-06-08
 
 ### Fixed
