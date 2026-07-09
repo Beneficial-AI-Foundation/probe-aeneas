@@ -56,6 +56,12 @@ enum Commands {
         #[arg(long)]
         functions: Option<PathBuf>,
 
+        /// Path to Aeneas's translation.json (emitted with the `emit-json` arg).
+        /// Used as the authoritative loop/primary classification overlay.
+        /// Auto-detected at the project root when PROJECT is given.
+        #[arg(long)]
+        translation: Option<PathBuf>,
+
         /// Output path for the merged atoms JSON.
         /// Defaults to aeneas_{package}_{version}.json based on the Rust input.
         #[arg(short, long)]
@@ -95,6 +101,11 @@ enum Commands {
         /// Path to functions.json (from `lake exe listfuns`).
         #[arg(long)]
         functions: PathBuf,
+
+        /// Path to Aeneas's translation.json (emitted with the `emit-json` arg).
+        /// Optional authoritative loop/primary classification overlay.
+        #[arg(long)]
+        translation: Option<PathBuf>,
 
         /// Output path for the translations JSON.
         #[arg(short, long, default_value = "translations.json")]
@@ -162,13 +173,14 @@ fn resolve_and_extract(
     lean: Option<PathBuf>,
     lean_project: Option<PathBuf>,
     functions: Option<PathBuf>,
+    translation: Option<PathBuf>,
     output: Option<PathBuf>,
     aeneas_config: Option<PathBuf>,
     lake: bool,
     with_public_api: bool,
     skip_enrich: bool,
 ) -> anyhow::Result<()> {
-    let (rust, rust_project, lean_project, functions, rust_path_prefix, charon_config) =
+    let (rust, rust_project, lean_project, functions, translation, rust_path_prefix, charon_config) =
         if let Some(ref proj) = project {
             let resolved = extract::resolve_project(proj)?;
             let prefix = if resolved.crate_dir != "." {
@@ -181,11 +193,20 @@ fn resolve_and_extract(
                 Some(resolved.rust_project),
                 Some(resolved.lean_project),
                 functions.or(resolved.functions_json),
+                translation.or(resolved.translation_json),
                 prefix,
                 resolved.charon_config,
             )
         } else {
-            (rust, rust_project, lean_project, functions, None, None)
+            (
+                rust,
+                rust_project,
+                lean_project,
+                functions,
+                translation,
+                None,
+                None,
+            )
         };
 
     // Pre-flight: generate charon LLBC with aeneas-config.yml args
@@ -199,6 +220,7 @@ fn resolve_and_extract(
         lean.as_deref(),
         lean_project.as_deref(),
         functions.as_deref(),
+        translation.as_deref(),
         output.as_deref(),
         aeneas_config.as_deref(),
         lake,
@@ -220,6 +242,7 @@ fn main() {
             lean,
             lean_project,
             functions,
+            translation,
             output,
             aeneas_config,
             lake,
@@ -232,6 +255,7 @@ fn main() {
             lean,
             lean_project,
             functions,
+            translation,
             output,
             aeneas_config,
             lake,
@@ -243,8 +267,9 @@ fn main() {
             rust,
             lean,
             functions,
+            translation,
             output,
-        } => extract::run_translate_only(&rust, &lean, &functions, &output)
+        } => extract::run_translate_only(&rust, &lean, &functions, translation.as_deref(), &output)
             .map_err(anyhow::Error::new),
 
         Commands::Listfuns {

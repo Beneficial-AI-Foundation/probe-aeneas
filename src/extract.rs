@@ -30,6 +30,7 @@ use crate::translate::{
     build_functions_rust_names, build_translations_json, generate_translations, load_atoms,
     load_functions, normalize_rust_name,
 };
+use crate::translation_manifest;
 
 type MappingMaps = (HashMap<String, Vec<String>>, HashMap<String, Vec<String>>);
 
@@ -114,6 +115,10 @@ pub struct ResolvedProject {
     pub rust_project: PathBuf,
     pub lean_project: PathBuf,
     pub functions_json: Option<PathBuf>,
+    /// Aeneas `translation.json` (from the `emit-json` arg), if present at the
+    /// configured `aeneas_args.dest` (default: project root). Used as the
+    /// authoritative loop/primary classification overlay.
+    pub translation_json: Option<PathBuf>,
     /// Effective crate directory relative to the project root.
     /// `"."` when the Rust project IS the project root (including workspace
     /// layouts where probe-rust runs at the workspace root).
@@ -378,10 +383,17 @@ pub fn resolve_project(project: &Path) -> Result<ResolvedProject> {
         None
     };
 
+    // translation.json is written by Aeneas to `aeneas_args.dest` (default: the
+    // project root). Optional: absent when the project doesn't emit it. The
+    // actual load + overlay (with success/warning reporting) happens later in
+    // `translation_manifest::apply`, so we only resolve the path here.
+    let translation_json = translation_manifest::resolve_path(project);
+
     Ok(ResolvedProject {
         rust_project,
         lean_project,
         functions_json,
+        translation_json,
         crate_dir,
         charon_config: config.charon,
     })
@@ -402,6 +414,7 @@ pub fn run_extract(
     lean_json: Option<&Path>,
     lean_project: Option<&Path>,
     functions_json: Option<&Path>,
+    translation_json: Option<&Path>,
     output_path: Option<&Path>,
     aeneas_config: Option<&Path>,
     use_lake: bool,
@@ -455,7 +468,7 @@ pub fn run_extract(
 
     // --- Generate translations ---
     let (translations_result, funs_rust_names) =
-        run_translate(&rust_path, &lean_path, &functions_path)?;
+        run_translate(&rust_path, &lean_path, &functions_path, translation_json)?;
 
     // --- Merge atom maps ---
     run_extract_with_translations(
@@ -578,6 +591,7 @@ fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
     functions_path: &Path,
+    translation_json: Option<&Path>,
 ) -> Result<(MappingMaps, HashSet<String>)> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
@@ -590,8 +604,10 @@ fn run_translate(
     println!("  {} atoms", lean_data.len());
 
     println!("Loading functions from {}...", functions_path.display());
-    let functions = load_functions(functions_path)?;
+    let mut functions = load_functions(functions_path)?;
     println!("  {} entries", functions.len());
+
+    translation_manifest::apply(&mut functions, translation_json);
 
     let funs_rust_names = build_functions_rust_names(&functions);
 
@@ -946,6 +962,7 @@ pub fn run_translate_only(
     rust_path: &Path,
     lean_path: &Path,
     functions_path: &Path,
+    translation_json: Option<&Path>,
     output_path: &Path,
 ) -> Result<()> {
     println!("Loading Rust atoms from {}...", rust_path.display());
@@ -959,8 +976,10 @@ pub fn run_translate_only(
     println!("  {} atoms", lean_data.len());
 
     println!("Loading functions from {}...", functions_path.display());
-    let functions = load_functions(functions_path)?;
+    let mut functions = load_functions(functions_path)?;
     println!("  {} entries", functions.len());
+
+    translation_manifest::apply(&mut functions, translation_json);
 
     println!("\nGenerating translations...");
     let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);

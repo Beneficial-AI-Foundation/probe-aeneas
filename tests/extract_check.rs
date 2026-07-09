@@ -107,6 +107,7 @@ fn library_extract_with_pregenerated_json() {
         Some(lean_json),
         None,
         Some(functions_json),
+        None,
         Some(&output_path),
         None,
         false,

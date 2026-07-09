@@ -111,12 +111,18 @@ pub fn run_enriched_listfuns(
     module_prefix: Option<&str>,
     aeneas_config_path: Option<&Path>,
 ) -> Result<()> {
-    let records =
+    let mut records =
         gen_functions::parse_aeneas_project(lean_project).context("parse Aeneas project")?;
     println!(
         "Parsed {} function entries from Aeneas files",
         records.len()
     );
+
+    // Overlay Aeneas's translation.json (authoritative loop/primary
+    // classification) when present. Optional: heuristic fallback otherwise.
+    // `resolve_path` honors `aeneas_args.dest`, matching the `extract` flow.
+    let translation_path = crate::translation_manifest::resolve_path(lean_project);
+    crate::translation_manifest::apply(&mut records, translation_path.as_deref());
 
     let atoms = load_atoms(lean_project, atoms_path, module_prefix)?;
     println!("Loaded {} atoms from probe-lean", atoms.len());
@@ -197,6 +203,7 @@ mod tests {
             lines: None,
             is_hidden: false,
             is_extraction_artifact: false,
+            ..Default::default()
         }
     }
 

@@ -269,7 +269,11 @@ pub fn enrich_function_records(
             || is_type_alias(&kind, &attrs)
             || (!rust_source.is_empty() && !is_relevant(&rust_source, rust_crate_name));
 
-        let func_is_artifact = is_extraction_artifact(&rec.lean_name);
+        // Authoritative when `translation.json` covered this record (overlay set
+        // by `translation_manifest::annotate`); heuristic otherwise.
+        let func_is_artifact = rec
+            .is_loop_artifact
+            .unwrap_or_else(|| is_extraction_artifact(&rec.lean_name));
         let func_is_relevant = if rust_source.is_empty() {
             atom.map(|a| {
                 a.extensions
@@ -1034,6 +1038,7 @@ mod tests {
             lines: None,
             is_hidden: false,
             is_extraction_artifact: false,
+            ..Default::default()
         }];
         let config = AeneasConfig::default();
         let results = enrich_function_records(&records, &atoms, "mycrate", &config);
@@ -1068,6 +1073,7 @@ mod tests {
             lines: None,
             is_hidden: false,
             is_extraction_artifact: false,
+            ..Default::default()
         }];
         let config = AeneasConfig::default();
         let results = enrich_function_records(&records, &atoms, "mycrate", &config);
@@ -1161,6 +1167,7 @@ mod tests {
             lines: None,
             is_hidden: false,
             is_extraction_artifact: false,
+            ..Default::default()
         }];
         let config = AeneasConfig::default();
         let results = enrich_function_records(&records, &atoms, "", &config);
@@ -1195,6 +1202,7 @@ mod tests {
                 lines: None,
                 is_hidden: false,
                 is_extraction_artifact: false,
+                ..Default::default()
             },
             FunctionRecord {
                 lean_name: "Foo.Insts.TraitName.method".to_string(),
@@ -1203,6 +1211,7 @@ mod tests {
                 lines: None,
                 is_hidden: false,
                 is_extraction_artifact: false,
+                ..Default::default()
             },
         ];
         let config = AeneasConfig::default();
