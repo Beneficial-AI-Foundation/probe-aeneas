@@ -88,9 +88,10 @@ pub fn resolve_path(project_root: &Path) -> Option<PathBuf> {
 }
 
 /// Load Aeneas's `translation.json` from `path` (if any) and overlay its
-/// authoritative loop/primary classification onto `functions`. A `None` path or
-/// a load error is a no-op (heuristic fallback) and is reported — a bad manifest
-/// must never abort the pipeline. Shared by the `extract` and `listfuns` flows.
+/// authoritative loop/primary classification onto `functions`. A `None` path is
+/// a silent no-op; a load error is reported and swallowed. Both fall back to the
+/// name heuristics and never abort the pipeline. Shared by the `extract` and
+/// `listfuns` flows.
 pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) {
     let Some(path) = path else {
         return;

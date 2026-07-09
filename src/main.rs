@@ -58,7 +58,8 @@ enum Commands {
 
         /// Path to Aeneas's translation.json (emitted with the `emit-json` arg).
         /// Used as the authoritative loop/primary classification overlay.
-        /// Auto-detected at the project root when PROJECT is given.
+        /// Auto-detected under `aeneas_args.dest` (default: project root) when
+        /// PROJECT is given.
         #[arg(long)]
         translation: Option<PathBuf>,
 
