@@ -38,6 +38,7 @@ src/
 ├── extract.rs         # Extract pipeline: input resolution, translation, merge orchestration
 ├── enrich.rs          # Shared enrichment: heuristic classifiers, atom helpers, enrichment pipeline
 ├── translate.rs       # Translation logic: three matching strategies, JSON I/O, unit tests
+├── translation_manifest.rs # Parses Aeneas translation.json; overlays authoritative loop/primary classification onto FunctionRecords
 ├── extract_runner.rs  # Runs probe-rust and probe-lean extractors, auto-install logic
 ├── listfuns.rs        # Enriched listfuns pipeline, or delegates to `lake exe listfuns`
 ├── gen_functions.rs   # Parses Aeneas-generated .lean files into function records

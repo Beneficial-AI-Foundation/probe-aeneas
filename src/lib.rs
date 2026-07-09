@@ -6,4 +6,5 @@ pub mod gen_functions;
 pub mod listfuns;
 pub mod setup;
 pub mod translate;
+pub mod translation_manifest;
 pub mod types;

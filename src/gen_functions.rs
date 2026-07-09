@@ -262,6 +262,7 @@ fn emit_record(
             },
             is_hidden,
             is_extraction_artifact: is_artifact,
+            ..Default::default()
         });
     }
 }

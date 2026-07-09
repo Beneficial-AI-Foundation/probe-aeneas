@@ -26,7 +26,7 @@ pub enum ParseError {
 }
 
 /// A single entry from `functions.json`, produced by `lake exe listfuns`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct FunctionRecord {
     pub lean_name: String,
     #[serde(default)]
@@ -39,6 +39,22 @@ pub struct FunctionRecord {
     pub is_hidden: bool,
     #[serde(default)]
     pub is_extraction_artifact: bool,
+
+    // -- Authoritative overlay from Aeneas's `translation.json` (in-memory only;
+    //    never (de)serialized to/from `functions.json`). Populated by
+    //    `translation_manifest::annotate` when the manifest is available. --
+    /// `Some(true)` when Aeneas marks this `lean_name` as a loop helper (its
+    /// manifest entry carries a `loop` field), `Some(false)` when it is the
+    /// authoritative top-level def, `None` when the manifest does not cover it
+    /// (callers fall back to name-suffix heuristics).
+    #[serde(skip)]
+    pub is_loop_artifact: Option<bool>,
+    /// `lean_name` of the enclosing top-level def, for loop helpers.
+    #[serde(skip)]
+    pub parent_lean_name: Option<String>,
+    /// Aeneas `FunDeclId`, shared by a top-level def and all its loop helpers.
+    #[serde(skip)]
+    pub def_id: Option<u64>,
 }
 
 /// Top-level structure of `functions.json`.

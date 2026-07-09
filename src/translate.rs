@@ -220,17 +220,24 @@ fn extract_base_name(display_name: &str) -> &str {
 /// and binds the Rust atom to a spec-less Lean atom (issue #16, and the SPQR
 /// `parallel_mult` → `parallel_mult_loop.body` case).
 ///
-/// Both the `functions.json` flags and the name heuristics are consulted, so
-/// files with incomplete flags (issue #2) are still classified correctly.
+/// The loop/artifact dimension is authoritative when Aeneas's `translation.json`
+/// covers the entry (`FunctionRecord::is_loop_artifact` is `Some`): its `loop`
+/// field is ground truth, so a real function named `foo_body` is not deferred and
+/// a loop helper with an unusual name is. When the manifest is absent, the check
+/// falls back to the `functions.json` flags and name-suffix heuristics, so files
+/// with incomplete flags (issue #2) are still classified correctly. The hidden
+/// dimension (trait boilerplate, closures, …) is always heuristic — the manifest
+/// says nothing about it.
 ///
 /// Deferral is never exclusion: a deferred entry (including a false positive
 /// from the name heuristic, e.g. a real function named `foo_loop`) still
 /// binds in the second pass if its Rust atom is otherwise unmatched.
 fn is_deferred_entry(func: &FunctionRecord) -> bool {
-    func.is_hidden
-        || func.is_extraction_artifact
-        || enrich::is_extraction_artifact(&func.lean_name)
-        || enrich::is_hidden_by_name(&func.lean_name)
+    let artifact = match func.is_loop_artifact {
+        Some(is_loop) => is_loop,
+        None => func.is_extraction_artifact || enrich::is_extraction_artifact(&func.lean_name),
+    };
+    artifact || func.is_hidden || enrich::is_hidden_by_name(&func.lean_name)
 }
 
 /// Match Rust atoms to Lean translations via normalized `rust-qualified-name`.
@@ -591,6 +598,7 @@ mod tests {
             lines: Some(lines.to_string()),
             is_hidden: false,
             is_extraction_artifact: false,
+            ..Default::default()
         }
     }
 
@@ -1013,30 +1021,30 @@ mod tests {
         }
 
         // Emission order as in real Aeneas output: body, loop, then primary.
-        let funcs = vec![
-            make_func_flagged(
-                "spqr.encoding.gf.parallel_mult_loop.body",
-                Some("spqr::encoding::gf::parallel_mult"),
-                "src/encoding/gf.rs",
-                "L205-L210",
-                false,
-                true,
-            ),
-            make_func_flagged(
-                "spqr.encoding.gf.parallel_mult_loop",
-                Some("spqr::encoding::gf::parallel_mult"),
-                "src/encoding/gf.rs",
-                "L205-L210",
-                false,
-                true,
-            ),
-            make_func(
-                "spqr.encoding.gf.parallel_mult",
-                Some("spqr::encoding::gf::parallel_mult"),
-                "src/encoding/gf.rs",
-                "L201-L214",
-            ),
-        ];
+        // Overlay flags mirror translation.json: helpers Some(true), primary
+        // Some(false). The primary must win regardless of emission order.
+        let mut body = make_func(
+            "spqr.encoding.gf.parallel_mult_loop.body",
+            Some("spqr::encoding::gf::parallel_mult"),
+            "src/encoding/gf.rs",
+            "L205-L210",
+        );
+        body.is_loop_artifact = Some(true);
+        let mut loopfn = make_func(
+            "spqr.encoding.gf.parallel_mult_loop",
+            Some("spqr::encoding::gf::parallel_mult"),
+            "src/encoding/gf.rs",
+            "L205-L210",
+        );
+        loopfn.is_loop_artifact = Some(true);
+        let mut primary = make_func(
+            "spqr.encoding.gf.parallel_mult",
+            Some("spqr::encoding::gf::parallel_mult"),
+            "src/encoding/gf.rs",
+            "L201-L214",
+        );
+        primary.is_loop_artifact = Some(false);
+        let funcs = vec![body, loopfn, primary];
 
         let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
 
@@ -1046,6 +1054,79 @@ mod tests {
             "primary def must win over loop artifacts regardless of emission order"
         );
         assert_eq!(mappings[0].confidence, "exact");
+    }
+
+    /// translation.json overlay: a real crate function literally named
+    /// `..._body` (which the name-suffix heuristic would wrongly defer) is kept
+    /// primary because Aeneas's manifest says it is NOT a loop artifact
+    /// (`is_loop_artifact = Some(false)`).
+    #[test]
+    fn manifest_overlay_rescues_suffix_false_positive() {
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom("parse_body", "src/http.rs", 10, 20);
+        atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("crate::http::parse_body"),
+        );
+        rust_atoms.insert("probe:crate/1.0/parse_body()".to_string(), atom);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:crate.http.parse_body".to_string(),
+            make_lean_atom("parse_body", "Funs.lean"),
+        );
+
+        // Name ends in `_body` -> is_extraction_artifact heuristic would defer it,
+        // but the manifest overlay says it is the authoritative primary.
+        let mut func = make_func(
+            "crate.http.parse_body",
+            Some("crate::http::parse_body"),
+            "src/http.rs",
+            "L10-L20",
+        );
+        func.is_loop_artifact = Some(false);
+
+        // Sanity: without the overlay the heuristic WOULD flag this as an artifact.
+        assert!(enrich::is_extraction_artifact("crate.http.parse_body"));
+        assert!(!is_deferred_entry(&func));
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func]);
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].to, "probe:crate.http.parse_body");
+        assert_eq!(mappings[0].confidence, "exact");
+    }
+
+    /// translation.json overlay: an entry with an ordinary (non-suffix) name that
+    /// Aeneas marks as a loop helper (`is_loop_artifact = Some(true)`) is deferred,
+    /// even though the name heuristic alone would not catch it.
+    #[test]
+    fn manifest_overlay_defers_non_suffix_loop_helper() {
+        let ordinary = make_func(
+            "crate.math.compute",
+            Some("crate::math::compute"),
+            "src/math.rs",
+            "L1-L5",
+        );
+        assert!(!enrich::is_extraction_artifact("crate.math.compute"));
+        assert!(!is_deferred_entry(&ordinary));
+
+        let mut loopy = ordinary.clone();
+        loopy.is_loop_artifact = Some(true);
+        assert!(is_deferred_entry(&loopy));
+    }
+
+    /// With no overlay (`is_loop_artifact = None`) the pre-existing name-heuristic
+    /// behavior is preserved: a `_loop`/`.body` name is still deferred.
+    #[test]
+    fn no_overlay_falls_back_to_name_heuristic() {
+        let mut func = make_func(
+            "crate.gf.parallel_mult_loop.body",
+            Some("crate::gf::parallel_mult"),
+            "src/gf.rs",
+            "L5-L10",
+        );
+        func.is_loop_artifact = None;
+        assert!(is_deferred_entry(&func));
     }
 
     /// Issue #16 shape: a hidden macro-generated owned-variant entry precedes

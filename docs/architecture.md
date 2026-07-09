@@ -51,11 +51,22 @@ Each Rust function maps to at most one Lean definition (1-to-1). Once a
 Rust or Lean atom is claimed by an earlier strategy it is excluded from
 later ones.
 
+Aeneas expands one looping Rust function into a top-level def plus `_loop` /
+`_loop.body` helpers that share its `rust_name`; only the top-level def is a
+valid mapping target. When Aeneas's `translation.json` is available it is
+overlaid onto the loaded `functions.json` records (joined by exact `lean_name`,
+via `src/translation_manifest.rs`): an entry is a loop helper iff its manifest
+record carries a `loop` field. This authoritative classification replaces the
+name-suffix heuristic (`_loop`/`_body`/`.body`), which remains the fallback when
+the manifest is absent. See the manifest overlay note in
+[USAGE.md](USAGE.md#translation-strategies).
+
 The output of this phase is a bidirectional map
 `(from_to: HashMap, to_from: HashMap)` -- the format that
 `merge_atom_maps` accepts.
 
 Implementation: `src/translate.rs` (matching logic),
+`src/translation_manifest.rs` (manifest overlay),
 `src/extract.rs::run_translate` (orchestration).
 
 ### Phase 2: Merge with cross-language edges (generic)
