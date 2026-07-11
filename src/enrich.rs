@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use probe::types::Atom;
 use serde::Serialize;
@@ -20,9 +20,75 @@ pub const ARTIFACT_DOT_SUFFIXES: &[&str] = &[".body"];
 // ---------------------------------------------------------------------------
 
 /// Check if a name is an Aeneas extraction artifact by suffix.
+///
+/// This covers only the loop/body split helpers (`_loop`, `.body`, …). The
+/// broader "auxiliary def" categories (trait-instance wrappers, type stand-ins,
+/// function-split parts) are classified by [`is_auxiliary_def`]. Kept narrow on
+/// purpose: the translation matcher ([`crate::translate`]) uses this to defer
+/// loop helpers, and must not defer wrappers/types.
 pub fn is_extraction_artifact(name: &str) -> bool {
     ARTIFACT_SUFFIXES.iter().any(|sfx| name.ends_with(sfx))
         || ARTIFACT_DOT_SUFFIXES.iter().any(|sfx| name.ends_with(sfx))
+}
+
+/// Check if a Lean name denotes an Aeneas trait-instance wrapper def.
+///
+/// Aeneas emits one wrapper per `impl Trait for Type` block, named
+/// `<Type>.Insts.<Trait>` (e.g. `Scalar.Insts.CoreOpsArithAddScalarScalar`).
+/// The wrapper is a structure-instance literal that delegates to the method
+/// body def (`<Type>.Insts.<Trait>.<method>`); only the method body is a
+/// translation target, never the wrapper. Detected structurally: the name
+/// contains `.Insts.` and the segment after it has no further `.`, which
+/// distinguishes the wrapper parent from its method leaf.
+pub fn is_trait_instance_wrapper(name: &str) -> bool {
+    match name.split_once(".Insts.") {
+        Some((_, after)) => !after.contains('.'),
+        None => false,
+    }
+}
+
+/// Check if a Lean name denotes an Aeneas function-split part (`.part1`,
+/// `.part2`, …).
+///
+/// When Aeneas splits a large function body, only the main def is a translation
+/// target; the numbered parts are scaffolding. Matches a final dot-segment of
+/// the form `part<digits>`.
+pub fn is_function_split_part(name: &str) -> bool {
+    name.rsplit('.').next().is_some_and(|last| {
+        last.strip_prefix("part")
+            .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+    })
+}
+
+/// Check whether a Lean atom is an Aeneas-generated auxiliary def with no Rust
+/// `exec` counterpart: a trait-instance wrapper, a type stand-in, or a
+/// function-split part (probe-aeneas#26). These carry `rust-source` but are
+/// scaffolding, so consumers must keep them out of implementation counts.
+///
+/// `aux_names` is the authoritative set from Aeneas's `translation.json`
+/// (`types` + `trait_impls`, via [`crate::translation_manifest`]); the
+/// name/kind checks are the heuristic fallback when the manifest is absent.
+///
+/// This is the *auxiliary-def* dimension only — orthogonal to the loop/body
+/// dimension of [`is_extraction_artifact`]; callers OR the two. Callers must
+/// additionally exclude spec targets: a def with a primary spec is a genuine
+/// implementation and must never be flagged.
+///
+/// The name/kind heuristics apply only to `def` atoms, so a proof named like a
+/// wrapper (`<Type>.Insts.<Trait>_spec`, a `theorem`) is never mislabeled;
+/// `aux_names` is authoritative and applies regardless of kind (Aeneas lists
+/// only defs/structures there).
+pub fn is_auxiliary_def(
+    name: &str,
+    kind: &str,
+    attrs: &[String],
+    aux_names: &HashSet<String>,
+) -> bool {
+    aux_names.contains(name)
+        || (kind == "def"
+            && (is_trait_instance_wrapper(name)
+                || is_function_split_part(name)
+                || is_type_alias(kind, attrs)))
 }
 
 /// Trait implementation fragments that represent boilerplate (auto-derived,
@@ -168,14 +234,6 @@ pub fn atom_rust_source(atom: &Atom) -> &str {
         .unwrap_or("")
 }
 
-/// Get the `kind` extension from an atom (e.g. "def", "theorem", "structure").
-pub fn atom_kind(atom: &Atom) -> &str {
-    atom.extensions
-        .get("kind")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-}
-
 /// Get atom dependencies as a list of key strings.
 pub fn atom_dependencies(atom: &Atom) -> Vec<String> {
     atom.extensions
@@ -246,6 +304,7 @@ pub fn enrich_function_records(
     atoms: &BTreeMap<String, Atom>,
     rust_crate_name: &str,
     config: &AeneasConfig,
+    aux_names: &HashSet<String>,
 ) -> Vec<EnrichedFunctionOutput> {
     let mut fv_cache: HashMap<String, bool> = HashMap::new();
     let mut results = Vec::with_capacity(records.len());
@@ -254,12 +313,16 @@ pub fn enrich_function_records(
         let key = format!("{PROBE_PREFIX}{}", rec.lean_name);
         let atom = atoms.get(&key);
 
+        // `kind` is the struct field, not a `kind` extension: serde captures
+        // the JSON `kind` key as `Atom::kind`, so it never lands in `extensions`.
+        // Reading it correctly lets `is_structure`/`is_type_alias` classify type
+        // stand-ins that previously slipped through as unspecified implementations.
         let (attrs, deps_raw, rust_source, kind) = match atom {
             Some(a) => (
                 atom_attrs(a),
                 atom_dependencies(a),
                 atom_rust_source(a).to_string(),
-                atom_kind(a).to_string(),
+                a.kind.clone(),
             ),
             None => (vec![], vec![], String::new(), String::new()),
         };
@@ -269,9 +332,11 @@ pub fn enrich_function_records(
             || is_type_alias(&kind, &attrs)
             || (!rust_source.is_empty() && !is_relevant(&rust_source, rust_crate_name));
 
-        // Authoritative when `translation.json` covered this record (overlay set
-        // by `translation_manifest::annotate`); heuristic otherwise.
-        let func_is_artifact = rec
+        // Loop/body dimension: authoritative when `translation.json` covered this
+        // record (overlay set by `translation_manifest::annotate`); name-suffix
+        // heuristic otherwise. The auxiliary-def dimension (guarded by `specified`)
+        // is OR-ed in below, once the primary spec is known.
+        let loop_or_suffix_artifact = rec
             .is_loop_artifact
             .unwrap_or_else(|| is_extraction_artifact(&rec.lean_name));
         let func_is_relevant = if rust_source.is_empty() {
@@ -288,6 +353,11 @@ pub fn enrich_function_records(
 
         let (primary_spec_key, spec_atom) = find_primary_spec(&rec.lean_name, atoms);
         let specified = primary_spec_key.is_some();
+
+        // Auxiliary-def dimension, guarded: a spec target is a genuine
+        // implementation and is never scaffolding.
+        let func_is_artifact = loop_or_suffix_artifact
+            || (is_auxiliary_def(&rec.lean_name, &kind, &attrs, aux_names) && !specified);
 
         // Layer B: never hide a function that has a primary spec.
         if func_is_hidden && specified {
@@ -503,12 +573,51 @@ pub struct AeneasEnrichStats {
 /// Computes `is-hidden`, `is-extraction-artifact`, `is-relevant` (refined),
 /// `is-externally-verified`, and applies optional config overrides for
 /// `is-hidden` (project tail) and `is-ignored` (always manual).
+///
+/// `aux_names` is the authoritative auxiliary-def set from Aeneas's
+/// `translation.json` (empty when the manifest is absent); it broadens
+/// `is-extraction-artifact` to cover trait-instance wrappers, type stand-ins,
+/// and function-split parts (probe-aeneas#26), so consumers keep them out of
+/// implementation counts.
+///
+/// Must run after [`crate::extract`]'s translation-metadata pass so Rust atoms
+/// already carry `translation-name`: an atom that some Rust `exec` translates to
+/// is that function's implementation and is never flagged, even if a heuristic
+/// or the manifest classifies it as auxiliary (some single-method trait impls
+/// map the Rust method straight onto the `Insts.<Trait>` def).
 pub fn enrich_lean_atom_flags(
     merged: &mut BTreeMap<String, Atom>,
     rust_crate_name: &str,
     config: &AeneasConfig,
+    aux_names: &HashSet<String>,
 ) {
     let mut stats = AeneasEnrichStats::default();
+
+    // Genuine implementations must never be flagged as extraction artifacts.
+    // Precompute two owned guard sets before the mutable pass:
+    //  - `specified`: Lean names with a primary spec (needs a shared borrow for
+    //    `find_primary_spec`);
+    //  - `translation_targets`: Lean keys some Rust exec translates to (the
+    //    precise "this is an implementation" signal — a spec-less target is a
+    //    real unspecified impl, which the `specified` guard alone would miss).
+    let specified: HashSet<String> = merged
+        .iter()
+        .filter(|(_, a)| a.language == "lean")
+        .filter_map(|(key, _)| {
+            let name = strip_prefix(key);
+            find_primary_spec(name, merged).0.map(|_| name.to_string())
+        })
+        .collect();
+    let translation_targets: HashSet<String> = merged
+        .values()
+        .filter(|a| a.language == "rust")
+        .filter_map(|a| {
+            a.extensions
+                .get("translation-name")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        })
+        .collect();
 
     for (key, atom) in merged.iter_mut() {
         if atom.language != "lean" {
@@ -520,7 +629,13 @@ pub fn enrich_lean_atom_flags(
         let attrs = atom_attrs(atom);
         let rust_source = atom_rust_source(atom).to_string();
 
-        let artifact = is_extraction_artifact(display_name);
+        // Loop/body suffix dimension OR auxiliary-def dimension; the latter is
+        // guarded so a genuine implementation — one carrying a primary spec, or
+        // one some Rust exec translates to — is never treated as scaffolding.
+        let artifact = is_extraction_artifact(display_name)
+            || (is_auxiliary_def(name_no_prefix, &atom.kind, &attrs, aux_names)
+                && !specified.contains(name_no_prefix)
+                && !translation_targets.contains(key.as_str()));
         if artifact {
             stats.artifacts += 1;
         }
@@ -658,6 +773,96 @@ mod tests {
         assert!(!is_extraction_artifact("foo"));
         assert!(!is_extraction_artifact("loop_helper"));
         assert!(!is_extraction_artifact("body_parser"));
+    }
+
+    #[test]
+    fn trait_instance_wrapper_detected() {
+        // Wrapper parent: one segment after `.Insts.`.
+        assert!(is_trait_instance_wrapper(
+            "crate.Scalar.Insts.CoreOpsArithAddScalarScalar"
+        ));
+        assert!(is_trait_instance_wrapper(
+            "crate.edwards.CompressedEdwardsY.Insts.CoreCmpEq"
+        ));
+        // Method leaf: two segments after `.Insts.` → NOT a wrapper.
+        assert!(!is_trait_instance_wrapper(
+            "crate.Scalar.Insts.CoreOpsArithAddScalarScalar.add"
+        ));
+        // No `.Insts.` at all.
+        assert!(!is_trait_instance_wrapper("crate.scalar.Scalar.reduce"));
+        assert!(!is_trait_instance_wrapper(""));
+    }
+
+    #[test]
+    fn function_split_part_detected() {
+        assert!(is_function_split_part(
+            "crate.scalar.Scalar52.montgomery_reduce.part1"
+        ));
+        assert!(is_function_split_part("crate.foo.part2"));
+        assert!(is_function_split_part("crate.foo.part10"));
+        // Not a numbered part.
+        assert!(!is_function_split_part("crate.foo.part"));
+        assert!(!is_function_split_part("crate.foo.partial_cmp"));
+        assert!(!is_function_split_part("crate.foo.bar"));
+        assert!(!is_function_split_part(""));
+    }
+
+    #[test]
+    fn auxiliary_def_authoritative_and_heuristic() {
+        let mut aux = BTreeSet::new();
+        aux.insert("crate.backend.u64.field.FieldElement51".to_string());
+        let aux: HashSet<String> = aux.into_iter().collect();
+
+        // Authoritative: name in the translation.json aux set (a type stand-in).
+        assert!(is_auxiliary_def(
+            "crate.backend.u64.field.FieldElement51",
+            "def",
+            &[],
+            &aux
+        ));
+        // Heuristic: wrapper by name, even absent from the aux set.
+        assert!(is_auxiliary_def(
+            "crate.Scalar.Insts.CoreOpsArithAddScalarScalar",
+            "def",
+            &[],
+            &HashSet::new()
+        ));
+        // Heuristic: split part.
+        assert!(is_auxiliary_def(
+            "crate.Scalar52.montgomery_reduce.part1",
+            "def",
+            &[],
+            &HashSet::new()
+        ));
+        // Heuristic: reducible type alias.
+        assert!(is_auxiliary_def(
+            "crate.Alias",
+            "def",
+            &["reducible".to_string()],
+            &HashSet::new()
+        ));
+        // Genuine unspecified method leaf: not auxiliary.
+        assert!(!is_auxiliary_def(
+            "crate.Scalar.Insts.CoreOpsArithNegScalar.neg",
+            "def",
+            &[],
+            &HashSet::new()
+        ));
+        // Genuine function: not auxiliary.
+        assert!(!is_auxiliary_def(
+            "crate.backend.variable_base_mul",
+            "def",
+            &[],
+            &HashSet::new()
+        ));
+        // A theorem whose name looks like a wrapper is NOT an auxiliary def:
+        // the name heuristics apply only to `def` atoms.
+        assert!(!is_auxiliary_def(
+            "crate.Type.Insts.SomeTrait_spec",
+            "theorem",
+            &[],
+            &HashSet::new()
+        ));
     }
 
     #[test]
@@ -1041,7 +1246,8 @@ mod tests {
             ..Default::default()
         }];
         let config = AeneasConfig::default();
-        let results = enrich_function_records(&records, &atoms, "mycrate", &config);
+        let results =
+            enrich_function_records(&records, &atoms, "mycrate", &config, &HashSet::new());
 
         assert_eq!(results.len(), 1);
         // rust_trait_impl would hide it, but spec override keeps it visible
@@ -1076,7 +1282,8 @@ mod tests {
             ..Default::default()
         }];
         let config = AeneasConfig::default();
-        let results = enrich_function_records(&records, &atoms, "mycrate", &config);
+        let results =
+            enrich_function_records(&records, &atoms, "mycrate", &config, &HashSet::new());
 
         assert_eq!(results.len(), 1);
         assert!(results[0].is_hidden);
@@ -1170,7 +1377,7 @@ mod tests {
             ..Default::default()
         }];
         let config = AeneasConfig::default();
-        let results = enrich_function_records(&records, &atoms, "", &config);
+        let results = enrich_function_records(&records, &atoms, "", &config, &HashSet::new());
 
         assert_eq!(results.len(), 1);
         assert!(results[0].externally_verified);
@@ -1179,6 +1386,101 @@ mod tests {
             "externally_verified should be exclusive from verified"
         );
         assert!(results[0].specified);
+    }
+
+    fn lean_atom(kind: &str, reducible: bool, primary_spec: Option<&str>) -> Atom {
+        let mut a = test_atom();
+        a.language = "lean".to_string();
+        a.kind = kind.to_string();
+        a.code_path = "crate/src/lib.rs".to_string();
+        a.extensions.insert(
+            "rust-source".to_string(),
+            serde_json::json!("crate/src/lib.rs"),
+        );
+        if reducible {
+            a.extensions
+                .insert("attributes".to_string(), serde_json::json!(["reducible"]));
+        }
+        if let Some(ps) = primary_spec {
+            a.extensions
+                .insert("primary-spec".to_string(), serde_json::json!(ps));
+        }
+        a
+    }
+
+    #[test]
+    fn enrich_lean_flags_marks_auxiliary_defs_not_genuine() {
+        let mut merged: BTreeMap<String, Atom> = BTreeMap::new();
+        // Trait-instance wrapper (heuristic + reducible) — artifact.
+        merged.insert(
+            "probe:crate.Scalar.Insts.CoreOpsArithAddScalarScalar".to_string(),
+            lean_atom("def", true, None),
+        );
+        // Type stand-in, authoritative via aux set — artifact.
+        merged.insert(
+            "probe:crate.field.FieldElement51".to_string(),
+            lean_atom("def", true, None),
+        );
+        // Function-split part — artifact.
+        merged.insert(
+            "probe:crate.scalar.Scalar52.montgomery_reduce.part1".to_string(),
+            lean_atom("def", false, None),
+        );
+        // Genuine unspecified method leaf — NOT an artifact.
+        merged.insert(
+            "probe:crate.Scalar.Insts.CoreOpsArithNegScalar.neg".to_string(),
+            lean_atom("def", false, None),
+        );
+        // Wrapper that carries a primary spec — guard keeps it un-flagged.
+        merged.insert(
+            "probe:crate.Type.Insts.SomeTrait".to_string(),
+            lean_atom("def", true, Some("crate.Type.Insts.SomeTrait_spec")),
+        );
+        merged.insert(
+            "probe:crate.Type.Insts.SomeTrait_spec".to_string(),
+            lean_atom("theorem", false, None),
+        );
+        // Single-method trait wrapper that IS a Rust exec's translation target
+        // (authoritative aux set), unspecified — must stay a countable impl.
+        merged.insert(
+            "probe:crate.Error.Insts.CoreConvertFrom".to_string(),
+            lean_atom("def", true, None),
+        );
+        let mut rust_from = test_atom();
+        rust_from.language = "rust".to_string();
+        rust_from.extensions.insert(
+            "translation-name".to_string(),
+            serde_json::json!("probe:crate.Error.Insts.CoreConvertFrom"),
+        );
+        merged.insert("probe:rust::Error::from".to_string(), rust_from);
+
+        let mut aux: HashSet<String> = HashSet::new();
+        aux.insert("crate.field.FieldElement51".to_string());
+        aux.insert("crate.Error.Insts.CoreConvertFrom".to_string());
+
+        let config = AeneasConfig::default();
+        enrich_lean_atom_flags(&mut merged, "crate", &config, &aux);
+
+        let art = |k: &str| {
+            merged[k].extensions["is-extraction-artifact"]
+                .as_bool()
+                .unwrap()
+        };
+        assert!(art("probe:crate.Scalar.Insts.CoreOpsArithAddScalarScalar"));
+        assert!(art("probe:crate.field.FieldElement51"));
+        assert!(art("probe:crate.scalar.Scalar52.montgomery_reduce.part1"));
+        assert!(
+            !art("probe:crate.Scalar.Insts.CoreOpsArithNegScalar.neg"),
+            "genuine unspecified method leaf must stay a countable implementation"
+        );
+        assert!(
+            !art("probe:crate.Type.Insts.SomeTrait"),
+            "a spec target must never be flagged as scaffolding"
+        );
+        assert!(
+            !art("probe:crate.Error.Insts.CoreConvertFrom"),
+            "a Rust exec's translation target must never be flagged, even from the authoritative aux set"
+        );
     }
 
     #[test]
@@ -1215,7 +1517,7 @@ mod tests {
             },
         ];
         let config = AeneasConfig::default();
-        let results = enrich_function_records(&records, &atoms, "", &config);
+        let results = enrich_function_records(&records, &atoms, "", &config, &HashSet::new());
 
         assert_eq!(results.len(), 2);
         assert!(
