@@ -803,7 +803,12 @@ fn run_extract_with_translations(
     }
 
     // Phase 2: Enrich (Aeneas-specific)
-    enrich_with_aeneas_metadata(&mut merged, &translations.0, cfg_config);
+    enrich_with_aeneas_metadata(
+        &mut merged,
+        &translations.0,
+        cfg_config,
+        &config.out_of_scope,
+    );
     enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config, aux_defs);
 
     // Phase 2.5: Enrich verification status (transitive propagation, P23)
@@ -880,11 +885,14 @@ fn resolve_verification_status(
 ///
 /// `cfg_config` is `None` when the active feature set could not be resolved; cfg
 /// scope classification is then skipped entirely (conservative — never disables
-/// a backlog atom on a guess).
+/// a backlog atom on a guess). `out_of_scope_patterns` is the project config's
+/// curated glob list (matched against `rust-qualified-name` / `display-name`)
+/// for functions Aeneas structurally does not translate.
 fn enrich_with_aeneas_metadata(
     merged: &mut std::collections::BTreeMap<String, Atom>,
     from_to: &HashMap<String, Vec<String>>,
     cfg_config: Option<&crate::cfg_eval::CfgConfig>,
+    out_of_scope_patterns: &[String],
 ) {
     let enrichments: Vec<_> = from_to
         .iter()
@@ -935,6 +943,13 @@ fn enrich_with_aeneas_metadata(
         }
     }
 
+    // Precompile the curated out-of-scope globs once (matched against each Rust
+    // atom's rust-qualified-name / display-name below).
+    let oos_globs: Vec<regex::Regex> = out_of_scope_patterns
+        .iter()
+        .filter_map(|p| enrich::glob_to_regex(p))
+        .collect();
+
     for (key, atom) in merged.iter_mut() {
         if atom.language != "rust" {
             continue;
@@ -947,9 +962,25 @@ fn enrich_with_aeneas_metadata(
                 .is_some_and(|pred| cfg.is_inactive(pred))
         });
         let out_of_scope = out_of_scope_rust.contains(key);
+        // Non-library targets (build.rs / tests / examples / benches) are
+        // compiled outside the verified library, so Aeneas never translates
+        // them — out of scope, not backlog (KB P25).
+        let non_lib_target = enrich::is_non_library_target(&atom.code_path);
+        // Curated config opt-out: functions Aeneas structurally does not
+        // translate (Debug/Display fmt, Zeroize, …) which therefore never carry
+        // a Lean translation to annotate `@[out_of_scope]` (KB P25).
+        let config_oos = !oos_globs.is_empty() && {
+            let rqn = atom
+                .extensions
+                .get("rust-qualified-name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            enrich::is_config_out_of_scope(rqn, &atom.display_name, &oos_globs)
+        };
         // Tracked backlog by default; disabled only when out of scope and not
         // status-bearing (P24/P25).
-        let is_disabled = !has_status && (cfg_inactive || out_of_scope);
+        let is_disabled =
+            !has_status && (cfg_inactive || out_of_scope || non_lib_target || config_oos);
         atom.extensions
             .insert("is-disabled".to_string(), serde_json::json!(is_disabled));
         // Relevance is crate membership, independent of scope: external stubs
@@ -1710,7 +1741,7 @@ charon:
 
         let from_to = HashMap::new();
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:crate/1.0/foo()").unwrap();
         assert_eq!(
@@ -1730,7 +1761,7 @@ charon:
 
         let from_to = HashMap::new();
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:crate/1.0/bar()").unwrap();
         assert_eq!(
@@ -1750,7 +1781,7 @@ charon:
 
         let from_to = HashMap::new();
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:module.lean_fn").unwrap();
         assert!(
@@ -1783,7 +1814,7 @@ charon:
             .or_default()
             .push("probe:my_crate.ristretto.decompress.step_2".to_string());
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged
             .get("probe:my-crate/1.0/ristretto/decompress/step_2()")
@@ -1820,7 +1851,7 @@ charon:
         merged.insert("probe:crate/1.0/foo()".to_string(), make_rust_atom("foo"));
 
         let from_to = HashMap::new();
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:crate/1.0/foo()").unwrap();
         assert_eq!(
@@ -1847,7 +1878,7 @@ charon:
             features: ["alloc"].iter().map(|s| s.to_string()).collect(),
         };
         let from_to = HashMap::new();
-        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg));
+        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg), &[]);
 
         let atom = merged.get("probe:crate/1.0/serde_only()").unwrap();
         assert_eq!(
@@ -1870,13 +1901,91 @@ charon:
             features: ["alloc"].iter().map(|s| s.to_string()).collect(),
         };
         let from_to = HashMap::new();
-        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg));
+        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg), &[]);
 
         let atom = merged.get("probe:crate/1.0/alloc_gated()").unwrap();
         assert_eq!(
             atom.extensions.get("is-disabled"),
             Some(&serde_json::json!(false)),
             "an active-feature-gated function stays tracked backlog"
+        );
+    }
+
+    #[test]
+    fn enrich_non_library_target_is_disabled() {
+        let mut merged = std::collections::BTreeMap::new();
+        // A benchmark function: compiled outside the verified library, no cfg,
+        // no translation → out of scope, not backlog (KB P25).
+        let mut bench = make_rust_atom("bench_fn");
+        bench.code_path = "curve25519-dalek/benches/dalek_benchmarks.rs".to_string();
+        merged.insert("probe:crate/1.0/benches/bench_fn()".to_string(), bench);
+        // A build-script function.
+        let mut build = make_rust_atom("main");
+        build.code_path = "curve25519-dalek/build.rs".to_string();
+        merged.insert("probe:crate/1.0/build/main()".to_string(), build);
+        // A genuine library function stays tracked backlog.
+        let lib = make_rust_atom("lib_fn"); // code_path defaults to src/lib.rs
+        merged.insert("probe:crate/1.0/lib_fn()".to_string(), lib);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        for k in [
+            "probe:crate/1.0/benches/bench_fn()",
+            "probe:crate/1.0/build/main()",
+        ] {
+            assert_eq!(
+                merged[k].extensions.get("is-disabled"),
+                Some(&serde_json::json!(true)),
+                "non-library target {k} should be out of scope"
+            );
+            assert!(!merged[k].extensions.contains_key("verification-status"));
+        }
+        assert_eq!(
+            merged["probe:crate/1.0/lib_fn()"]
+                .extensions
+                .get("is-disabled"),
+            Some(&serde_json::json!(false)),
+            "library function stays tracked backlog"
+        );
+    }
+
+    #[test]
+    fn enrich_config_out_of_scope_pattern_disables() {
+        let mut merged = std::collections::BTreeMap::new();
+        // A Debug `fmt` the config opts out of; no translation, no cfg.
+        let mut fmt = make_rust_atom("EdwardsPoint::fmt");
+        fmt.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!(
+                "curve25519_dalek::edwards::{core::fmt::Debug for curve25519_dalek::edwards::EdwardsPoint}::fmt"
+            ),
+        );
+        merged.insert(
+            "probe:crate/1.0/edwards/EdwardsPoint_fmt()".to_string(),
+            fmt,
+        );
+        // A normal library function the pattern must NOT touch.
+        let lib = make_rust_atom("EdwardsPoint::compress");
+        merged.insert("probe:crate/1.0/edwards/compress()".to_string(), lib);
+
+        let from_to = HashMap::new();
+        let patterns = ["*core::fmt::Debug*".to_string(), "*::fmt".to_string()];
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &patterns);
+
+        assert_eq!(
+            merged["probe:crate/1.0/edwards/EdwardsPoint_fmt()"]
+                .extensions
+                .get("is-disabled"),
+            Some(&serde_json::json!(true)),
+            "config out-of-scope pattern should disable the matching fn"
+        );
+        assert_eq!(
+            merged["probe:crate/1.0/edwards/compress()"]
+                .extensions
+                .get("is-disabled"),
+            Some(&serde_json::json!(false)),
+            "a non-matching library fn stays tracked backlog"
         );
     }
 
@@ -1900,7 +2009,7 @@ charon:
             .or_default()
             .push("probe:my_crate.opt_out".to_string());
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/opt_out()").unwrap();
         assert_eq!(
@@ -2013,7 +2122,7 @@ charon:
     fn vs_verified_def_with_verified_spec() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("verified"), Some("verified"));
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -2027,7 +2136,7 @@ charon:
     fn vs_verified_def_without_spec() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("verified"), None);
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -2041,7 +2150,7 @@ charon:
     fn vs_trusted_def_preserved() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("trusted"), Some("verified"));
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -2055,7 +2164,7 @@ charon:
     fn vs_failed_def_preserved() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("failed"), Some("verified"));
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -2069,7 +2178,7 @@ charon:
     fn vs_verified_def_with_failed_spec() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("verified"), Some("failed"));
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -2083,7 +2192,7 @@ charon:
     fn vs_no_lean_status_no_spec() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, None, None);
-        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(

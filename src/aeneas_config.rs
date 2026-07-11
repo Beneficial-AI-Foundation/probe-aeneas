@@ -28,6 +28,16 @@ pub struct AeneasConfigFile {
     /// progress percentages). This is always a manual editorial decision.
     #[serde(default, rename = "is-ignored")]
     pub is_ignored: Vec<String>,
+
+    /// Rust functions to mark **out of verification scope** (`is-disabled: true`,
+    /// no status), given as glob patterns (`*` matches any run of characters)
+    /// matched against each Rust atom's `rust-qualified-name` and `display-name`.
+    /// For functions Aeneas structurally does not translate — e.g. `Debug`/
+    /// `Display` `fmt`, `Zeroize` — which never appear in `functions.json` and
+    /// so cannot carry a Lean `@[out_of_scope]` attribute, yet are not
+    /// verification targets. A curated, reviewable opt-out (KB P25).
+    #[serde(default, rename = "out-of-scope")]
+    pub out_of_scope: Vec<String>,
 }
 
 /// Resolved config used during enrichment.
@@ -35,6 +45,8 @@ pub struct AeneasConfigFile {
 pub struct AeneasConfig {
     pub hidden: HashSet<String>,
     pub ignored: HashSet<String>,
+    /// Out-of-scope glob patterns (see [`AeneasConfigFile::out_of_scope`]).
+    pub out_of_scope: Vec<String>,
 }
 
 impl AeneasConfig {
@@ -65,10 +77,14 @@ impl AeneasConfig {
         if !file.is_ignored.is_empty() {
             println!("  is-ignored: {} entries", file.is_ignored.len());
         }
+        if !file.out_of_scope.is_empty() {
+            println!("  out-of-scope: {} pattern(s)", file.out_of_scope.len());
+        }
 
         Ok(Self {
             hidden: file.is_hidden.into_iter().collect(),
             ignored: file.is_ignored.into_iter().collect(),
+            out_of_scope: file.out_of_scope,
         })
     }
 }

@@ -199,6 +199,47 @@ pub fn is_externally_verified(attrs: &[String]) -> bool {
     attrs.iter().any(|a| a == "externally_verified")
 }
 
+/// Check whether a Rust atom's `code-path` is a **non-library target** — a build
+/// script, integration tests, examples, or benches — which Aeneas does not
+/// translate or verify (KB P25). Such code is compiled in a separate target, not
+/// the verified library, so it is out of scope rather than backlog.
+///
+/// Keyed on path *components*: the absence of a `src` component distinguishes
+/// these from in-`src` modules that merely happen to be named `tests` (e.g.
+/// `src/foo/tests.rs`). `code_path` may carry a crate-dir / workspace-member
+/// prefix (e.g. `curve25519-dalek/benches/dalek_benchmarks.rs`). Mirrors
+/// probe-verus's non-library-target classification.
+pub fn is_non_library_target(code_path: &str) -> bool {
+    !code_path.split('/').any(|c| c == "src")
+        && code_path
+            .split('/')
+            .any(|c| matches!(c, "build.rs" | "tests" | "examples" | "benches"))
+}
+
+/// Compile a glob pattern (`*` = any run of characters, anchored at both ends;
+/// no other metacharacters) into an anchored regex. Returns `None` if the
+/// pattern is malformed as a regex (should not happen — segments are escaped).
+pub fn glob_to_regex(pattern: &str) -> Option<regex::Regex> {
+    let mut re = String::from("^");
+    for (i, seg) in pattern.split('*').enumerate() {
+        if i > 0 {
+            re.push_str(".*");
+        }
+        re.push_str(&regex::escape(seg));
+    }
+    re.push('$');
+    regex::Regex::new(&re).ok()
+}
+
+/// Whether a Rust atom is out of scope by the config's curated `out-of-scope`
+/// glob list, matched against its `rust-qualified-name` and `display-name`
+/// (either matching suffices). `globs` are precompiled via [`glob_to_regex`].
+pub fn is_config_out_of_scope(rqn: &str, display_name: &str, globs: &[regex::Regex]) -> bool {
+    globs
+        .iter()
+        .any(|g| g.is_match(rqn) || g.is_match(display_name))
+}
+
 /// Check if attributes include the Aeneas `@[out_of_scope]` opt-out.
 ///
 /// A Lean translation carrying this attribute declares "this translation will
@@ -999,6 +1040,64 @@ mod tests {
         assert!(is_externally_verified(&attrs));
         assert!(!is_externally_verified(&[]));
         assert!(!is_externally_verified(&["other".to_string()]));
+    }
+
+    #[test]
+    fn out_of_scope_check() {
+        assert!(is_out_of_scope(&["out_of_scope".to_string()]));
+        assert!(is_out_of_scope(&["@[out_of_scope]".to_string()]));
+        assert!(!is_out_of_scope(&["reducible".to_string()]));
+        assert!(!is_out_of_scope(&[]));
+    }
+
+    #[test]
+    fn glob_and_config_out_of_scope() {
+        let g = |p: &str, t: &str| glob_to_regex(p).unwrap().is_match(t);
+        // Anchored; `*` spans any run.
+        assert!(g("*::fmt", "EdwardsPoint::fmt"));
+        assert!(g("*core::fmt::Debug*", "x::{core::fmt::Debug for y}::fmt"));
+        assert!(g("exact", "exact"));
+        assert!(!g("exact", "exact_suffix"));
+        assert!(!g("*::fmt", "fmt_helper"));
+        // Dots are literal, not regex wildcards.
+        assert!(!g("a.c", "abc"));
+
+        let globs: Vec<regex::Regex> = ["*::fmt".to_string(), "*Zeroize*".to_string()]
+            .iter()
+            .filter_map(|p| glob_to_regex(p))
+            .collect();
+        // Matches via display-name.
+        assert!(is_config_out_of_scope("", "Scalar::fmt", &globs));
+        // Matches via rust-qualified-name.
+        assert!(is_config_out_of_scope(
+            "c::{zeroize::Zeroize for T}::zeroize",
+            "T::zeroize",
+            &globs
+        ));
+        // No match → in scope.
+        assert!(!is_config_out_of_scope(
+            "c::reduce",
+            "Scalar::reduce",
+            &globs
+        ));
+    }
+
+    #[test]
+    fn non_library_target_check() {
+        // Non-library targets (no `src` component + build.rs/tests/examples/benches).
+        assert!(is_non_library_target("build.rs"));
+        assert!(is_non_library_target("curve25519-dalek/build.rs"));
+        assert!(is_non_library_target(
+            "curve25519-dalek/benches/dalek_benchmarks.rs"
+        ));
+        assert!(is_non_library_target("mycrate/tests/integration.rs"));
+        assert!(is_non_library_target("mycrate/examples/demo.rs"));
+        // In-`src` code is library, even when a module is named `tests`.
+        assert!(!is_non_library_target("curve25519-dalek/src/edwards.rs"));
+        assert!(!is_non_library_target("mycrate/src/foo/tests.rs"));
+        assert!(!is_non_library_target("src/lib.rs"));
+        // External stubs (empty) are not classified here.
+        assert!(!is_non_library_target(""));
     }
 
     #[test]
