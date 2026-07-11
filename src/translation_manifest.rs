@@ -20,7 +20,7 @@
 //! [`load`] returns [`anyhow::Result`]; failures are IO or JSON parse errors,
 //! surfaced with `.context(...)` and propagated by callers via `?`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
@@ -28,12 +28,42 @@ use serde::Deserialize;
 
 use crate::types::FunctionRecord;
 
-/// Aeneas `translation.json`. Only the `functions` array is consumed; `types`,
-/// `globals`, `trait_decls`, and `trait_impls` never carry loop metadata.
+/// Aeneas `translation.json`. The `functions` array drives loop/primary
+/// classification (only it carries loop metadata); the `types` and `trait_impls`
+/// arrays name the Aeneas-generated auxiliary defs (type stand-ins and
+/// trait-instance wrappers) that carry `rust-source` but correspond to no Rust
+/// `exec` atom (probe-aeneas#26). `globals` and `trait_decls` are unused.
 #[derive(Debug, Deserialize)]
 pub struct TranslationManifest {
     #[serde(default)]
     pub functions: Vec<TranslationFunc>,
+    #[serde(default)]
+    pub types: Vec<TranslationEntry>,
+    #[serde(default)]
+    pub trait_impls: Vec<TranslationEntry>,
+}
+
+/// A `types` or `trait_impls` entry from `translation.json`. Only `lean_name`
+/// is consumed — enough to identify the generated auxiliary def by name.
+#[derive(Debug, Deserialize)]
+pub struct TranslationEntry {
+    pub lean_name: String,
+}
+
+impl TranslationManifest {
+    /// Lean names of Aeneas-generated auxiliary defs that carry `rust-source`
+    /// but are scaffolding, not implementations: type stand-ins (`types`) and
+    /// trait-instance wrappers (`trait_impls`). Consumers should exclude these
+    /// from implementation counts (probe-aeneas#26). Names are in the
+    /// dot-separated Lean form (e.g. `crate.Type.Insts.Trait`), matching an
+    /// atom key with the `probe:` prefix stripped.
+    pub fn auxiliary_lean_names(&self) -> HashSet<String> {
+        self.types
+            .iter()
+            .chain(self.trait_impls.iter())
+            .map(|e| e.lean_name.clone())
+            .collect()
+    }
 }
 
 /// A single `functions` entry from `translation.json`.
@@ -87,14 +117,16 @@ pub fn resolve_path(project_root: &Path) -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
-/// Load Aeneas's `translation.json` from `path` (if any) and overlay its
-/// authoritative loop/primary classification onto `functions`. A `None` path is
-/// a silent no-op; a load error is reported and swallowed. Both fall back to the
-/// name heuristics and never abort the pipeline. Shared by the `extract` and
-/// `listfuns` flows.
-pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) {
+/// Load Aeneas's `translation.json` from `path` (if any), overlay its
+/// authoritative loop/primary classification onto `functions`, and return the
+/// set of auxiliary-def Lean names (type stand-ins + trait-instance wrappers)
+/// for consumers to flag as extraction artifacts. A `None` path is a silent
+/// no-op; a load error is reported and swallowed. Both return an empty set and
+/// fall back to the name heuristics, never aborting the pipeline. Shared by the
+/// `extract` and `listfuns` flows.
+pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> HashSet<String> {
     let Some(path) = path else {
-        return;
+        return HashSet::new();
     };
     match load(path) {
         Ok(manifest) => {
@@ -103,10 +135,12 @@ pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) {
                 "  Applied translation.json overlay: {n}/{} entries classified authoritatively",
                 functions.len()
             );
+            manifest.auxiliary_lean_names()
         }
         Err(e) => {
             eprintln!("  Warning: could not read {}: {e:#}", path.display());
             eprintln!("  Falling back to name-heuristic classification.");
+            HashSet::new()
         }
     }
 }
@@ -175,7 +209,12 @@ mod tests {
                 "parent_lean_name": "spqr.encoding.gf.GF16.div_impl"
             }
         ],
-        "types": [],
+        "types": [
+            {"def_id": 133, "lean_name": "spqr.encoding.gf.GF16"}
+        ],
+        "trait_impls": [
+            {"def_id": 329, "lean_name": "spqr.Array.Insts.CoreFmtDebug"}
+        ],
         "globals": []
     }"#;
 
@@ -228,6 +267,23 @@ mod tests {
         // Unmatched record stays on the heuristic-fallback path.
         assert_eq!(funcs[3].is_loop_artifact, None);
         assert_eq!(funcs[3].def_id, None);
+    }
+
+    #[test]
+    fn auxiliary_lean_names_unions_types_and_trait_impls() {
+        let m: TranslationManifest = serde_json::from_str(SAMPLE).unwrap();
+        let aux = m.auxiliary_lean_names();
+        assert_eq!(aux.len(), 2);
+        assert!(aux.contains("spqr.encoding.gf.GF16"));
+        assert!(aux.contains("spqr.Array.Insts.CoreFmtDebug"));
+        // Function entries are NOT auxiliary defs.
+        assert!(!aux.contains("spqr.encoding.gf.GF16.div_impl"));
+    }
+
+    #[test]
+    fn auxiliary_lean_names_empty_when_arrays_absent() {
+        let m: TranslationManifest = serde_json::from_str(r#"{"functions": []}"#).unwrap();
+        assert!(m.auxiliary_lean_names().is_empty());
     }
 
     #[test]

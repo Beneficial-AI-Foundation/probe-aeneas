@@ -467,7 +467,7 @@ pub fn run_extract(
     let config = AeneasConfig::load(aeneas_config, lean_project).context("load aeneas config")?;
 
     // --- Generate translations ---
-    let (translations_result, funs_rust_names) =
+    let (translations_result, funs_rust_names, aux_defs) =
         run_translate(&rust_path, &lean_path, &functions_path, translation_json)?;
 
     // --- Merge atom maps ---
@@ -476,6 +476,7 @@ pub fn run_extract(
         &lean_path,
         &translations_result,
         &funs_rust_names,
+        &aux_defs,
         output_path,
         &config,
         rust_path_prefix,
@@ -585,14 +586,15 @@ fn resolve_functions(
     Ok(functions_path)
 }
 
-/// Run the translate step, returning bidirectional maps and the set of
-/// normalized Rust names found in `functions.json`.
+/// Run the translate step, returning bidirectional maps, the set of normalized
+/// Rust names found in `functions.json`, and the auxiliary-def Lean names from
+/// Aeneas's `translation.json` (empty when the manifest is absent).
 fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
     functions_path: &Path,
     translation_json: Option<&Path>,
-) -> Result<(MappingMaps, HashSet<String>)> {
+) -> Result<(MappingMaps, HashSet<String>, HashSet<String>)> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
         .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
@@ -607,7 +609,7 @@ fn run_translate(
     let mut functions = load_functions(functions_path)?;
     println!("  {} entries", functions.len());
 
-    translation_manifest::apply(&mut functions, translation_json);
+    let aux_defs = translation_manifest::apply(&mut functions, translation_json);
 
     let funs_rust_names = build_functions_rust_names(&functions);
 
@@ -632,7 +634,7 @@ fn run_translate(
             .push(m.from.clone());
     }
 
-    Ok(((from_to, to_from), funs_rust_names))
+    Ok(((from_to, to_from), funs_rust_names, aux_defs))
 }
 
 /// Merge atoms with pre-computed translations and produce the final output.
@@ -652,6 +654,7 @@ fn run_extract_with_translations(
     lean_path: &Path,
     translations: &MappingMaps,
     funs_rust_names: &HashSet<String>,
+    aux_defs: &HashSet<String>,
     output_path: Option<&Path>,
     config: &AeneasConfig,
     rust_path_prefix: Option<&str>,
@@ -690,7 +693,7 @@ fn run_extract_with_translations(
 
     // Phase 2: Enrich (Aeneas-specific)
     enrich_with_aeneas_metadata(&mut merged, &translations.0, funs_rust_names);
-    enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config);
+    enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config, aux_defs);
 
     // Phase 2.5: Enrich verification status (transitive propagation, P23)
     if !skip_enrich {

@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.7
-Date: 2026-04-16
+Version: 2.8
+Date: 2026-07-11
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -259,7 +259,7 @@ the enrichment pass:
 | `is-relevant` | bool | yes | Whether the atom is relevant for verification tracking |
 | `is-ignored` | bool | yes | Whether the atom is explicitly ignored from progress metrics |
 | `is-hidden` | bool | yes | Whether the atom is hidden from default views |
-| `is-extraction-artifact` | bool | yes | Whether the atom is an Aeneas extraction artifact |
+| `is-extraction-artifact` | bool | yes | Whether the atom is an Aeneas-generated auxiliary def with no Rust `exec` counterpart (loop/body helper, trait-instance wrapper, type stand-in, or function-split part); excluded from implementation counts |
 | `is-externally-verified` | bool | no | Whether the atom is verified externally (e.g. in Verus). Present only when `true`. |
 | `attributes` | array of strings | no | Lean tag attributes detected on this declaration (from probe-lean). Absent when empty. |
 | `specs` | array of strings | no | Code-names of spec theorems (present on defs/abbrevs that have associated specs) |
@@ -333,7 +333,7 @@ needed for each field.
 
 | Field | Method | Computation Details |
 |-------|--------|---------------------|
-| `is-extraction-artifact` | **AUTO** | `true` when the display name ends with an Aeneas-standard suffix: `_body`, `_loop`, `_loop0`–`_loop3`. These suffixes are universal Aeneas conventions, identical across all Aeneas projects. No config needed. |
+| `is-extraction-artifact` | **AUTO** | `true` for Aeneas-generated auxiliary defs that carry `rust-source` but correspond to no Rust `exec` atom, so consumers keep them out of implementation counts (probe-aeneas#26). Covers: (1) loop/body split helpers — display name ends with `_body`, `_loop`, `_loop0`–`_loop3` (universal Aeneas suffixes); (2) **trait-instance wrappers** — one per `impl Trait for Type` block, named `<Type>.Insts.<Trait>` with no method leaf (the exec's `translation-name` targets the method body, not the wrapper); (3) **type stand-ins** — Rust types are never execs; (4) **function-split parts** — `<fn>.part1`/`.part2`, only the main def is a translation target. Categories 2–3 are authoritative from Aeneas's `translation.json` (`trait_impls` + `types` arrays) when present, falling back to name/kind heuristics (`.Insts.<one-segment>`, reducible type aliases, `.part<N>`) otherwise. **Guard:** a def carrying a primary spec is a genuine implementation and is never flagged. No config needed. |
 | `is-hidden` | **HYBRID** | **Auto:** `true` when `attributes` contains `"rust_trait_impl"`, OR the name matches a boilerplate `.Insts.` trait (Clone, Copy, Default, Zeroize), OR the name is a borrow-pattern delegator variant (`SharedA`/`SharedB` in receiver or `SharedB` in trait args — `Shared0` primary forms are kept visible), OR the name ends with `.mutual` (loop mutual recursion), OR the name contains `.closure` (closures), OR the name contains `.Blanket.` (blanket impls), OR the name contains `DOC_HIDDEN` (doc-hidden constants), OR the entry is an `.Insts.` parent with exactly one nested child method (single-child parent collapsing). **Manual:** project-specific entries via `aeneas.json` config (inner constants, project-specific helpers). |
 | `is-relevant` | **AUTO** | For Lean atoms without `rust-source`: inherits `is-in-package` from probe-lean. For Lean atoms with `rust-source`: `true` when the source path contains the Rust crate name, does not start with `/`, and does not contain `/cargo/registry/`. This subsumes `excluded-namespace-prefixes` — external Rust dependencies that Aeneas transpiled will have `rust-source` paths from other crates. For Rust atoms: `is-relevant` = `!is-disabled` (i.e. `true` when in `functions.json` or has a translation). |
 | `is-ignored` | **MANUAL** | Always requires explicit configuration in `aeneas.json`. This is a human editorial decision about what to exclude from verification progress percentages. probe-aeneas never auto-sets this to `true`. |
@@ -553,7 +553,7 @@ The `listfuns` command has three modes:
 | `dependencies` | array of strings | yes | Lean dependency names (probe prefix stripped) |
 | `nested_children` | array of strings | yes | For `.Insts.` parents with exactly one child method: contains that child's name (parent is auto-hidden). Empty otherwise. |
 | `is_relevant` | bool | yes | Whether the function belongs to the target crate |
-| `is_extraction_artifact` | bool | yes | Whether the function is an Aeneas extraction artifact |
+| `is_extraction_artifact` | bool | yes | Whether the function is an Aeneas-generated auxiliary def (loop/body helper, trait-instance wrapper, type stand-in, or function-split part); excluded from implementation counts |
 | `is_hidden` | bool | yes | Whether the function is hidden from default views |
 | `is_ignored` | bool | yes | Whether the function is ignored from progress metrics |
 | `specified` | bool | yes | Whether a spec theorem exists for this function |
@@ -590,7 +590,7 @@ The `listfuns` command has three modes:
 | `source` | string | no | Relative path to the Rust source file |
 | `lines` | string | no | Line range in `"L<start>-L<end>"` format |
 | `is_hidden` | bool | yes | Whether the function is hidden (name-pattern heuristic only) |
-| `is_extraction_artifact` | bool | yes | Whether the function is an Aeneas extraction artifact |
+| `is_extraction_artifact` | bool | yes | Whether the function is an Aeneas-generated auxiliary def (loop/body helper, trait-instance wrapper, type stand-in, or function-split part); excluded from implementation counts |
 
 ---
 

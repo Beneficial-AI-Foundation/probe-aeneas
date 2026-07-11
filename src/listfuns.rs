@@ -122,7 +122,7 @@ pub fn run_enriched_listfuns(
     // classification) when present. Optional: heuristic fallback otherwise.
     // `resolve_path` honors `aeneas_args.dest`, matching the `extract` flow.
     let translation_path = crate::translation_manifest::resolve_path(lean_project);
-    crate::translation_manifest::apply(&mut records, translation_path.as_deref());
+    let aux_defs = crate::translation_manifest::apply(&mut records, translation_path.as_deref());
 
     let atoms = load_atoms(lean_project, atoms_path, module_prefix)?;
     println!("Loaded {} atoms from probe-lean", atoms.len());
@@ -133,7 +133,8 @@ pub fn run_enriched_listfuns(
     let rust_crate_name = detect_crate_name(&records);
     println!("Detected crate name: {rust_crate_name:?}");
 
-    let enriched = enrich::enrich_function_records(&records, &atoms, &rust_crate_name, &config);
+    let enriched =
+        enrich::enrich_function_records(&records, &atoms, &rust_crate_name, &config, &aux_defs);
 
     let output_json = EnrichedFunctionsFile {
         functions: enriched,
