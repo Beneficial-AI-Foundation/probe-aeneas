@@ -579,6 +579,12 @@ pub struct AeneasEnrichStats {
 /// `is-extraction-artifact` to cover trait-instance wrappers, type stand-ins,
 /// and function-split parts (probe-aeneas#26), so consumers keep them out of
 /// implementation counts.
+///
+/// Must run after [`crate::extract`]'s translation-metadata pass so Rust atoms
+/// already carry `translation-name`: an atom that some Rust `exec` translates to
+/// is that function's implementation and is never flagged, even if a heuristic
+/// or the manifest classifies it as auxiliary (some single-method trait impls
+/// map the Rust method straight onto the `Insts.<Trait>` def).
 pub fn enrich_lean_atom_flags(
     merged: &mut BTreeMap<String, Atom>,
     rust_crate_name: &str,
@@ -587,15 +593,29 @@ pub fn enrich_lean_atom_flags(
 ) {
     let mut stats = AeneasEnrichStats::default();
 
-    // Spec targets are genuine implementations and must never be flagged as
-    // extraction artifacts. Precompute the set of specified Lean names (owned)
-    // before the mutable pass, since `find_primary_spec` needs a shared borrow.
+    // Genuine implementations must never be flagged as extraction artifacts.
+    // Precompute two owned guard sets before the mutable pass:
+    //  - `specified`: Lean names with a primary spec (needs a shared borrow for
+    //    `find_primary_spec`);
+    //  - `translation_targets`: Lean keys some Rust exec translates to (the
+    //    precise "this is an implementation" signal — a spec-less target is a
+    //    real unspecified impl, which the `specified` guard alone would miss).
     let specified: HashSet<String> = merged
         .iter()
         .filter(|(_, a)| a.language == "lean")
         .filter_map(|(key, _)| {
             let name = strip_prefix(key);
             find_primary_spec(name, merged).0.map(|_| name.to_string())
+        })
+        .collect();
+    let translation_targets: HashSet<String> = merged
+        .values()
+        .filter(|a| a.language == "rust")
+        .filter_map(|a| {
+            a.extensions
+                .get("translation-name")
+                .and_then(|v| v.as_str())
+                .map(String::from)
         })
         .collect();
 
@@ -610,10 +630,12 @@ pub fn enrich_lean_atom_flags(
         let rust_source = atom_rust_source(atom).to_string();
 
         // Loop/body suffix dimension OR auxiliary-def dimension; the latter is
-        // guarded so a spec target is never treated as scaffolding.
+        // guarded so a genuine implementation — one carrying a primary spec, or
+        // one some Rust exec translates to — is never treated as scaffolding.
         let artifact = is_extraction_artifact(display_name)
             || (is_auxiliary_def(name_no_prefix, &atom.kind, &attrs, aux_names)
-                && !specified.contains(name_no_prefix));
+                && !specified.contains(name_no_prefix)
+                && !translation_targets.contains(key.as_str()));
         if artifact {
             stats.artifacts += 1;
         }
@@ -1418,9 +1440,23 @@ mod tests {
             "probe:crate.Type.Insts.SomeTrait_spec".to_string(),
             lean_atom("theorem", false, None),
         );
+        // Single-method trait wrapper that IS a Rust exec's translation target
+        // (authoritative aux set), unspecified — must stay a countable impl.
+        merged.insert(
+            "probe:crate.Error.Insts.CoreConvertFrom".to_string(),
+            lean_atom("def", true, None),
+        );
+        let mut rust_from = test_atom();
+        rust_from.language = "rust".to_string();
+        rust_from.extensions.insert(
+            "translation-name".to_string(),
+            serde_json::json!("probe:crate.Error.Insts.CoreConvertFrom"),
+        );
+        merged.insert("probe:rust::Error::from".to_string(), rust_from);
 
         let mut aux: HashSet<String> = HashSet::new();
         aux.insert("crate.field.FieldElement51".to_string());
+        aux.insert("crate.Error.Insts.CoreConvertFrom".to_string());
 
         let config = AeneasConfig::default();
         enrich_lean_atom_flags(&mut merged, "crate", &config, &aux);
@@ -1440,6 +1476,10 @@ mod tests {
         assert!(
             !art("probe:crate.Type.Insts.SomeTrait"),
             "a spec target must never be flagged as scaffolding"
+        );
+        assert!(
+            !art("probe:crate.Error.Insts.CoreConvertFrom"),
+            "a Rust exec's translation target must never be flagged, even from the authoritative aux set"
         );
     }
 
