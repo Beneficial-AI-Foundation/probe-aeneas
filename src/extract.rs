@@ -982,7 +982,9 @@ pub fn run_translate_only(
     let mut functions = load_functions(functions_path)?;
     println!("  {} entries", functions.len());
 
-    translation_manifest::apply(&mut functions, translation_json);
+    // `translate` emits only mappings, not the merged/enriched atom map, so the
+    // auxiliary-def set is intentionally discarded here.
+    let _ = translation_manifest::apply(&mut functions, translation_json);
 
     println!("\nGenerating translations...");
     let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
