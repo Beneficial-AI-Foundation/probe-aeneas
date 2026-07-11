@@ -6,17 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-11
+
+### Added
+- **Non-library-target exclusion** (KB P25): Rust functions in `build.rs`, `tests/`, `examples/`, or `benches/` (a `code-path` with no `src` component and a `build.rs`/`tests`/`examples`/`benches` component) are out of scope — they are compiled in separate targets, not the verified library, so Aeneas never translates them. Mirrors probe-verus's non-library-target case; keeps them out of the backlog rather than showing as spec-less "white".
+- **Curated `out-of-scope` config list** (KB P25): a new `out-of-scope` field in `.verilib/aeneas.json` — glob patterns (`*` = any run) matched against each Rust atom's `rust-qualified-name` / `display-name` — marks matching functions `is-disabled: true`. For functions Aeneas *structurally does not translate* (e.g. `Debug`/`Display` `fmt`), which never appear in `functions.json` and so have no Lean def to carry `@[out_of_scope]`. A status-bearing atom is never disabled (P24), so broad patterns cannot demote a translated/verified function. Editorial, not automatic.
+
 ## [0.14.0] - 2026-07-11
 
 ### Changed
-- **`is-disabled` now follows the KB P24/P25 two-state scope model** (breaking). Previously a Rust atom was `is-disabled: true` unless its `rust-qualified-name` appeared in `functions.json` or it had a `translation-name` — which wrongly demoted every compiled-but-untranslated function to out-of-scope (452 of 672 on curve25519-dalek). Now **every compiled Rust function is tracked backlog by default** (`is-disabled: false`); a function is `is-disabled: true` (out of scope, no `verification-status`) **only** when it has no status **and** is cfg-inactive in the Aeneas build, a non-library target, or its Lean translation carries `@[out_of_scope]`. Absence from `functions.json` no longer affects scope.
+- **`is-disabled` now follows the KB P24/P25 two-state scope model** (breaking). Previously a Rust atom was `is-disabled: true` unless its `rust-qualified-name` appeared in `functions.json` or it had a `translation-name` — which wrongly demoted every compiled-but-untranslated function to out-of-scope (452 of 672 on curve25519-dalek). Now **every compiled Rust function is tracked backlog by default** (`is-disabled: false`); a function is `is-disabled: true` (out of scope, no `verification-status`) **only** when it has no status **and** is cfg-inactive in the Aeneas build or its Lean translation carries `@[out_of_scope]`. Absence from `functions.json` no longer affects scope.
 - **`is-relevant` decoupled from scope**: it now reflects crate membership (non-empty `code-path`) rather than mirroring `is-disabled`.
 
 ### Added
 - **cfg-inactive scope classification** (KB P25): new `cfg_eval` module evaluates the per-function `#[cfg(...)]` predicate emitted by probe-rust (≥ 0.7.0) as the `cfg` atom field against the Aeneas build's active cargo feature set (resolved via `cargo metadata`, default features overlaid by `charon.cargo_args` `--features`/`--no-default-features`/`--all-features`). A function whose predicate is inactive (e.g. `#[cfg(test)]`, an off feature) is out of scope. Conservative: an unresolvable predicate or feature set leaves the atom in scope.
 - **`@[out_of_scope]` detection**: a Lean translation carrying the `out_of_scope` attribute marks its Rust function out of scope (no `verification-status`).
-- **Non-library-target exclusion** (KB P25): Rust functions in `build.rs`, `tests/`, `examples/`, or `benches/` (a `code-path` with no `src` component and a `build.rs`/`tests`/`examples`/`benches` component) are out of scope — they are compiled in separate targets, not the verified library, so Aeneas never translates them. Mirrors probe-verus's non-library-target case; keeps them out of the backlog rather than showing as spec-less "white".
-- **Curated `out-of-scope` config list** (KB P25): a new `out-of-scope` field in `.verilib/aeneas.json` — glob patterns (`*` = any run) matched against each Rust atom's `rust-qualified-name` / `display-name` — marks matching functions `is-disabled: true`. For functions Aeneas *structurally does not translate* (e.g. `Debug`/`Display` `fmt`), which never appear in `functions.json` and so have no Lean def to carry `@[out_of_scope]`. A status-bearing atom is never disabled (P24), so broad patterns cannot demote a translated/verified function. Editorial, not automatic.
 
 ## [0.11.2] - 2026-07-02
 
