@@ -234,8 +234,9 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
-| `is-disabled` | bool | yes | `false` if the function's `rust-qualified-name` appears as a `rust_name` in `functions.json` or it has a `translation-name`; `true` otherwise. Indicates whether Aeneas processed this function. |
-| `is-relevant` | bool | yes | Inverse of `is-disabled`. `true` when Aeneas transpiled this function. |
+| `is-disabled` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is either cfg-inactive in the Aeneas build (its `cfg` predicate is false) or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
+| `is-relevant` | bool | yes | Crate membership, independent of scope: `true` when the atom belongs to the analyzed crate (non-empty `code-path`), `false` for external stubs. |
+| `cfg` | string | no | The combined item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; own gate plus enclosing `impl`/`mod`/`trait` gates, `all(...)`-joined). Omitted when the function has no `#[cfg]` gate. Used to decide `is-disabled` (cfg-inactive ⟹ out of scope). |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
 | `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Derived from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is propagated directly. Otherwise, if a primary spec exists, the spec's status is used; if no spec exists, the status is `"unverified"`. After enrichment (default, `--skip-enrich` to disable): `"verified"` is upgraded to `"transitively-verified"` when all transitive deps are verified/trusted. |
@@ -269,37 +270,42 @@ the enrichment pass:
 > **Note on spec discovery**: probe-aeneas resolves the primary spec via the `primary-spec` extension on the definition atom, falling back to the `<name>_spec` naming convention. It does not currently walk the `specs` array. Definitions whose specs do not match either pattern will be classified as `"unverified"` on the Rust side.
 | `rust-source` | string or null | no | Rust source reference from Aeneas docstring |
 
-### `is-disabled` -- Aeneas Scope Indicator
+### `is-disabled` -- Aeneas Scope Indicator (KB P24/P25)
 
-Every Rust atom in the merged output carries an `is-disabled` boolean that
-records whether the function was processed by Aeneas during transpilation.
+Every Rust atom in the merged output carries an `is-disabled` boolean marking
+whether the function is in verification scope. probe-aeneas follows the
+two-state scope model of KB P24/P25.
 
 **Semantics:**
-- `is-disabled: false` -- Aeneas transpiled this Rust function into Lean.
-  Either the function's `rust-qualified-name` appears as a `rust_name` entry
-  in the project's `functions.json`, or a translation was found by one of the
-  secondary matching strategies (`file+display-name` or `file+line-overlap`).
-- `is-disabled: true` -- Aeneas did **not** process this function. It exists
-  in the Rust crate but has no corresponding Lean transpilation. This
-  typically means the function is out of scope for formal verification.
+- `is-disabled: false` -- **in scope**. Every compiled Rust function is tracked
+  by default. This includes the *backlog*: compiled functions that Aeneas has
+  not translated (or has translated but not yet verified) carry
+  `is-disabled: false` and no or `"unverified"` `verification-status`.
+- `is-disabled: true` -- **out of scope**, and carries no `verification-status`.
+  A function is out of scope only when:
+  1. **cfg-inactive** -- its `cfg` predicate is false under the Aeneas build's
+     active feature set (e.g. `#[cfg(test)]`, an inactive feature). It is not
+     compiled, so it cannot be translated or verified.
+  2. **`@[out_of_scope]`** -- its generated Lean translation carries the
+     `@[out_of_scope]` attribute, an explicit opt-out.
 
-**How it is computed:** During the `extract` merge step, probe-aeneas first
-populates `translation-name` for Rust atoms that have a Lean translation
-(found via any of the three matching strategies). Then for each Rust atom,
-`is-disabled` is `false` if the atom's `rust-qualified-name` (normalized)
-appears in `functions.json` **or** the atom already has a `translation-name`;
-otherwise `is-disabled` is `true`.
+**Not a scope signal:** absence from `functions.json`. A compiled Rust function
+Aeneas has not translated is backlog (`is-disabled: false`), not out of scope.
+`functions.json` remains the translation-matching bridge, not the scope oracle.
 
-**Relationship to translation fields:** A function with `is-disabled: false`
-*may* still lack `translation-name`/`translation-path`/`translation-text` if
-the matching strategies could not resolve which specific Lean definition
-corresponds to it (the name appeared in `functions.json` but no Lean atom
-could be paired).
+**How it is computed:** During the `extract` merge step, probe-aeneas populates
+`translation-name`/`verification-status` for translated Rust atoms (a status is
+skipped when the translation is `@[out_of_scope]`). Then, for each Rust atom,
+`is-disabled` defaults to `false` and is set to `true` only when the atom has no
+`verification-status` **and** is cfg-inactive or `@[out_of_scope]`. The active
+feature set is resolved via `cargo metadata` (default features overlaid by
+`charon.cargo_args`); when it cannot be resolved, cfg classification is skipped
+entirely (conservative — a backlog atom is never disabled on a guess). A
+status-bearing atom is never disabled (P24).
 
-**Consumer guidance:** Downstream tools can use `is-disabled` to partition the
-Rust call graph into "in scope for verification" (`false`) and "out of scope"
-(`true`). This is useful for computing verification coverage, filtering
-dependency trees, or highlighting functions that still need transpilation.
+**Consumer guidance:** partition the Rust call graph into in-scope (`false`) and
+out-of-scope (`true`). The verification backlog is exactly the in-scope,
+unspecified functions: `is-disabled: false` with no/`"unverified"` status.
 
 ### `is-public` -- Rust Visibility Indicator
 
