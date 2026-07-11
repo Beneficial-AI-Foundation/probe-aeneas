@@ -299,6 +299,10 @@ fn parse_explicit_features(args: &[String]) -> Vec<String> {
             split(val, &mut out);
         } else if let Some(val) = arg.strip_prefix("-F=") {
             split(val, &mut out);
+        } else if let Some(val) = arg.strip_prefix("-F") {
+            // Attached short form `-Ffoo` (the exact `-F` and `-F=` cases are
+            // handled above, so `val` here is a non-empty, non-`=` value).
+            split(val, &mut out);
         }
     }
     out
@@ -1151,6 +1155,29 @@ pub fn run_translate_only(
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn parse_explicit_features_forms() {
+        let f = |args: &[&str]| {
+            let mut v =
+                parse_explicit_features(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+            v.sort();
+            v
+        };
+        // Separate-value long and short forms.
+        assert_eq!(f(&["--features", "alloc,serde"]), vec!["alloc", "serde"]);
+        assert_eq!(f(&["-F", "alloc"]), vec!["alloc"]);
+        // Attached `=` forms.
+        assert_eq!(f(&["--features=alloc"]), vec!["alloc"]);
+        assert_eq!(f(&["-F=alloc,serde"]), vec!["alloc", "serde"]);
+        // Attached short form `-Ffoo`.
+        assert_eq!(f(&["-Falloc"]), vec!["alloc"]);
+        assert_eq!(f(&["-Falloc,serde"]), vec!["alloc", "serde"]);
+        // Space-separated within one value.
+        assert_eq!(f(&["--features", "alloc serde"]), vec!["alloc", "serde"]);
+        // Unrelated args ignored; bare `-F` with no value is a no-op.
+        assert_eq!(f(&["-p", "curve25519-dalek", "-F"]), Vec::<String>::new());
+    }
 
     fn create_aeneas_project(dir: &Path, crate_dir: &str, crate_name: Option<&str>, dest: &str) {
         fs::create_dir_all(dir).unwrap();

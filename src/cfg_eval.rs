@@ -149,13 +149,22 @@ fn tokenize(s: &str) -> Vec<Tok> {
             '"' => {
                 chars.next();
                 let mut val = String::new();
+                let mut closed = false;
                 for ch in chars.by_ref() {
                     if ch == '"' {
+                        closed = true;
                         break;
                     }
                     val.push(ch);
                 }
-                out.push(Tok::Str(val));
+                // An unterminated string literal is malformed: emit the bad
+                // sentinel so the parse fails (⇒ None ⇒ never inactive), rather
+                // than silently accepting a truncated value.
+                if closed {
+                    out.push(Tok::Str(val));
+                } else {
+                    out.push(Tok::Ident("\u{0}bad".to_string()));
+                }
             }
             c if c.is_alphanumeric() || c == '_' || c == '-' => {
                 let mut ident = String::new();
@@ -376,6 +385,10 @@ mod tests {
         let c = cfg(&["alloc"]);
         assert!(!c.is_inactive("all(feature ="));
         assert!(parse_cfg("").is_none());
+        // Unterminated string literal is malformed ⇒ None ⇒ never inactive,
+        // even though the (missing) value names an inactive feature.
+        assert!(parse_cfg("feature = \"serde").is_none());
+        assert!(!c.is_inactive("feature = \"serde"));
     }
 
     #[test]
