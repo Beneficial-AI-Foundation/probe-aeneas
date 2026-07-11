@@ -199,6 +199,23 @@ pub fn is_externally_verified(attrs: &[String]) -> bool {
     attrs.iter().any(|a| a == "externally_verified")
 }
 
+/// Check whether a Rust atom's `code-path` is a **non-library target** — a build
+/// script, integration tests, examples, or benches — which Aeneas does not
+/// translate or verify (KB P25). Such code is compiled in a separate target, not
+/// the verified library, so it is out of scope rather than backlog.
+///
+/// Keyed on path *components*: the absence of a `src` component distinguishes
+/// these from in-`src` modules that merely happen to be named `tests` (e.g.
+/// `src/foo/tests.rs`). `code_path` may carry a crate-dir / workspace-member
+/// prefix (e.g. `curve25519-dalek/benches/dalek_benchmarks.rs`). Mirrors
+/// probe-verus's non-library-target classification.
+pub fn is_non_library_target(code_path: &str) -> bool {
+    !code_path.split('/').any(|c| c == "src")
+        && code_path
+            .split('/')
+            .any(|c| matches!(c, "build.rs" | "tests" | "examples" | "benches"))
+}
+
 /// Check if attributes include the Aeneas `@[out_of_scope]` opt-out.
 ///
 /// A Lean translation carrying this attribute declares "this translation will
@@ -999,6 +1016,32 @@ mod tests {
         assert!(is_externally_verified(&attrs));
         assert!(!is_externally_verified(&[]));
         assert!(!is_externally_verified(&["other".to_string()]));
+    }
+
+    #[test]
+    fn out_of_scope_check() {
+        assert!(is_out_of_scope(&["out_of_scope".to_string()]));
+        assert!(is_out_of_scope(&["@[out_of_scope]".to_string()]));
+        assert!(!is_out_of_scope(&["reducible".to_string()]));
+        assert!(!is_out_of_scope(&[]));
+    }
+
+    #[test]
+    fn non_library_target_check() {
+        // Non-library targets (no `src` component + build.rs/tests/examples/benches).
+        assert!(is_non_library_target("build.rs"));
+        assert!(is_non_library_target("curve25519-dalek/build.rs"));
+        assert!(is_non_library_target(
+            "curve25519-dalek/benches/dalek_benchmarks.rs"
+        ));
+        assert!(is_non_library_target("mycrate/tests/integration.rs"));
+        assert!(is_non_library_target("mycrate/examples/demo.rs"));
+        // In-`src` code is library, even when a module is named `tests`.
+        assert!(!is_non_library_target("curve25519-dalek/src/edwards.rs"));
+        assert!(!is_non_library_target("mycrate/src/foo/tests.rs"));
+        assert!(!is_non_library_target("src/lib.rs"));
+        // External stubs (empty) are not classified here.
+        assert!(!is_non_library_target(""));
     }
 
     #[test]

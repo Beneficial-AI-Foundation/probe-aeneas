@@ -947,9 +947,13 @@ fn enrich_with_aeneas_metadata(
                 .is_some_and(|pred| cfg.is_inactive(pred))
         });
         let out_of_scope = out_of_scope_rust.contains(key);
+        // Non-library targets (build.rs / tests / examples / benches) are
+        // compiled outside the verified library, so Aeneas never translates
+        // them — out of scope, not backlog (KB P25).
+        let non_lib_target = enrich::is_non_library_target(&atom.code_path);
         // Tracked backlog by default; disabled only when out of scope and not
         // status-bearing (P24/P25).
-        let is_disabled = !has_status && (cfg_inactive || out_of_scope);
+        let is_disabled = !has_status && (cfg_inactive || out_of_scope || non_lib_target);
         atom.extensions
             .insert("is-disabled".to_string(), serde_json::json!(is_disabled));
         // Relevance is crate membership, independent of scope: external stubs
@@ -1877,6 +1881,45 @@ charon:
             atom.extensions.get("is-disabled"),
             Some(&serde_json::json!(false)),
             "an active-feature-gated function stays tracked backlog"
+        );
+    }
+
+    #[test]
+    fn enrich_non_library_target_is_disabled() {
+        let mut merged = std::collections::BTreeMap::new();
+        // A benchmark function: compiled outside the verified library, no cfg,
+        // no translation → out of scope, not backlog (KB P25).
+        let mut bench = make_rust_atom("bench_fn");
+        bench.code_path = "curve25519-dalek/benches/dalek_benchmarks.rs".to_string();
+        merged.insert("probe:crate/1.0/benches/bench_fn()".to_string(), bench);
+        // A build-script function.
+        let mut build = make_rust_atom("main");
+        build.code_path = "curve25519-dalek/build.rs".to_string();
+        merged.insert("probe:crate/1.0/build/main()".to_string(), build);
+        // A genuine library function stays tracked backlog.
+        let lib = make_rust_atom("lib_fn"); // code_path defaults to src/lib.rs
+        merged.insert("probe:crate/1.0/lib_fn()".to_string(), lib);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+
+        for k in [
+            "probe:crate/1.0/benches/bench_fn()",
+            "probe:crate/1.0/build/main()",
+        ] {
+            assert_eq!(
+                merged[k].extensions.get("is-disabled"),
+                Some(&serde_json::json!(true)),
+                "non-library target {k} should be out of scope"
+            );
+            assert!(!merged[k].extensions.contains_key("verification-status"));
+        }
+        assert_eq!(
+            merged["probe:crate/1.0/lib_fn()"]
+                .extensions
+                .get("is-disabled"),
+            Some(&serde_json::json!(false)),
+            "library function stays tracked backlog"
         );
     }
 
