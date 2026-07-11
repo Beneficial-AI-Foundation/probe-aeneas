@@ -199,6 +199,19 @@ pub fn is_externally_verified(attrs: &[String]) -> bool {
     attrs.iter().any(|a| a == "externally_verified")
 }
 
+/// Check if attributes include the Aeneas `@[out_of_scope]` opt-out.
+///
+/// A Lean translation carrying this attribute declares "this translation will
+/// not be verified", so the corresponding Rust function is out of verification
+/// scope (`is-disabled: true`, no status) per KB P25. probe-lean surfaces Lean
+/// attributes stripped of their `@[...]` syntax, so the bare `out_of_scope`
+/// form is the expected value; the bracketed form is accepted defensively.
+pub fn is_out_of_scope(attrs: &[String]) -> bool {
+    attrs
+        .iter()
+        .any(|a| a == "out_of_scope" || a == "@[out_of_scope]")
+}
+
 /// Check if a Lean atom represents a structure definition.
 pub fn is_structure(kind: &str) -> bool {
     kind == "structure"

@@ -215,6 +215,13 @@ fn resolve_and_extract(
         extract_runner::ensure_charon_llbc(rp, cc)?;
     }
 
+    // Resolve the Aeneas build's active cargo feature set so cfg predicates on
+    // Rust atoms can be evaluated for scope (KB P25). `None` when unresolvable —
+    // cfg-based scope classification is then skipped (conservative).
+    let cfg_config = rust_project
+        .as_deref()
+        .and_then(|rp| extract::resolve_active_features(rp, charon_config.as_ref()));
+
     extract::run_extract(
         rust.as_deref(),
         rust_project.as_deref(),
@@ -228,6 +235,7 @@ fn resolve_and_extract(
         rust_path_prefix.as_deref(),
         with_public_api,
         skip_enrich,
+        cfg_config.as_ref(),
     )
     .map_err(anyhow::Error::new)
 }

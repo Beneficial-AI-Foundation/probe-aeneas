@@ -28,7 +28,7 @@ use crate::gen_functions::generate_functions_json;
 use crate::listfuns::{run_listfuns, ListfunsError};
 use crate::translate::{
     build_functions_rust_names, build_translations_json, generate_translations, load_atoms,
-    load_functions, normalize_rust_name,
+    load_functions,
 };
 use crate::translation_manifest;
 
@@ -276,6 +276,114 @@ fn resolve_workspace_member(
     .into())
 }
 
+/// Collect the feature names passed via `--features`/`-F` in `cargo_args`.
+///
+/// Handles `--features a,b`, `--features=a,b`, `-F a`, and `-F=a`; values are
+/// split on commas and whitespace.
+fn parse_explicit_features(args: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut iter = args.iter().peekable();
+    let split = |s: &str, out: &mut Vec<String>| {
+        out.extend(
+            s.split([',', ' '])
+                .filter(|t| !t.is_empty())
+                .map(str::to_string),
+        );
+    };
+    while let Some(arg) = iter.next() {
+        if arg == "--features" || arg == "-F" {
+            if let Some(val) = iter.next() {
+                split(val, &mut out);
+            }
+        } else if let Some(val) = arg.strip_prefix("--features=") {
+            split(val, &mut out);
+        } else if let Some(val) = arg.strip_prefix("-F=") {
+            split(val, &mut out);
+        } else if let Some(val) = arg.strip_prefix("-F") {
+            // Attached short form `-Ffoo` (the exact `-F` and `-F=` cases are
+            // handled above, so `val` here is a non-empty, non-`=` value).
+            split(val, &mut out);
+        }
+    }
+    out
+}
+
+/// Resolve the active cargo feature set for the Aeneas build, so cfg predicates
+/// on Rust atoms can be evaluated (KB P25). Uses `cargo metadata` to read the
+/// target package's declared features, computes the default-feature closure,
+/// then overlays `charon.cargo_args` (`--no-default-features`, `--all-features`,
+/// `--features`).
+///
+/// Returns `None` when the feature set cannot be determined (cargo metadata
+/// unavailable, or an ambiguous workspace with no target package). Callers then
+/// skip cfg-based scope classification entirely — conservative, never disabling
+/// a backlog atom on a guess.
+pub fn resolve_active_features(
+    rust_project: &Path,
+    charon_config: Option<&CharonConfig>,
+) -> Option<crate::cfg_eval::CfgConfig> {
+    let output = std::process::Command::new("cargo")
+        .args(["metadata", "--no-deps", "--format-version", "1"])
+        .current_dir(rust_project)
+        .stderr(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let packages = metadata["packages"].as_array()?;
+
+    // Select the target package: by resolved name when known, else the sole
+    // package. An ambiguous workspace without a target name is unresolvable.
+    let target = resolve_target_package_name(None, charon_config);
+    let pkg = match &target {
+        Some(t) => {
+            let nt = t.replace('-', "_");
+            packages
+                .iter()
+                .find(|p| p["name"].as_str().unwrap_or("").replace('-', "_") == nt)?
+        }
+        None if packages.len() == 1 => &packages[0],
+        None => return None,
+    };
+
+    let features_obj = pkg["features"].as_object()?;
+    let edges: HashMap<String, Vec<String>> = features_obj
+        .iter()
+        .map(|(k, v)| {
+            let list = v
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            (k.clone(), list)
+        })
+        .collect();
+
+    let args: Vec<String> = charon_config
+        .and_then(|c| c.cargo_args.clone())
+        .unwrap_or_default();
+
+    let features = if args.iter().any(|a| a == "--all-features") {
+        edges.keys().cloned().collect()
+    } else {
+        let mut seeds: Vec<String> = if args.iter().any(|a| a == "--no-default-features") {
+            Vec::new()
+        } else {
+            edges.get("default").cloned().unwrap_or_default()
+        };
+        seeds.extend(parse_explicit_features(&args));
+        crate::cfg_eval::feature_closure(&edges, &seeds)
+    };
+
+    Some(crate::cfg_eval::CfgConfig { features })
+}
+
 /// Parse `aeneas-config.yml` in the given project directory and derive
 /// the Rust project path, Lean project path, and optional functions.json.
 pub fn resolve_project(project: &Path) -> Result<ResolvedProject> {
@@ -421,6 +529,7 @@ pub fn run_extract(
     rust_path_prefix: Option<&str>,
     with_public_api: bool,
     skip_enrich: bool,
+    cfg_config: Option<&crate::cfg_eval::CfgConfig>,
 ) -> Result<()> {
     // --- Validate inputs ---
     if rust_json.is_none() && rust_project.is_none() {
@@ -467,7 +576,9 @@ pub fn run_extract(
     let config = AeneasConfig::load(aeneas_config, lean_project).context("load aeneas config")?;
 
     // --- Generate translations ---
-    let (translations_result, funs_rust_names, aux_defs) =
+    // `funs_rust_names` (functions.json membership) no longer gates scope; the
+    // translation matcher inside `run_translate` still uses functions.json.
+    let (translations_result, _funs_rust_names, aux_defs) =
         run_translate(&rust_path, &lean_path, &functions_path, translation_json)?;
 
     // --- Merge atom maps ---
@@ -475,7 +586,7 @@ pub fn run_extract(
         &rust_path,
         &lean_path,
         &translations_result,
-        &funs_rust_names,
+        cfg_config,
         &aux_defs,
         output_path,
         &config,
@@ -653,7 +764,7 @@ fn run_extract_with_translations(
     rust_path: &Path,
     lean_path: &Path,
     translations: &MappingMaps,
-    funs_rust_names: &HashSet<String>,
+    cfg_config: Option<&crate::cfg_eval::CfgConfig>,
     aux_defs: &HashSet<String>,
     output_path: Option<&Path>,
     config: &AeneasConfig,
@@ -692,7 +803,7 @@ fn run_extract_with_translations(
     }
 
     // Phase 2: Enrich (Aeneas-specific)
-    enrich_with_aeneas_metadata(&mut merged, &translations.0, funs_rust_names);
+    enrich_with_aeneas_metadata(&mut merged, &translations.0, cfg_config);
     enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config, aux_defs);
 
     // Phase 2.5: Enrich verification status (transitive propagation, P23)
@@ -750,20 +861,30 @@ fn resolve_verification_status(
     }
 }
 
-/// Add Aeneas-specific metadata to merged atoms.
+/// Add Aeneas-specific metadata to merged atoms, and set `is-disabled` per the
+/// two-state scope model (KB P24/P25).
 ///
 /// Two enrichment passes:
 /// 1. For each Rust atom with a Lean translation, set `translation-name`,
 ///    `translation-path`, `translation-text`, and `verification-status`
-///    (spec-based) from the Lean atom and its primary spec.
-/// 2. For every Rust atom, set `is-disabled` to `false` when its
-///    `rust-qualified-name` appears in `functions.json` **or** it already
-///    has a `translation-name` from pass 1 (defensive: a translation found
-///    by any strategy means Aeneas processed the function).
+///    (spec-based) from the Lean atom and its primary spec — **unless** the
+///    translation carries `@[out_of_scope]`, in which case no status is set
+///    (an out-of-scope atom carries no `verification-status`).
+/// 2. For every Rust atom, default `is-disabled` to `false` (tracked backlog),
+///    and set it to `true` only when the atom has **no** `verification-status`
+///    **and** it is genuinely out of scope: its `#[cfg]` predicate is inactive
+///    in the Aeneas build (`cfg_config`), or its translation is `@[out_of_scope]`.
+///    A status-bearing atom is never disabled (P24). Membership in
+///    `functions.json` no longer affects scope — a compiled function Aeneas has
+///    not translated is unverified backlog, not out of scope.
+///
+/// `cfg_config` is `None` when the active feature set could not be resolved; cfg
+/// scope classification is then skipped entirely (conservative — never disables
+/// a backlog atom on a guess).
 fn enrich_with_aeneas_metadata(
     merged: &mut std::collections::BTreeMap<String, Atom>,
     from_to: &HashMap<String, Vec<String>>,
-    funs_rust_names: &HashSet<String>,
+    cfg_config: Option<&crate::cfg_eval::CfgConfig>,
 ) {
     let enrichments: Vec<_> = from_to
         .iter()
@@ -777,13 +898,20 @@ fn enrich_with_aeneas_metadata(
                         lean_atom.code_text.lines_start,
                         lean_atom.code_text.lines_end,
                         resolve_verification_status(lean_name, lean_atom, merged),
+                        enrich::is_out_of_scope(&enrich::atom_attrs(lean_atom)),
                     )
                 })
             })
         })
         .collect();
 
-    for (rust_name, lean_name, path, start, end, vs) in enrichments {
+    // Rust atom keys whose Lean translation is annotated `@[out_of_scope]`.
+    let mut out_of_scope_rust: HashSet<String> = HashSet::new();
+
+    for (rust_name, lean_name, path, start, end, vs, out_of_scope) in enrichments {
+        if out_of_scope {
+            out_of_scope_rust.insert(rust_name.clone());
+        }
         if let Some(atom) = merged.get_mut(&rust_name) {
             atom.extensions
                 .insert("translation-name".to_string(), serde_json::json!(lean_name));
@@ -798,32 +926,41 @@ fn enrich_with_aeneas_metadata(
                     }),
                 );
             }
-            atom.extensions
-                .insert("verification-status".to_string(), vs);
+            // An out-of-scope translation carries no verification-status
+            // (P24: has-status ⟹ ¬is-disabled).
+            if !out_of_scope {
+                atom.extensions
+                    .insert("verification-status".to_string(), vs);
+            }
         }
     }
 
-    for atom in merged.values_mut() {
-        if atom.language == "rust" {
-            let in_functions = atom
-                .extensions
-                .get("rust-qualified-name")
+    for (key, atom) in merged.iter_mut() {
+        if atom.language != "rust" {
+            continue;
+        }
+        let has_status = atom.extensions.contains_key("verification-status");
+        let cfg_inactive = cfg_config.is_some_and(|cfg| {
+            atom.extensions
+                .get("cfg")
                 .and_then(|v| v.as_str())
-                .is_some_and(|rqn| funs_rust_names.contains(&normalize_rust_name(rqn)));
-            let has_translation = atom.extensions.contains_key("translation-name");
-            let aeneas_processed = in_functions || has_translation;
-            atom.extensions.insert(
-                "is-disabled".to_string(),
-                serde_json::json!(!aeneas_processed),
-            );
-            atom.extensions.insert(
-                "is-relevant".to_string(),
-                serde_json::json!(aeneas_processed),
-            );
-            if !atom.extensions.contains_key("is-public") {
-                atom.extensions
-                    .insert("is-public".to_string(), serde_json::json!(false));
-            }
+                .is_some_and(|pred| cfg.is_inactive(pred))
+        });
+        let out_of_scope = out_of_scope_rust.contains(key);
+        // Tracked backlog by default; disabled only when out of scope and not
+        // status-bearing (P24/P25).
+        let is_disabled = !has_status && (cfg_inactive || out_of_scope);
+        atom.extensions
+            .insert("is-disabled".to_string(), serde_json::json!(is_disabled));
+        // Relevance is crate membership, independent of scope: external stubs
+        // (empty code-path) reference other crates and are not relevant.
+        atom.extensions.insert(
+            "is-relevant".to_string(),
+            serde_json::json!(!atom.code_path.is_empty()),
+        );
+        if !atom.extensions.contains_key("is-public") {
+            atom.extensions
+                .insert("is-public".to_string(), serde_json::json!(false));
         }
     }
 }
@@ -1018,6 +1155,29 @@ pub fn run_translate_only(
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn parse_explicit_features_forms() {
+        let f = |args: &[&str]| {
+            let mut v =
+                parse_explicit_features(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+            v.sort();
+            v
+        };
+        // Separate-value long and short forms.
+        assert_eq!(f(&["--features", "alloc,serde"]), vec!["alloc", "serde"]);
+        assert_eq!(f(&["-F", "alloc"]), vec!["alloc"]);
+        // Attached `=` forms.
+        assert_eq!(f(&["--features=alloc"]), vec!["alloc"]);
+        assert_eq!(f(&["-F=alloc,serde"]), vec!["alloc", "serde"]);
+        // Attached short form `-Ffoo`.
+        assert_eq!(f(&["-Falloc"]), vec!["alloc"]);
+        assert_eq!(f(&["-Falloc,serde"]), vec!["alloc", "serde"]);
+        // Space-separated within one value.
+        assert_eq!(f(&["--features", "alloc serde"]), vec!["alloc", "serde"]);
+        // Unrelated args ignored; bare `-F` with no value is a no-op.
+        assert_eq!(f(&["-p", "curve25519-dalek", "-F"]), Vec::<String>::new());
+    }
 
     fn create_aeneas_project(dir: &Path, crate_dir: &str, crate_name: Option<&str>, dest: &str) {
         fs::create_dir_all(dir).unwrap();
@@ -1549,9 +1709,8 @@ charon:
         merged.insert("probe:crate/1.0/foo()".to_string(), make_rust_atom("foo"));
 
         let from_to = HashMap::new();
-        let funs_rust_names = &HashSet::new();
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, funs_rust_names);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:crate/1.0/foo()").unwrap();
         assert_eq!(
@@ -1570,9 +1729,8 @@ charon:
         merged.insert("probe:crate/1.0/bar()".to_string(), atom);
 
         let from_to = HashMap::new();
-        let funs_rust_names = &HashSet::new();
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, funs_rust_names);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:crate/1.0/bar()").unwrap();
         assert_eq!(
@@ -1591,9 +1749,8 @@ charon:
         );
 
         let from_to = HashMap::new();
-        let funs_rust_names = &HashSet::new();
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, funs_rust_names);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:module.lean_fn").unwrap();
         assert!(
@@ -1603,7 +1760,7 @@ charon:
     }
 
     #[test]
-    fn enrich_translation_overrides_is_disabled() {
+    fn enrich_translated_atom_is_tracked() {
         let mut merged = std::collections::BTreeMap::new();
 
         let mut rust_atom = make_rust_atom("step_2");
@@ -1625,10 +1782,8 @@ charon:
             .entry("probe:my-crate/1.0/ristretto/decompress/step_2()".to_string())
             .or_default()
             .push("probe:my_crate.ristretto.decompress.step_2".to_string());
-        // The rust-qualified-name does NOT appear in funs_rust_names (name mismatch).
-        let funs_rust_names = HashSet::new();
 
-        enrich_with_aeneas_metadata(&mut merged, &from_to, &funs_rust_names);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged
             .get("probe:my-crate/1.0/ristretto/decompress/step_2()")
@@ -1636,7 +1791,7 @@ charon:
         assert_eq!(
             atom.extensions.get("is-disabled"),
             Some(&serde_json::json!(false)),
-            "atom with translation should not be disabled even if RQN not in functions.json"
+            "a translated (status-bearing) atom is tracked, never disabled"
         );
         assert_eq!(
             atom.extensions.get("is-relevant"),
@@ -1654,6 +1809,113 @@ charon:
             atom.extensions.get("verification-status"),
             Some(&serde_json::json!("unverified")),
             "translated atom without spec should get unverified status"
+        );
+    }
+
+    #[test]
+    fn enrich_untranslated_compiled_atom_is_backlog() {
+        // A compiled Rust function Aeneas did not translate (no from_to entry,
+        // no cfg gate) is unverified backlog: is-disabled false, no status.
+        let mut merged = std::collections::BTreeMap::new();
+        merged.insert("probe:crate/1.0/foo()".to_string(), make_rust_atom("foo"));
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+
+        let atom = merged.get("probe:crate/1.0/foo()").unwrap();
+        assert_eq!(
+            atom.extensions.get("is-disabled"),
+            Some(&serde_json::json!(false)),
+            "untranslated compiled function is tracked backlog, not disabled"
+        );
+        assert!(
+            !atom.extensions.contains_key("verification-status"),
+            "backlog atom carries no verification-status"
+        );
+    }
+
+    #[test]
+    fn enrich_cfg_inactive_atom_is_disabled() {
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("serde_only");
+        atom.extensions
+            .insert("cfg".to_string(), serde_json::json!(r#"feature = "serde""#));
+        merged.insert("probe:crate/1.0/serde_only()".to_string(), atom);
+
+        // Active features do not include `serde` → predicate inactive.
+        let cfg = crate::cfg_eval::CfgConfig {
+            features: ["alloc"].iter().map(|s| s.to_string()).collect(),
+        };
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg));
+
+        let atom = merged.get("probe:crate/1.0/serde_only()").unwrap();
+        assert_eq!(
+            atom.extensions.get("is-disabled"),
+            Some(&serde_json::json!(true)),
+            "a cfg-inactive function is out of scope"
+        );
+        assert!(!atom.extensions.contains_key("verification-status"));
+    }
+
+    #[test]
+    fn enrich_active_cfg_atom_stays_backlog() {
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("alloc_gated");
+        atom.extensions
+            .insert("cfg".to_string(), serde_json::json!(r#"feature = "alloc""#));
+        merged.insert("probe:crate/1.0/alloc_gated()".to_string(), atom);
+
+        let cfg = crate::cfg_eval::CfgConfig {
+            features: ["alloc"].iter().map(|s| s.to_string()).collect(),
+        };
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg));
+
+        let atom = merged.get("probe:crate/1.0/alloc_gated()").unwrap();
+        assert_eq!(
+            atom.extensions.get("is-disabled"),
+            Some(&serde_json::json!(false)),
+            "an active-feature-gated function stays tracked backlog"
+        );
+    }
+
+    #[test]
+    fn enrich_out_of_scope_translation_is_disabled() {
+        let mut merged = std::collections::BTreeMap::new();
+
+        let rust_atom = make_rust_atom("opt_out");
+        merged.insert("probe:my-crate/1.0/opt_out()".to_string(), rust_atom);
+
+        let mut lean_atom = make_lean_atom("opt_out");
+        lean_atom.extensions.insert(
+            "attributes".to_string(),
+            serde_json::json!(["out_of_scope"]),
+        );
+        merged.insert("probe:my_crate.opt_out".to_string(), lean_atom);
+
+        let mut from_to: HashMap<String, Vec<String>> = HashMap::new();
+        from_to
+            .entry("probe:my-crate/1.0/opt_out()".to_string())
+            .or_default()
+            .push("probe:my_crate.opt_out".to_string());
+
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
+
+        let atom = merged.get("probe:my-crate/1.0/opt_out()").unwrap();
+        assert_eq!(
+            atom.extensions.get("is-disabled"),
+            Some(&serde_json::json!(true)),
+            "@[out_of_scope] translation marks the Rust function out of scope"
+        );
+        assert!(
+            !atom.extensions.contains_key("verification-status"),
+            "out-of-scope atom carries no verification-status (P24)"
+        );
+        // Translation metadata is still recorded.
+        assert_eq!(
+            atom.extensions.get("translation-name"),
+            Some(&serde_json::json!("probe:my_crate.opt_out"))
         );
     }
 
@@ -1751,7 +2013,7 @@ charon:
     fn vs_verified_def_with_verified_spec() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("verified"), Some("verified"));
-        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -1765,7 +2027,7 @@ charon:
     fn vs_verified_def_without_spec() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("verified"), None);
-        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -1779,7 +2041,7 @@ charon:
     fn vs_trusted_def_preserved() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("trusted"), Some("verified"));
-        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -1793,7 +2055,7 @@ charon:
     fn vs_failed_def_preserved() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("failed"), Some("verified"));
-        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -1807,7 +2069,7 @@ charon:
     fn vs_verified_def_with_failed_spec() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, Some("verified"), Some("failed"));
-        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
@@ -1821,7 +2083,7 @@ charon:
     fn vs_no_lean_status_no_spec() {
         let mut merged = std::collections::BTreeMap::new();
         let from_to = setup_translation(&mut merged, None, None);
-        enrich_with_aeneas_metadata(&mut merged, &from_to, &HashSet::new());
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
         assert_eq!(
