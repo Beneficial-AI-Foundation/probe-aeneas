@@ -574,9 +574,13 @@ pub fn run_extract(
 
     // Preserve the `functions.json` artifact when probe-aeneas produced the
     // records itself. `Override` already has a file on disk (the user's), and
-    // `Lake` wrote `<lean_project>/functions.json`; only the in-memory sources
-    // need serializing. (No `lean_project` implies an override was given.)
-    if resolved.source == RecordSource::LegacyScrape {
+    // `Lake` wrote `<lean_project>/functions.json`; the in-memory sources
+    // (`Manifest`, `LegacyScrape`) need serializing. (No `lean_project` implies
+    // an override was given.)
+    if matches!(
+        resolved.source,
+        RecordSource::Manifest | RecordSource::LegacyScrape
+    ) {
         if let Some(lean_proj) = lean_project {
             write_functions_json(&resolved.records, &lean_proj.join("functions.json"))
                 .map_err(anyhow::Error::new)

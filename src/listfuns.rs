@@ -98,6 +98,24 @@ pub fn run_listfuns(lean_project: &Path, output: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Generate a basic (non-enriched) `functions.json` via the single record
+/// source dispatch: built from `translation.json` when present, else the legacy
+/// docstring scrape. Replaces the direct `gen_functions::generate_functions_json`
+/// call so this path also benefits from the manifest.
+pub fn run_basic_listfuns(lean_project: &Path, output: &Path) -> Result<()> {
+    let translation_path = crate::translation_manifest::resolve_path(lean_project);
+    let resolved = crate::function_source::resolve(
+        Some(lean_project),
+        None,
+        translation_path.as_deref(),
+        false,
+    )
+    .context("resolve function records")?;
+    crate::gen_functions::write_functions_json(&resolved.records, output)
+        .map_err(anyhow::Error::new)?;
+    Ok(())
+}
+
 /// Generate an enriched functions.json: parse Aeneas files, run probe-lean
 /// extract internally, and enrich with verification data.
 ///
