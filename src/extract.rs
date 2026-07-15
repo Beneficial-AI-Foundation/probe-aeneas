@@ -24,13 +24,12 @@ use serde::Deserialize;
 use crate::aeneas_config::AeneasConfig;
 use crate::enrich;
 use crate::extract_runner::{self, ExtractRunnerError};
-use crate::gen_functions::generate_functions_json;
-use crate::listfuns::{run_listfuns, ListfunsError};
-use crate::translate::{
-    build_functions_rust_names, build_translations_json, generate_translations, load_atoms,
-    load_functions,
-};
+use crate::function_source::{self, RecordSource};
+use crate::gen_functions::write_functions_json;
+use crate::listfuns::ListfunsError;
+use crate::translate::{build_translations_json, generate_translations, load_atoms};
 use crate::translation_manifest;
+use crate::types::FunctionRecord;
 
 type MappingMaps = (HashMap<String, Vec<String>>, HashMap<String, Vec<String>>);
 
@@ -569,17 +568,28 @@ pub fn run_extract(
         with_public_api,
     )?;
 
-    // --- Resolve functions.json ---
-    let functions_path = resolve_functions(functions_json, lean_project, use_lake)?;
+    // --- Resolve function records (single source dispatch) ---
+    let resolved =
+        function_source::resolve(lean_project, functions_json, translation_json, use_lake)?;
+
+    // Preserve the `functions.json` artifact when probe-aeneas produced the
+    // records itself. `Override` already has a file on disk (the user's), and
+    // `Lake` wrote `<lean_project>/functions.json`; only the in-memory sources
+    // need serializing. (No `lean_project` implies an override was given.)
+    if resolved.source == RecordSource::LegacyScrape {
+        if let Some(lean_proj) = lean_project {
+            write_functions_json(&resolved.records, &lean_proj.join("functions.json"))
+                .map_err(anyhow::Error::new)
+                .context("write functions.json")?;
+        }
+    }
 
     // --- Load Aeneas config (optional) ---
     let config = AeneasConfig::load(aeneas_config, lean_project).context("load aeneas config")?;
 
     // --- Generate translations ---
-    // `funs_rust_names` (functions.json membership) no longer gates scope; the
-    // translation matcher inside `run_translate` still uses functions.json.
-    let (translations_result, _funs_rust_names, aux_defs) =
-        run_translate(&rust_path, &lean_path, &functions_path, translation_json)?;
+    let translations_result = run_translate(&rust_path, &lean_path, &resolved.records)?;
+    let aux_defs = resolved.aux_defs;
 
     // --- Merge atom maps ---
     run_extract_with_translations(
@@ -671,41 +681,15 @@ fn resolve_inputs(
     }
 }
 
-/// Resolve functions.json: use provided path, generate from Lean source, or
-/// fall back to `lake exe listfuns`.
-fn resolve_functions(
-    functions_json: Option<&Path>,
-    lean_project: Option<&Path>,
-    use_lake: bool,
-) -> Result<PathBuf> {
-    if let Some(path) = functions_json {
-        return Ok(path.to_path_buf());
-    }
-
-    let lean_proj =
-        lean_project.context("Cannot auto-generate functions.json without --lean-project")?;
-    let functions_path = lean_proj.join("functions.json");
-
-    if use_lake {
-        // ListfunsError -> ExtractError::Listfuns via #[from].
-        run_listfuns(lean_proj, &functions_path)?;
-    } else {
-        generate_functions_json(lean_proj, &functions_path)
-            .map_err(anyhow::Error::new)
-            .context("generate functions.json")?;
-    }
-    Ok(functions_path)
-}
-
-/// Run the translate step, returning bidirectional maps, the set of normalized
-/// Rust names found in `functions.json`, and the auxiliary-def Lean names from
-/// Aeneas's `translation.json` (empty when the manifest is absent).
+/// Run the translate step, returning bidirectional cross-language maps.
+///
+/// `functions` are the resolved records (source-blind: manifest-built or
+/// legacy-scraped, already carrying any `translation.json` overlay).
 fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
-    functions_path: &Path,
-    translation_json: Option<&Path>,
-) -> Result<(MappingMaps, HashSet<String>, HashSet<String>)> {
+    functions: &[FunctionRecord],
+) -> Result<MappingMaps> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
         .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
@@ -716,16 +700,8 @@ fn run_translate(
         .with_context(|| format!("load Lean atoms from {}", lean_path.display()))?;
     println!("  {} atoms", lean_data.len());
 
-    println!("Loading functions from {}...", functions_path.display());
-    let mut functions = load_functions(functions_path)?;
-    println!("  {} entries", functions.len());
-
-    let aux_defs = translation_manifest::apply(&mut functions, translation_json);
-
-    let funs_rust_names = build_functions_rust_names(&functions);
-
     println!("\nGenerating translations...");
-    let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
+    let (mappings, stats) = generate_translations(&rust_data, &lean_data, functions);
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {
@@ -745,7 +721,7 @@ fn run_translate(
             .push(m.from.clone());
     }
 
-    Ok(((from_to, to_from), funs_rust_names, aux_defs))
+    Ok((from_to, to_from))
 }
 
 /// Merge atoms with pre-computed translations and produce the final output.
@@ -1146,16 +1122,14 @@ pub fn run_translate_only(
         .with_context(|| format!("load Lean atoms from {}", lean_path.display()))?;
     println!("  {} atoms", lean_data.len());
 
-    println!("Loading functions from {}...", functions_path.display());
-    let mut functions = load_functions(functions_path)?;
-    println!("  {} entries", functions.len());
-
-    // `translate` emits only mappings, not the merged/enriched atom map, so the
-    // auxiliary-def set is intentionally discarded here.
-    let _ = translation_manifest::apply(&mut functions, translation_json);
+    // Resolve records through the single source dispatch (override arm: the
+    // `translate` subcommand always supplies a `functions.json`). `translate`
+    // emits only mappings, so the auxiliary-def set is intentionally unused.
+    let resolved = function_source::resolve(None, Some(functions_path), translation_json, false)?;
+    println!("  {} entries", resolved.records.len());
 
     println!("\nGenerating translations...");
-    let (mappings, stats) = generate_translations(&rust_data, &lean_data, &functions);
+    let (mappings, stats) = generate_translations(&rust_data, &lean_data, &resolved.records);
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {

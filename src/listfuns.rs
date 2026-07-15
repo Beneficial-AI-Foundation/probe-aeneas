@@ -24,7 +24,6 @@ use probe::types::Atom;
 use crate::aeneas_config::AeneasConfig;
 use crate::enrich::{self, EnrichedFunctionsFile};
 use crate::extract_runner::{self, ExtractRunnerError};
-use crate::gen_functions;
 
 // ---------------------------------------------------------------------------
 // Typed error
@@ -111,18 +110,23 @@ pub fn run_enriched_listfuns(
     module_prefix: Option<&str>,
     aeneas_config_path: Option<&Path>,
 ) -> Result<()> {
-    let mut records =
-        gen_functions::parse_aeneas_project(lean_project).context("parse Aeneas project")?;
+    // Resolve records through the single source dispatch. `resolve_path` honors
+    // `aeneas_args.dest`, matching the `extract` flow; the manifest overlay (or
+    // legacy scrape when absent) happens inside `function_source::resolve`.
+    let translation_path = crate::translation_manifest::resolve_path(lean_project);
+    let resolved = crate::function_source::resolve(
+        Some(lean_project),
+        None,
+        translation_path.as_deref(),
+        false,
+    )
+    .context("resolve function records")?;
+    let records = resolved.records;
+    let aux_defs = resolved.aux_defs;
     println!(
         "Parsed {} function entries from Aeneas files",
         records.len()
     );
-
-    // Overlay Aeneas's translation.json (authoritative loop/primary
-    // classification) when present. Optional: heuristic fallback otherwise.
-    // `resolve_path` honors `aeneas_args.dest`, matching the `extract` flow.
-    let translation_path = crate::translation_manifest::resolve_path(lean_project);
-    let aux_defs = crate::translation_manifest::apply(&mut records, translation_path.as_deref());
 
     let atoms = load_atoms(lean_project, atoms_path, module_prefix)?;
     println!("Loaded {} atoms from probe-lean", atoms.len());

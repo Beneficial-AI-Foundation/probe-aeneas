@@ -76,8 +76,17 @@ pub fn generate_functions_json(lean_project: &Path, output: &Path) -> Result<()>
 
     println!("  Parsed {} function entries", all_records.len());
 
+    write_functions_json(&all_records, output)
+}
+
+/// Serialize function records to a `functions.json` file (the basic,
+/// non-enriched schema: `lean_name`/`rust_name`/`source`/`lines` plus the
+/// name-heuristic `is_hidden`/`is_extraction_artifact` flags). The in-memory
+/// overlay fields on [`FunctionRecord`] are `#[serde(skip)]`, so they never
+/// appear in the output regardless of whether the manifest overlay ran.
+pub fn write_functions_json(records: &[FunctionRecord], output: &Path) -> Result<()> {
     let output_json = FunctionsFileOutput {
-        functions: all_records.iter().map(|r| r.into()).collect(),
+        functions: records.iter().map(|r| r.into()).collect(),
     };
 
     let json = serde_json::to_string_pretty(&output_json).context("serialize functions.json")?;
