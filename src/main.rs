@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use probe_aeneas::{extract, extract_runner, listfuns, setup};
+use probe_aeneas::{extract, extract_runner, listfuns, setup, translation_manifest};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -210,9 +210,14 @@ fn resolve_and_extract(
             )
         };
 
-    // Pre-flight: generate charon LLBC with aeneas-config.yml args
+    // Pre-flight: generate charon LLBC with aeneas-config.yml args. Pass the
+    // manifest's charon version so a stale cached LLBC (different charon run) is
+    // regenerated rather than silently feeding the charon-def-id join.
     if let (Some(ref rp), Some(ref cc)) = (&rust_project, &charon_config) {
-        extract_runner::ensure_charon_llbc(rp, cc)?;
+        let expected = translation
+            .as_deref()
+            .and_then(translation_manifest::read_charon_version);
+        extract_runner::ensure_charon_llbc(rp, cc, expected.as_deref())?;
     }
 
     // Resolve the Aeneas build's active cargo feature set so cfg predicates on
