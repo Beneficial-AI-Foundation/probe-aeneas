@@ -101,7 +101,14 @@ pub fn resolve(
             }
             Err(e) => {
                 eprintln!("  Warning: could not read {}: {e:#}", tj.display());
-                eprintln!("  Falling back to legacy docstring scraping.");
+                eprintln!(
+                    "  Falling back to {}.",
+                    if use_lake {
+                        "lake exe listfuns"
+                    } else {
+                        "legacy docstring scraping"
+                    }
+                );
             }
         }
     }

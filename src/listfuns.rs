@@ -141,10 +141,7 @@ pub fn run_enriched_listfuns(
     .context("resolve function records")?;
     let records = resolved.records;
     let aux_defs = resolved.aux_defs;
-    println!(
-        "Parsed {} function entries from Aeneas files",
-        records.len()
-    );
+    println!("Resolved {} function records", records.len());
 
     let atoms = load_atoms(lean_project, atoms_path, module_prefix)?;
     println!("Loaded {} atoms from probe-lean", atoms.len());

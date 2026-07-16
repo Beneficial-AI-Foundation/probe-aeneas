@@ -575,8 +575,9 @@ pub fn run_extract(
     // Preserve the `functions.json` artifact when probe-aeneas produced the
     // records itself. `Override` already has a file on disk (the user's), and
     // `Lake` wrote `<lean_project>/functions.json`; the in-memory sources
-    // (`Manifest`, `LegacyScrape`) need serializing. (No `lean_project` implies
-    // an override was given.)
+    // (`Manifest`, `LegacyScrape`) need serializing — but only when we have a
+    // destination. The `Manifest` arm can resolve from `translation.json` with
+    // no `lean_project`, in which case there's nowhere to write and we skip.
     if matches!(
         resolved.source,
         RecordSource::Manifest | RecordSource::LegacyScrape
