@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-07-16
+
 ### Added
 - **`charon-def-id` translation strategy (Strategy 0)**: a precise Rust-to-Lean
   join on the charon `FunDeclId` integer. When a Rust atom carries a `charon-def-id`
