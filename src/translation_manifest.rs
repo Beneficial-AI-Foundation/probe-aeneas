@@ -45,7 +45,8 @@ pub struct TranslationManifest {
     /// charon version that produced this manifest (top-level `charon_version`).
     /// Used to provenance-gate the `def_id` join: probe-rust's `charon-def-id`s
     /// are only comparable to these `def_id`s when they come from the same
-    /// charon run (see docs/charon-def-id-matching-plan.md).
+    /// charon *version* (best-effort provenance, not proof of an identical run;
+    /// see docs/charon-def-id-matching-plan.md).
     #[serde(default)]
     pub charon_version: Option<String>,
     #[serde(default)]
@@ -265,24 +266,6 @@ pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> ManifestO
     }
 }
 
-/// Read only the `charon_version` from a `translation.json`, ignoring the rest.
-///
-/// Used by the charon LLBC pre-flight ([`crate::extract_runner::ensure_charon_llbc`])
-/// to check provenance without loading the full manifest into the record model.
-/// Returns `None` on any IO/parse error or when the field is absent (the
-/// pre-flight then leaves the cache decision unchanged).
-pub fn read_charon_version(path: &Path) -> Option<String> {
-    #[derive(Deserialize)]
-    struct VersionOnly {
-        #[serde(default)]
-        charon_version: Option<String>,
-    }
-    let content = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str::<VersionOnly>(&content)
-        .ok()?
-        .charon_version
-}
-
 /// Load and parse `translation.json` from disk.
 pub fn load(path: &Path) -> anyhow::Result<TranslationManifest> {
     let content =
@@ -469,23 +452,6 @@ mod tests {
         // Absent field deserializes to None (legacy manifests, provenance gate off).
         let bare: TranslationManifest = serde_json::from_str(r#"{"functions": []}"#).unwrap();
         assert_eq!(bare.charon_version, None);
-    }
-
-    #[test]
-    fn read_charon_version_reads_field_only() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("translation.json");
-        std::fs::write(&path, SAMPLE).unwrap();
-        assert_eq!(read_charon_version(&path).as_deref(), Some("y"));
-
-        // Absent field / missing file -> None (pre-flight leaves cache untouched).
-        let bare = tmp.path().join("bare.json");
-        std::fs::write(&bare, r#"{"functions": []}"#).unwrap();
-        assert_eq!(read_charon_version(&bare), None);
-        assert_eq!(
-            read_charon_version(tmp.path().join("nope.json").as_path()),
-            None
-        );
     }
 
     #[test]

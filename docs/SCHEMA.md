@@ -11,7 +11,7 @@ the `data` field and the output of non-enveloped commands.
 
 ---
 
-## Common: Schema 2.0 Envelope
+## Common: Envelope (Schema 2.x)
 
 Both `extract` and `translate` commands wrap their output in a standardized
 metadata envelope. The envelope fields vary slightly between commands (see
@@ -20,7 +20,7 @@ sections below), but share this structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema` | string | Data type identifier (e.g. `"probe-aeneas/extract"`) |
-| `schema-version` | string | Interchange spec version (`"2.0"`) |
+| `schema-version` | string | Interchange spec version (`"2.1"` for `extract`, `"2.0"` for `translate`) |
 | `tool.name` | string | Always `"probe-aeneas"` |
 | `tool.version` | string | Semver version of the probe-aeneas binary |
 | `tool.command` | string | Subcommand that produced the file |
@@ -38,7 +38,7 @@ sections below), but share this structure:
 ```json
 {
   "schema": "probe-aeneas/extract",
-  "schema-version": "2.0",
+  "schema-version": "2.1",
   "tool": {
     "name": "probe-aeneas",
     "version": "0.9.0",
@@ -618,7 +618,14 @@ When changing required fields or their semantics, increment the major version
 (`2.0` -> `3.0`).
 
 Consumers should check `schema-version` and reject files with an unsupported
-major version.
+major version. A minor bump is backward-compatible: a `2.0` consumer can read a
+`2.1` file (the new fields are optional).
+
+The `probe-aeneas/extract` envelope is at `2.1`: it carries the optional
+`charon-def-id`/`charon-version` atom fields (passed through from probe-rust).
+The `probe/mappings` (`translate`) envelope remains `2.0` — it gained no new
+fields (the `charon-def-id` `method` value is a backward-compatible addition to
+an existing field).
 
 ---
 
@@ -626,9 +633,11 @@ major version.
 
 ### With probe-rust
 
-probe-aeneas consumes `probe-rust/extract` (Schema 2.0) files as input.
-The `--with-charon` flag on `probe-rust extract` is recommended for best
-translation accuracy (enables strategy 1: `rust-qualified-name`).
+probe-aeneas consumes `probe-rust/extract` (Schema 2.x — probe-rust emits `2.1`)
+files as input. Charon enrichment on `probe-rust extract` is recommended for best
+translation accuracy: `--with-charon` (or `--translation <manifest>`, which reads
+charon `def_id`s from an Aeneas `translation.json`) enables the `charon-def-id`
+join (strategy 0) and `rust-qualified-name` (strategy 1).
 
 ### With probe-lean
 

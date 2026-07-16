@@ -48,7 +48,8 @@ priority order, produce `Mapping` entries:
    otherwise mismatched ids would point at different functions. Version equality
    is not proof of an identical run -- two runs of the same version with
    different cargo flags/sources can still diverge; a charon commit hash or LLBC
-   digest would be the durable fix. A no-op until probe-rust emits the field.
+   digest would be the durable fix. A no-op for atoms that do not carry a
+   `charon-def-id`, which then fall through to the name/location strategies.
 1. **`rust-qualified-name`** -- exact match via Charon-derived qualified
    names joined with `functions.json` `rust_name` entries. Confidence:
    `exact`.

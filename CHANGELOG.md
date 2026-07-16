@@ -8,24 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 - **`charon-def-id` translation strategy (Strategy 0)**: a precise Rust-to-Lean
-  join on the charon `FunDeclId` integer. When probe-rust emits a `charon-def-id`
-  atom field, it is matched against Aeneas's `translation.json` `def_id` (the same
+  join on the charon `FunDeclId` integer. When a Rust atom carries a `charon-def-id`
+  field, it is matched against Aeneas's `translation.json` `def_id` (the same
   `FunDeclId`), binding the Rust atom to its family's primary (non-loop) Lean def
   with no name normalization (`confidence: "exact"`, `method: "charon-def-id"`).
-  Runs before the name/location strategies. Forward-compatible no-op until
-  probe-rust emits the field. Documented in `docs/charon-def-id-matching-plan.md`.
+  Runs before the name/location strategies; atoms without the field fall through
+  to name matching unchanged. Documented in `docs/charon-def-id-matching-plan.md`.
 - **Provenance gate on the id-join**: the join fires only when the atom's
   `charon-version` equals the manifest's `charon_version` (best-effort provenance,
-  not proof of an identical run). Mismatched or missing versions fall back to name
-  matching instead of binding ids across charon versions. The join is restricted
-  to the manifest's `functions` array so `GlobalDeclId`/`TraitImplId`s from
-  `globals`/`trait_impls` cannot collide with a `FunDeclId`. Duplicate
+  not proof of an identical run). Mismatched, empty, or missing versions fall back
+  to name matching instead of binding ids across charon versions. The join is
+  restricted to the manifest's `functions` array so `GlobalDeclId`/`TraitImplId`s
+  from `globals`/`trait_impls` cannot collide with a `FunDeclId`. Duplicate
   `charon-def-id`s across two Rust atoms are logged and the second is deferred.
-- **`ensure_charon_llbc` provenance check**: a cached `data/charon.llbc` produced
-  by a different charon version than `translation.json` is discarded and
-  regenerated. Fails closed — an unreadable cached version with a known expected
-  version regenerates rather than trusting the stale cache. The version reader
-  tolerates whitespace-formatted LLBC and bounded prefix reads.
+
+### Changed
+- **`probe-aeneas/extract` envelope bumped to `schema-version: "2.1"`**: reflects
+  the new optional `charon-def-id`/`charon-version` atom fields (passed through
+  from probe-rust). Backward-compatible — the fields are optional, so `2.0`
+  consumers still read `2.1` files. The `probe/mappings` (`translate`) envelope
+  stays `2.0` (no new fields).
+- **Manifest projects skip the redundant charon run**: when a `translation.json`
+  is present, `probe-rust extract` is invoked with `--translation <path>` instead
+  of `--with-charon`, so charon is not re-run (it already ran once inside Aeneas)
+  and probe-rust sources charon `def_id`s from the manifest. The `data/charon.llbc`
+  pre-flight (`ensure_charon_llbc`) now runs only on the legacy (no-manifest) path.
 
 ## [0.15.0] - 2026-07-11
 

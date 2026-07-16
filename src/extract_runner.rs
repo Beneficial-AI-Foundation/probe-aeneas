@@ -526,66 +526,6 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<()> {
 // Charon LLBC pre-generation
 // ---------------------------------------------------------------------------
 
-/// Bytes of the LLBC prefix scanned for `charon_version`. Charon serializes the
-/// field near the front of the JSON, so a bounded read avoids parsing the
-/// multi-megabyte AST while tolerating some leading whitespace/formatting.
-const LLBC_PREFIX_SCAN_BYTES: u64 = 64 * 1024;
-
-/// Read the `charon_version` from a `.llbc` file cheaply.
-///
-/// Charon serializes `charon_version` near the front of the LLBC JSON, so a
-/// bounded prefix read avoids parsing the multi-megabyte AST. Uses `read_to_end`
-/// on a capped [`std::io::Take`] rather than a single `read` (which is allowed a
-/// short read even on a regular file, and could miss the field). Tolerates
-/// optional whitespace around the `:` so a pretty-printed LLBC still parses.
-/// Returns `None` when the field is not found in the prefix (unexpected format),
-/// on IO error, or when the value is empty (an empty version cannot gate).
-fn read_llbc_charon_version(path: &Path) -> Option<String> {
-    use std::io::Read as _;
-    let file = std::fs::File::open(path).ok()?;
-    let mut buf = Vec::new();
-    file.take(LLBC_PREFIX_SCAN_BYTES)
-        .read_to_end(&mut buf)
-        .ok()?;
-    let prefix = String::from_utf8_lossy(&buf);
-    parse_charon_version_prefix(&prefix)
-}
-
-/// Extract the `charon_version` value from a JSON prefix. Split out from IO so
-/// the whitespace/format tolerance is unit-testable. Returns `None` when the key
-/// is absent or its value is empty.
-fn parse_charon_version_prefix(prefix: &str) -> Option<String> {
-    let key = "\"charon_version\"";
-    let after_key = &prefix[prefix.find(key)? + key.len()..];
-    // Skip whitespace, then the `:`, then whitespace, then the opening quote.
-    let rest = after_key.trim_start();
-    let rest = rest.strip_prefix(':')?.trim_start();
-    let value = rest.strip_prefix('"')?;
-    let end = value.find('"')?;
-    let version = &value[..end];
-    (!version.is_empty()).then(|| version.to_string())
-}
-
-/// Decide whether a cached LLBC must be regenerated to keep the charon-def-id
-/// join sound. `cached` is the version parsed from the cache; `expected` is
-/// Aeneas's `translation.json` `charon_version`.
-///
-/// Fails **closed**: when an expected version is known but the cache's version
-/// is unreadable (`None`, e.g. a format change or truncated file), the cache is
-/// treated as stale and regenerated rather than silently trusted. Only when
-/// there is nothing to compare against (`expected` is `None`) or both agree is
-/// the cache kept.
-fn llbc_cache_is_stale(cached: Option<&str>, expected: Option<&str>) -> bool {
-    match (cached, expected) {
-        // Nothing to compare against: keep the cache (join stays name-based).
-        (_, None) => false,
-        // Known-good match: keep.
-        (Some(c), Some(e)) if c == e => false,
-        // Mismatch, or an expected version with an unreadable cache: regenerate.
-        (_, Some(_)) => true,
-    }
-}
-
 /// Pre-generate the Charon LLBC file using config from `aeneas-config.yml`.
 ///
 /// `probe-rust --with-charon` runs charon with only `--preset aeneas`, which
@@ -594,37 +534,17 @@ fn llbc_cache_is_stale(cached: Option<&str>, expected: Option<&str>) -> bool {
 /// directly with the full configuration so the LLBC is cached at
 /// `<rust_project>/data/charon.llbc` before `probe-rust` needs it.
 ///
-/// `expected_charon_version` is Aeneas's `translation.json` `charon_version`.
-/// A cached LLBC produced by a *different* charon run yields `charon-def-id`s
-/// that point at different functions than the manifest's `def_id`s, so it must
-/// not feed the id-join. On mismatch the stale cache is discarded and
-/// regenerated; if regeneration still cannot match (the installed charon
-/// differs from Aeneas's), a warning notes that the id-join will be disabled by
-/// its provenance gate and matching falls back to names.
-pub fn ensure_charon_llbc(
-    rust_project: &Path,
-    config: &CharonConfig,
-    expected_charon_version: Option<&str>,
-) -> Result<()> {
+/// Only used on the legacy (no-manifest) path. When a `translation.json` is
+/// present, probe-rust reads charon `def_id`s from the manifest instead of
+/// running charon, so this pre-flight is skipped entirely (see
+/// [`crate::main`]'s `resolve_and_extract`).
+pub fn ensure_charon_llbc(rust_project: &Path, config: &CharonConfig) -> Result<()> {
     let data_dir = rust_project.join("data");
     let llbc_path = data_dir.join("charon.llbc");
 
     if llbc_path.exists() {
-        let cached = read_llbc_charon_version(&llbc_path);
-        if llbc_cache_is_stale(cached.as_deref(), expected_charon_version) {
-            eprintln!(
-                "  ⚠ Cached Charon LLBC is charon {} but translation.json is charon {}; \
-                 regenerating to keep the charon-def-id join sound.",
-                cached.as_deref().unwrap_or("unreadable"),
-                expected_charon_version.unwrap_or("?"),
-            );
-            // Ignore removal errors: charon overwrites --dest-file below, so a
-            // failed unlink (e.g. ENOENT race) still yields a fresh LLBC.
-            let _ = std::fs::remove_file(&llbc_path);
-        } else {
-            println!("Using cached Charon LLBC at {}", llbc_path.display());
-            return Ok(());
-        }
+        println!("Using cached Charon LLBC at {}", llbc_path.display());
+        return Ok(());
     }
 
     let charon_bin = match setup::resolve_charon_or_err() {
@@ -727,21 +647,6 @@ pub fn ensure_charon_llbc(
     if !llbc_path.exists() {
         eprintln!("  ⚠ Charon ran successfully but LLBC file was not created");
         return Ok(());
-    }
-
-    // Post-generation provenance check: if the installed charon still cannot
-    // match the manifest, the id-join will be gated off downstream — say so.
-    if let (Some(expected), Some(actual)) = (
-        expected_charon_version,
-        read_llbc_charon_version(&llbc_path),
-    ) {
-        if actual != expected {
-            eprintln!(
-                "  ⚠ Regenerated Charon LLBC is charon {actual}, but translation.json is \
-                 charon {expected}. The charon-def-id join will be disabled (provenance gate); \
-                 matching falls back to names. Install charon {expected} to enable the join.",
-            );
-        }
     }
 
     println!("  ✓ Charon LLBC generated at {}\n", llbc_path.display());
@@ -869,98 +774,5 @@ impl From<ExtractRunnerError> for String {
             source = s.source();
         }
         msg
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn write_tmp(contents: &[u8]) -> (tempfile::TempDir, PathBuf) {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("charon.llbc");
-        std::fs::write(&path, contents).unwrap();
-        (dir, path)
-    }
-
-    #[test]
-    fn read_llbc_charon_version_extracts_first_field() {
-        // Realistic LLBC prefix: charon_version is the first key.
-        let (_d, path) =
-            write_tmp(br#"{"charon_version":"0.1.217","translated":{"crate_name":"spqr"}}"#);
-        assert_eq!(read_llbc_charon_version(&path).as_deref(), Some("0.1.217"));
-    }
-
-    #[test]
-    fn read_llbc_charon_version_handles_large_prefix() {
-        // Version present, followed by a body larger than the read buffer.
-        let mut bytes = br#"{"charon_version":"0.1.174","translated":"#.to_vec();
-        bytes.extend(std::iter::repeat_n(b'x', 8192));
-        let (_d, path) = write_tmp(&bytes);
-        assert_eq!(read_llbc_charon_version(&path).as_deref(), Some("0.1.174"));
-    }
-
-    #[test]
-    fn read_llbc_charon_version_none_when_absent() {
-        let (_d, path) = write_tmp(br#"{"translated":{"crate_name":"spqr"}}"#);
-        assert_eq!(read_llbc_charon_version(&path), None);
-    }
-
-    #[test]
-    fn read_llbc_charon_version_none_on_missing_file() {
-        assert_eq!(
-            read_llbc_charon_version(Path::new("/nonexistent/charon.llbc")),
-            None
-        );
-    }
-
-    #[test]
-    fn read_llbc_charon_version_tolerates_whitespace() {
-        // A pretty-printed LLBC inserts spaces/newlines around the `:`.
-        let (_d, path) =
-            write_tmp(b"{\n  \"charon_version\" : \"0.1.217\",\n  \"translated\": {}\n}");
-        assert_eq!(read_llbc_charon_version(&path).as_deref(), Some("0.1.217"));
-    }
-
-    #[test]
-    fn read_llbc_charon_version_none_on_empty_value() {
-        // An empty version cannot gate anything, so it reads as absent.
-        let (_d, path) = write_tmp(br#"{"charon_version":"","translated":{}}"#);
-        assert_eq!(read_llbc_charon_version(&path), None);
-    }
-
-    #[test]
-    fn parse_charon_version_prefix_handles_formats() {
-        assert_eq!(
-            parse_charon_version_prefix(r#"{"charon_version":"1.2.3"}"#).as_deref(),
-            Some("1.2.3")
-        );
-        assert_eq!(
-            parse_charon_version_prefix(r#"{ "charon_version" :  "1.2.3" }"#).as_deref(),
-            Some("1.2.3")
-        );
-        assert_eq!(parse_charon_version_prefix(r#"{"other":"x"}"#), None);
-        assert_eq!(
-            parse_charon_version_prefix(r#"{"charon_version":""}"#),
-            None
-        );
-        // Non-string value: no opening quote after the colon -> None.
-        assert_eq!(
-            parse_charon_version_prefix(r#"{"charon_version":123}"#),
-            None
-        );
-    }
-
-    #[test]
-    fn llbc_cache_is_stale_decision_matrix() {
-        // Nothing to compare against: keep the cache regardless of what it holds.
-        assert!(!llbc_cache_is_stale(None, None));
-        assert!(!llbc_cache_is_stale(Some("0.1.217"), None));
-        // Known-good match: keep.
-        assert!(!llbc_cache_is_stale(Some("0.1.217"), Some("0.1.217")));
-        // Version mismatch: regenerate.
-        assert!(llbc_cache_is_stale(Some("0.1.174"), Some("0.1.217")));
-        // Expected version known but cache unreadable: fail closed -> regenerate.
-        assert!(llbc_cache_is_stale(None, Some("0.1.217")));
     }
 }

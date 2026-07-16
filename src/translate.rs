@@ -157,7 +157,7 @@ pub fn generate_translations(
 
     // Strategy 0: charon-def-id integer join (runs first, provenance-gated).
     // Precise for free when probe-rust emits `charon-def-id` from the same
-    // charon run that produced the manifest; a no-op otherwise.
+    // charon version as the manifest; a no-op when no atom carries the field.
     strategy_charon_def_id(
         rust_data,
         lean_data,
@@ -314,10 +314,12 @@ fn build_def_id_to_primary_lean(functions: &[FunctionRecord]) -> HashMap<u64, St
 /// `charon-def-id` extension. Equal ids therefore denote the same function, so
 /// binding a Rust atom to `primary(def_id)` is exact.
 ///
-/// **Provenance gate**: ids from different charon runs point at different
-/// functions, silently corrupting the mapping. The join runs only when
+/// **Provenance gate**: ids from a different charon *version* can point at
+/// different functions, silently corrupting the mapping. The join runs only when
 /// `manifest_charon_version` is present and each atom's own `charon-version`
 /// matches it; otherwise the atom is skipped and the name strategies handle it.
+/// Version equality is best-effort provenance, not proof of an identical run
+/// (see [`generate_translations`] and docs/charon-def-id-matching-plan.md).
 ///
 /// Forward-compatible no-op until probe-rust emits `charon-def-id`: with no such
 /// atoms the loop binds nothing and output is unchanged. Respects
@@ -345,8 +347,11 @@ fn strategy_charon_def_id(
         return;
     }
 
-    // Tracks which `charon-def-id` each already-bound Rust atom carried, to
-    // detect the invariant violation of two atoms sharing one `FunDeclId`.
+    // Tracks the `charon-def-id` each atom this strategy has *already bound*
+    // carried, to detect the invariant violation of two atoms sharing one
+    // `FunDeclId`. Populated only after a successful bind (below), so it reflects
+    // actual mappings rather than mere claims; `matched_lean` independently
+    // prevents any double-binding, making this purely diagnostic.
     let mut def_id_owner: HashMap<u64, String> = HashMap::new();
 
     for (code_name, atom) in rust_data {
@@ -372,11 +377,11 @@ fn strategy_charon_def_id(
         else {
             continue;
         };
-        // A `FunDeclId` identifies exactly one Rust function, so two atoms
-        // claiming the same id means an upstream bug (span collision, macro
-        // expansion). First-iterated wins (deterministic: `rust_data` is a
-        // `BTreeMap`); warn so the anomaly is not silent, and let the loser fall
-        // through to the name strategies.
+        // A `FunDeclId` identifies exactly one Rust function, so a second atom
+        // sharing the id of one already bound here means an upstream bug (span
+        // collision, macro expansion). First-bound wins (deterministic:
+        // `rust_data` is a `BTreeMap`); warn so the anomaly is not silent, and
+        // let the loser fall through to the name strategies.
         if let Some(first) = def_id_owner.get(&def_id) {
             eprintln!(
                 "  ⚠ charon-def-id {def_id} claimed by two Rust atoms ({first} and \
@@ -384,7 +389,6 @@ fn strategy_charon_def_id(
             );
             continue;
         }
-        def_id_owner.insert(def_id, code_name.clone());
         let Some(lean_name) = def_id_to_lean.get(&def_id) else {
             continue;
         };
@@ -398,6 +402,7 @@ fn strategy_charon_def_id(
             });
             matched_rust.insert(code_name.clone());
             matched_lean.insert(lean_code_name);
+            def_id_owner.insert(def_id, code_name.clone());
         }
     }
 }
@@ -1581,6 +1586,19 @@ mod tests {
     }
 
     #[test]
+    fn build_def_id_map_skips_empty_lean_name() {
+        // A record with a def_id but an empty lean_name must not enter the map:
+        // it would otherwise manufacture a bogus `probe:` target from the join.
+        let mut empty = make_func_def_id("", 42, false);
+        empty.lean_name.clear();
+        let map = build_def_id_to_primary_lean(&[empty]);
+        assert!(
+            map.is_empty(),
+            "an empty lean_name must not produce a def_id target"
+        );
+    }
+
+    #[test]
     fn charon_def_id_join_binds_when_version_matches() {
         let mut rust_atoms = BTreeMap::new();
         rust_atoms.insert(
@@ -1823,6 +1841,39 @@ mod tests {
         assert!(
             mappings.is_empty(),
             "an id without a charon-version must not bind via the id-join"
+        );
+    }
+
+    /// An empty-string `charon-version` is treated as absent: it must not satisfy
+    /// the per-atom gate (even against an empty manifest version, which is itself
+    /// rejected upstream). The id-join must skip such an atom.
+    #[test]
+    fn charon_def_id_join_skipped_when_atom_version_empty() {
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom("div_impl", "src/encoding/gf.rs", 549, 559);
+        atom.extensions
+            .insert("charon-def-id".to_string(), serde_json::json!(439));
+        atom.extensions
+            .insert("charon-version".to_string(), serde_json::json!(""));
+        rust_atoms.insert("probe:spqr/1.5.0/div_impl()".to_string(), atom);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:spqr.encoding.gf.GF16.div_impl".to_string(),
+            make_lean_atom("div_impl", "Funs.lean"),
+        );
+
+        let funcs = vec![make_func_def_id(
+            "spqr.encoding.gf.GF16.div_impl",
+            439,
+            false,
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+
+        assert!(
+            mappings.is_empty(),
+            "an empty charon-version must not satisfy the provenance gate"
         );
     }
 

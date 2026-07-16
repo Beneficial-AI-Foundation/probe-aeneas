@@ -1,10 +1,15 @@
 # Phase 2 plan: charon-`def_id` integer join for Rust↔Lean matching
 
-Status: WS1 (join) and WS2 (provenance gate) implemented on branch
-`feat/precise-rqn-matching` (stacked on `main`, which has the merged
-`function_source` seam + manifest producer, PR #39). WS3 (probe-rust emitting
-`charon-def-id`) is the remaining cross-repo work; until it ships the join is a
-forward-compatible no-op.
+Status: WS1 (join) implemented on branch `feat/precise-rqn-matching` (stacked on
+`main`, which has the merged `function_source` seam + manifest producer, PR #39).
+On manifest projects the extractor now passes `--translation` to probe-rust
+(skipping charon entirely), so once probe-rust emits `charon-def-id` from that
+path the join activates automatically — it is a no-op only for atoms that do not
+carry the field. **WS2 (the `ensure_charon_llbc` LLBC-provenance gate) was
+dropped**: because the manifest path no longer runs charon, there is no cached
+LLBC to provenance-check against, so that machinery was never reachable and has
+been removed. Provenance now rests entirely on the per-atom/manifest
+`charon-version` gate in `strategy_charon_def_id`.
 
 ## Context / why
 
@@ -98,13 +103,17 @@ to name matching otherwise.
 - Docs (P12): add `charon-def-id` method to `../probe/kb/engineering/properties.md`
   P12, `docs/SCHEMA.md`, `docs/architecture.md`, `docs/USAGE.md`.
 
-### WS2 — probe-aeneas: `ensure_charon_llbc` provenance (safety gate)
-- Compare the `.llbc`'s `charon_version` to `translation.json.charon_version`.
-  On mismatch: regenerate, or (if impossible with the installed charon) disable
-  the id-join and log why. Never feed mismatched ids to the join.
-- Investigate where Aeneas persists *its* `.llbc` and whether probe-rust can
-  consume that exact file (one shared run — the durable fix). `ensure_charon_llbc`
-  is in `extract_runner.rs`.
+### WS2 — probe-aeneas: `ensure_charon_llbc` provenance (safety gate) — DROPPED
+Originally: compare the cached `.llbc`'s `charon_version` to
+`translation.json.charon_version` and regenerate on mismatch. **Superseded by the
+`--translation` extractor mode** (see WS3 / step 4): manifest projects no longer
+run charon at all, so there is no local LLBC to provenance-check. The
+`ensure_charon_llbc` LLBC-version comparison (and its `read_charon_version` /
+`read_llbc_charon_version` helpers) was removed rather than left as unreachable
+code. `ensure_charon_llbc` remains only as the legacy (no-manifest) charon
+pre-flight. Investigating whether Aeneas can persist *its* `.llbc` for probe-rust
+to consume directly (one shared run — the durable fix) is tracked in
+`docs/upstream-issues/aeneas-persist-consumed-llbc.md`.
 
 ### WS3 — probe-rust: emit `charon-def-id` (cross-repo)
 - File an issue: surface the resolved `FunDeclId` (from probe-rust's existing
@@ -115,14 +124,15 @@ to name matching otherwise.
 
 ## Sequencing (with a de-risking prototype before any cross-repo work)
 
-1. **WS1** (join, forward-compatible). A/B byte-identical. Commit.
+1. **WS1** (join, forward-compatible). No-op for atoms without the field. Commit.
 2. **Prototype-validate without probe-rust**: a script/test that assigns each
    spqr Rust atom its `def_id` by span-matching `translation.json`'s own spans,
    injects it into `rust_extract.json`, runs the new join. Acceptance: ≥236
    matches, the 3 gains, **0 regressions**, each gain manually confirmed. Proves
    the join + coverage before asking probe-rust for anything.
-3. **WS2** (provenance gate) — independently useful (stale cache is a latent bug).
-4. **WS3** (probe-rust emit) — file issue, implement, release.
+3. ~~**WS2** (LLBC provenance gate)~~ — dropped; superseded by `--translation`
+   (no local charon run to provenance-check). See the WS2 section above.
+4. **WS3** (probe-rust emit via `--translation`) — file issue, implement, release.
 5. **Activate + real A/B** on spqr; recheck coverage on a second manifest project.
 6. **Later** (with legacy removal, see memory `legacy-docstring-scraper-removal`):
    once id-join is proven across projects, the fuzzy matcher /
@@ -130,10 +140,13 @@ to name matching otherwise.
    deleted when those go.
 
 ## Verification
-- WS1: A/B spqr (manifest) + dalek (legacy) → byte-identical (no-op).
+- WS1 unit tests: id-join binds on version match, is gated off on mismatch /
+  missing / empty version, excludes non-`FunDecl` records, and skips atoms
+  missing either half of the `charon-def-id`/`charon-version` pair.
 - Prototype: ≥236/+3/0-regression + spot-check the 3 gains.
-- Post-WS3: full A/B; negative test — feed a mismatched `.llbc`, confirm the
-  provenance gate *disables* the join.
+- Once probe-rust emits the field: real A/B on spqr (manifest) + dalek (legacy);
+  negative test — feed an atom whose `charon-version` differs from the manifest's
+  and confirm the per-atom gate *disables* the id-join (falls back to names).
 - Throughout: `cargo fmt` / `clippy --all-targets -D warnings` / `test`.
 
 ## Explicitly NOT doing

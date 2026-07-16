@@ -113,7 +113,7 @@ flags below. These are mutually exclusive with the positional `PROJECT` argument
 | Flag | Description |
 |------|-------------|
 | `--rust <PATH>` | Path to pre-generated Rust atoms JSON (from `probe-rust extract`). |
-| `--rust-project <PATH>` | Path to a Rust project directory. Runs `probe-rust extract --with-charon --auto-install` automatically (adds `--with-public-api` when `--with-public-api` is given). |
+| `--rust-project <PATH>` | Path to a Rust project directory. Runs `probe-rust extract --auto-install` automatically, passing `--translation <path>` when a `translation.json` is available (so charon `def_id`s are read from the Aeneas manifest) or `--with-charon` otherwise (adds `--with-public-api` when `--with-public-api` is given). |
 
 Exactly one of `--rust` or `--rust-project` is required (when not using `PROJECT`).
 

@@ -217,7 +217,7 @@ fn resolve_and_extract(
     // path; the LLBC pre-flight remains for legacy (no-manifest) projects.
     if translation.is_none() {
         if let (Some(ref rp), Some(ref cc)) = (&rust_project, &charon_config) {
-            extract_runner::ensure_charon_llbc(rp, cc, None)?;
+            extract_runner::ensure_charon_llbc(rp, cc)?;
         }
     }
 
