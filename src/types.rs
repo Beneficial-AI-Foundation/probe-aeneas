@@ -55,6 +55,14 @@ pub struct FunctionRecord {
     /// Aeneas `FunDeclId`, shared by a top-level def and all its loop helpers.
     #[serde(skip)]
     pub def_id: Option<u64>,
+    /// Whether `def_id` is a charon `FunDeclId` (from the manifest's `functions`
+    /// array) rather than a `GlobalDeclId`/`TraitImplId` (from `globals`/
+    /// `trait_impls`). charon numbers each declaration kind in its own id space,
+    /// so only `FunDeclId`s are comparable to probe-rust's `charon-def-id`. Only
+    /// records with this set participate in the `charon-def-id` integer join;
+    /// `false` (the default) keeps globals/trait-impl records out of it.
+    #[serde(skip)]
+    pub def_id_is_fun_decl: bool,
 }
 
 /// Top-level structure of `functions.json`.

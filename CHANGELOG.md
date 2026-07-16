@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+- **`charon-def-id` translation strategy (Strategy 0)**: a precise Rust-to-Lean
+  join on the charon `FunDeclId` integer. When probe-rust emits a `charon-def-id`
+  atom field, it is matched against Aeneas's `translation.json` `def_id` (the same
+  `FunDeclId`), binding the Rust atom to its family's primary (non-loop) Lean def
+  with no name normalization (`confidence: "exact"`, `method: "charon-def-id"`).
+  Runs before the name/location strategies. Forward-compatible no-op until
+  probe-rust emits the field. Documented in `docs/charon-def-id-matching-plan.md`.
+- **Provenance gate on the id-join**: the join fires only when the atom's
+  `charon-version` equals the manifest's `charon_version` (best-effort provenance,
+  not proof of an identical run). Mismatched or missing versions fall back to name
+  matching instead of binding ids across charon versions. The join is restricted
+  to the manifest's `functions` array so `GlobalDeclId`/`TraitImplId`s from
+  `globals`/`trait_impls` cannot collide with a `FunDeclId`. Duplicate
+  `charon-def-id`s across two Rust atoms are logged and the second is deferred.
+- **`ensure_charon_llbc` provenance check**: a cached `data/charon.llbc` produced
+  by a different charon version than `translation.json` is discarded and
+  regenerated. Fails closed — an unreadable cached version with a known expected
+  version regenerates rather than trusting the stale cache. The version reader
+  tolerates whitespace-formatted LLBC and bounded prefix reads.
+
 ## [0.15.0] - 2026-07-11
 
 ### Added
@@ -307,7 +328,9 @@ Initial release.
 - Schema 2.0 metadata envelopes for merged atoms (`probe-aeneas/extract`) and translations (`probe/translations`).
 - Project documentation: README, usage guide, schema specification, and changelog.
 
-[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.14.0...v0.15.0
+[0.14.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.2...v0.14.0
 [0.11.2]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/Beneficial-AI-Foundation/probe-aeneas/compare/v0.10.0...v0.11.0

@@ -44,8 +44,11 @@ priority order, produce `Mapping` entries:
    equal ids bind the Rust atom to the family's primary (non-loop) Lean def with
    no name normalization. Confidence: `exact`. Runs first, but is
    **provenance-gated** -- it fires only when the atom's `charon-version` matches
-   the manifest's `charon_version` (same charon run); otherwise mismatched ids
-   would point at different functions. A no-op until probe-rust emits the field.
+   the manifest's `charon_version` (same charon version, best-effort provenance);
+   otherwise mismatched ids would point at different functions. Version equality
+   is not proof of an identical run -- two runs of the same version with
+   different cargo flags/sources can still diverge; a charon commit hash or LLBC
+   digest would be the durable fix. A no-op until probe-rust emits the field.
 1. **`rust-qualified-name`** -- exact match via Charon-derived qualified
    names joined with `functions.json` `rust_name` entries. Confidence:
    `exact`.

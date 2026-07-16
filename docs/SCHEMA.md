@@ -236,8 +236,6 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
 | `charon-def-id` | integer | no | The charon `FunDeclId` for this function (from probe-rust's span→`FunDecl` resolution). Equals Aeneas's `translation.json` `def_id`, enabling a precise integer join to the Lean translation. Always emitted **together with** `charon-version` (see below). |
 | `charon-version` | string | no | The charon version that produced `charon-def-id`. Provenance-gates the `def_id` join: the join runs only when this matches Aeneas's `translation.json` `charon_version`. |
-
-> **Coupling invariant.** `charon-def-id` and `charon-version` are emitted **together or not at all**. A `FunDeclId` is only interpretable relative to the charon run that produced it, so probe-rust never emits an id without its version. Consumers may therefore treat a present `charon-def-id` as always accompanied by a `charon-version`.
 | `is-disabled` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is either cfg-inactive in the Aeneas build (its `cfg` predicate is false) or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
 | `is-relevant` | bool | yes | Crate membership, independent of scope: `true` when the atom belongs to the analyzed crate (non-empty `code-path`), `false` for external stubs. |
 | `cfg` | string | no | The combined item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; own gate plus enclosing `impl`/`mod`/`trait` gates, `all(...)`-joined). Omitted when the function has no `#[cfg]` gate. Used to decide `is-disabled` (cfg-inactive ⟹ out of scope). |
@@ -247,6 +245,8 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
+
+> **Coupling invariant.** `charon-def-id` and `charon-version` are emitted **together or not at all**. A `FunDeclId` is only interpretable relative to the charon run that produced it, so probe-rust never emits an id without its version. Consumers may therefore treat a present `charon-def-id` as always accompanied by a `charon-version`. Note the version match is **best-effort provenance**: two runs of the same charon version with different cargo flags or sources can still assign different ids, which the version check cannot detect. A charon commit hash or LLBC digest would be the durable fix.
 
 #### Lean-specific fields
 
@@ -511,7 +511,7 @@ to exactly one Lean definition (1-to-1).
 The `charon-def-id` join is precise (no name normalization) but runs only when
 probe-rust emits `charon-def-id` **and** its `charon-version` matches the
 manifest's `charon_version`. Otherwise the name/location strategies handle the
-atom, so output degrades gracefully rather than binding across charon runs.
+atom, so output degrades gracefully rather than binding across charon versions.
 
 ---
 

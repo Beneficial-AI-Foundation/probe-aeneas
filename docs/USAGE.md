@@ -310,11 +310,14 @@ so equal ids bind the atom to that family's primary (non-loop) Lean def — prec
 with no name normalization. Runs first.
 
 **Provenance-gated.** The ids are only comparable when they come from the same
-charon run. The join fires only when the atom's `charon-version` matches the
+charon version. The join fires only when the atom's `charon-version` matches the
 manifest's `charon_version`; on mismatch (or when either is absent) it is skipped
 and the name/location strategies below handle the atom. This degrades gracefully
 instead of binding ids across charon versions (which would point at different
-functions).
+functions). Version equality is best-effort provenance, not proof of an
+identical run — two runs of the same version with different cargo flags or
+sources can still assign different ids; a charon commit hash or LLBC digest would
+be the durable fix.
 
 **Requires:** probe-rust emitting `charon-def-id` + `charon-version`, and an
 Aeneas `translation.json`. Absent either, this strategy is a no-op.

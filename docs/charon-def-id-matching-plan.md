@@ -1,7 +1,10 @@
 # Phase 2 plan: charon-`def_id` integer join for Rust↔Lean matching
 
-Status: planned. Branch `feat/precise-rqn-matching` (stacked on `main`, which
-has the merged `function_source` seam + manifest producer, PR #39).
+Status: WS1 (join) and WS2 (provenance gate) implemented on branch
+`feat/precise-rqn-matching` (stacked on `main`, which has the merged
+`function_source` seam + manifest producer, PR #39). WS3 (probe-rust emitting
+`charon-def-id`) is the remaining cross-repo work; until it ships the join is a
+forward-compatible no-op.
 
 ## Context / why
 
@@ -55,8 +58,8 @@ deleting any fallback.
 
 ## The safety principle (shapes everything)
 
-The id-join is only correct when probe-rust's `charon-def-id`s come from **the
-same charon run** that produced `translation.json`. Different run/version →
+The id-join is only correct when probe-rust's `charon-def-id`s come from the
+**same charon version** that produced `translation.json`. A different version →
 integers point at different functions → **silent wrong mappings**. (Observed:
 `data/charon.llbc` is charon 0.1.174 while `translation.json` is 0.1.217 — a
 stale cache; `def_id` 439 = `core::fmt::rt::new_display` in the llbc vs
@@ -65,6 +68,16 @@ stale cache; `def_id` 439 = `core::fmt::rt::new_display` in the llbc vs
 Therefore the join must be **provenance-gated**: trust `charon-def-id` only when
 its charon version matches `translation.json.charon_version`; otherwise fall back
 to name matching. This degrades gracefully instead of corrupting.
+
+**Version equality is best-effort provenance, not proof of an identical run.**
+Two runs of the *same* charon version with different cargo flags, sources, or
+commits can still assign different `def_id`s, which the version check cannot
+detect. The durable fix is to gate on a charon commit hash or a digest of the
+exact LLBC Aeneas consumed (see
+`docs/upstream-issues/charon-expose-commit-and-versioned-releases.md` and
+`docs/upstream-issues/aeneas-persist-consumed-llbc.md`). Until then the version
+gate is the pragmatic guard: it catches the common stale-cache case and degrades
+to name matching otherwise.
 
 ## Workstreams
 
@@ -133,7 +146,10 @@ to name matching. This degrades gracefully instead of corrupting.
 
 ## Artifacts
 - `tests/fixtures/rqn_pairs.json` (commit on this branch) — 435 matched pairs +
-  20 must-stay-distinct pairs. Repurposed from normalizer oracle to
-  join-correctness oracle: matched pairs must pair correctly under the id-join;
-  distinct pairs must land on distinct `def_id`s. Also documents the RQN naming
-  noise if the fallback normalizer is ever touched.
+  20 must-stay-distinct pairs. Primarily a **normalizer oracle**: it pins the RQN
+  naming noise so a future `normalize_rust_name` change is deliberate. It also
+  exercises the id-join's *mechanics* (distinct ids map to distinct Lean defs;
+  the split the name matcher cannot make), but note this proves integer-lookup
+  behavior on synthetic ids, **not** that real probe-rust `charon-def-id`s equal
+  the manifest's `def_id`s — that end-to-end equality can only be validated
+  against a real manifest once probe-rust emits the field (WS3).

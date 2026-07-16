@@ -104,14 +104,22 @@ impl TranslationManifest {
 /// scraper did, for output parity; the authoritative loop/primary dimension
 /// rides on `is_loop_artifact`/`parent_lean_name`/`def_id`.
 pub fn records_from_manifest(manifest: &TranslationManifest) -> Vec<FunctionRecord> {
-    let mut records: Vec<FunctionRecord> = manifest
+    // Only `functions` entries carry a charon `FunDeclId` in `def_id`; `globals`
+    // and `trait_impls` are numbered in charon's separate `GlobalDeclId`/
+    // `TraitImplId` id spaces, so their `def_id`s must not feed the integer join
+    // (an int collision across kinds would be a silent wrong mapping).
+    let funcs = manifest
         .functions
         .iter()
-        .chain(manifest.globals.iter())
+        .filter(|f| !f.is_external_template())
+        .map(|f| f.to_record(true));
+    let others = manifest
+        .globals
+        .iter()
         .chain(manifest.trait_impls.iter())
         .filter(|f| !f.is_external_template())
-        .map(TranslationFunc::to_record)
-        .collect();
+        .map(|f| f.to_record(false));
+    let mut records: Vec<FunctionRecord> = funcs.chain(others).collect();
     records.sort_by(|a, b| a.lean_name.cmp(&b.lean_name));
     records
 }
@@ -152,7 +160,11 @@ impl TranslationFunc {
 
     /// Convert to a [`FunctionRecord`], carrying authoritative loop/primary
     /// classification directly (no post-hoc overlay needed).
-    fn to_record(&self) -> FunctionRecord {
+    ///
+    /// `is_fun_decl` is `true` only for entries from the manifest's `functions`
+    /// array, whose `def_id` is a charon `FunDeclId` (the one comparable to
+    /// probe-rust's `charon-def-id`). Globals and trait-impls pass `false`.
+    fn to_record(&self, is_fun_decl: bool) -> FunctionRecord {
         FunctionRecord {
             lean_name: self.lean_name.clone(),
             rust_name: self.rust_name.clone(),
@@ -169,6 +181,7 @@ impl TranslationFunc {
             is_loop_artifact: Some(self.loop_info.is_some()),
             parent_lean_name: self.parent_lean_name.clone(),
             def_id: Some(self.def_id),
+            def_id_is_fun_decl: is_fun_decl,
         }
     }
 }
@@ -296,6 +309,9 @@ pub fn annotate(functions: &mut [FunctionRecord], manifest: &TranslationManifest
             rec.is_loop_artifact = Some(tf.loop_info.is_some());
             rec.parent_lean_name = tf.parent_lean_name.clone();
             rec.def_id = Some(tf.def_id);
+            // `by_lean_name` is built only from `manifest.functions`, so every
+            // annotated `def_id` here is a charon `FunDeclId`.
+            rec.def_id_is_fun_decl = true;
             annotated += 1;
         }
     }
@@ -350,6 +366,19 @@ mod tests {
         let zloop = recs.iter().find(|r| r.lean_name == "c.zeta_loop").unwrap();
         assert_eq!(zloop.is_loop_artifact, Some(true));
         assert_eq!(zloop.parent_lean_name.as_deref(), Some("c.zeta"));
+
+        // Only `functions`-array entries carry a charon `FunDeclId`; the global
+        // (`c.alpha`) and trait-impl (`c.T.Insts.Tr`) records must not, so their
+        // `def_id`s never feed the integer join.
+        assert!(zeta.def_id_is_fun_decl);
+        assert!(zloop.def_id_is_fun_decl);
+        let alpha = recs.iter().find(|r| r.lean_name == "c.alpha").unwrap();
+        let trait_impl = recs.iter().find(|r| r.lean_name == "c.T.Insts.Tr").unwrap();
+        assert!(!alpha.def_id_is_fun_decl, "global def_id is a GlobalDeclId");
+        assert!(
+            !trait_impl.def_id_is_fun_decl,
+            "trait-impl def_id is a TraitImplId"
+        );
     }
 
     #[test]
