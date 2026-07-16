@@ -96,6 +96,7 @@ pub fn run_probe_rust_extract(
     project: &Path,
     output_dir: Option<&Path>,
     with_public_api: bool,
+    translation: Option<&Path>,
 ) -> Result<PathBuf> {
     let bin = find_or_install_probe_rust()?;
     ensure_rust_analyzer_for_project(project);
@@ -114,8 +115,22 @@ pub fn run_probe_rust_extract(
             .ok_or(ExtractRunnerError::NonUtf8Path { label: "Output" })?
             .to_string(),
         "--auto-install".to_string(),
-        "--with-charon".to_string(),
     ];
+    // When an Aeneas manifest is available, probe-rust reads charon `def_id`s
+    // from it (no charon run); otherwise it runs charon for the LLBC (legacy).
+    match translation {
+        Some(tj) => {
+            args.push("--translation".to_string());
+            args.push(
+                tj.to_str()
+                    .ok_or(ExtractRunnerError::NonUtf8Path {
+                        label: "Translation",
+                    })?
+                    .to_string(),
+            );
+        }
+        None => args.push("--with-charon".to_string()),
+    }
     if with_public_api {
         args.push("--with-public-api".to_string());
     }

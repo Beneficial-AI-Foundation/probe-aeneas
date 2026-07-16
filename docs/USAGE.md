@@ -77,8 +77,14 @@ Otherwise, it is generated from the Lean sources.
 
 **Charon configuration** (optional `charon` section in `aeneas-config.yml`):
 
-When present, probe-aeneas pre-generates the Charon LLBC file with the full
-project-specific settings before running `probe-rust`. Supported fields:
+> **No charon run when a `translation.json` is present.** charon already ran
+> once inside Aeneas to produce the manifest, so probe-aeneas skips its own
+> charon LLBC pre-generation and passes `--translation` to `probe-rust`, which
+> reads charon `def_id`s directly from the manifest. The LLBC path below applies
+> only to legacy projects that ship no `translation.json`.
+
+When no manifest is present, probe-aeneas pre-generates the Charon LLBC file with
+the full project-specific settings before running `probe-rust`. Supported fields:
 
 | Field | Description |
 |-------|-------------|

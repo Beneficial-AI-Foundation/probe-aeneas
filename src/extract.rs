@@ -566,6 +566,7 @@ pub fn run_extract(
         lean_json,
         lean_project,
         with_public_api,
+        translation_json,
     )?;
 
     // --- Resolve function records (single source dispatch) ---
@@ -621,12 +622,14 @@ pub fn run_extract(
 ///
 /// When `lean_project` is available, intermediate extractor outputs are saved
 /// to `<lean_project>/.verilib/probes/` alongside the final merged output.
+#[allow(clippy::too_many_arguments)]
 fn resolve_inputs(
     rust_json: Option<&Path>,
     rust_project: Option<&Path>,
     lean_json: Option<&Path>,
     lean_project: Option<&Path>,
     with_public_api: bool,
+    translation_json: Option<&Path>,
 ) -> Result<(PathBuf, PathBuf)> {
     let need_rust_extract = rust_json.is_none();
     // When --lean is given (pre-computed JSON), skip Lean extraction even if
@@ -647,7 +650,12 @@ fn resolve_inputs(
         println!("Extracting Rust and Lean atoms in parallel...\n");
         let (rust_result, lean_result) = std::thread::scope(|s| {
             let rust_handle = s.spawn(|| {
-                extract_runner::run_probe_rust_extract(rust_proj, probes_dir_ref, with_public_api)
+                extract_runner::run_probe_rust_extract(
+                    rust_proj,
+                    probes_dir_ref,
+                    with_public_api,
+                    translation_json,
+                )
             });
             let lean_handle =
                 s.spawn(|| extract_runner::run_probe_lean_extract(lean_proj, probes_dir_ref));
@@ -674,6 +682,7 @@ fn resolve_inputs(
                 rust_project.unwrap(),
                 probes_dir_ref,
                 with_public_api,
+                translation_json,
             )?
         };
 
