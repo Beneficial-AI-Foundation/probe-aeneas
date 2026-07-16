@@ -593,7 +593,12 @@ pub fn run_extract(
     let config = AeneasConfig::load(aeneas_config, lean_project).context("load aeneas config")?;
 
     // --- Generate translations ---
-    let translations_result = run_translate(&rust_path, &lean_path, &resolved.records)?;
+    let translations_result = run_translate(
+        &rust_path,
+        &lean_path,
+        &resolved.records,
+        resolved.charon_version.as_deref(),
+    )?;
     let aux_defs = resolved.aux_defs;
 
     // --- Merge atom maps ---
@@ -690,10 +695,13 @@ fn resolve_inputs(
 ///
 /// `functions` are the resolved records (source-blind: manifest-built or
 /// legacy-scraped, already carrying any `translation.json` overlay).
+/// `manifest_charon_version` provenance-gates the charon-`def_id` join (see
+/// [`generate_translations`]).
 fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
     functions: &[FunctionRecord],
+    manifest_charon_version: Option<&str>,
 ) -> Result<MappingMaps> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
@@ -706,7 +714,8 @@ fn run_translate(
     println!("  {} atoms", lean_data.len());
 
     println!("\nGenerating translations...");
-    let (mappings, stats) = generate_translations(&rust_data, &lean_data, functions);
+    let (mappings, stats) =
+        generate_translations(&rust_data, &lean_data, functions, manifest_charon_version);
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {
@@ -1134,7 +1143,12 @@ pub fn run_translate_only(
     println!("  {} entries", resolved.records.len());
 
     println!("\nGenerating translations...");
-    let (mappings, stats) = generate_translations(&rust_data, &lean_data, &resolved.records);
+    let (mappings, stats) = generate_translations(
+        &rust_data,
+        &lean_data,
+        &resolved.records,
+        resolved.charon_version.as_deref(),
+    );
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {

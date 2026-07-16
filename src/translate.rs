@@ -107,10 +107,19 @@ pub struct TranslateStats {
 
 /// Generate translation mappings between Rust and Lean atoms using functions.json
 /// as the bridge.
+///
+/// `manifest_charon_version` is the charon version recorded in Aeneas's
+/// `translation.json` (`None` when no manifest is available). It provenance-gates
+/// the charon-`def_id` join ([`strategy_charon_def_id`]): the integer join is
+/// only sound when a Rust atom's `charon-def-id` comes from the same charon run
+/// that produced the manifest's `def_id`s. When the versions disagree (or either
+/// is absent), the join is skipped and matching falls back to the name-based
+/// strategies. See docs/charon-def-id-matching-plan.md.
 pub fn generate_translations(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     functions: &[FunctionRecord],
+    manifest_charon_version: Option<&str>,
 ) -> (Vec<Mapping>, TranslateStats) {
     let mut mappings = Vec::new();
     let mut matched_rust: HashSet<String> = HashSet::new();
@@ -141,6 +150,19 @@ pub fn generate_translations(
             }
         }
     }
+
+    // Strategy 0: charon-def-id integer join (runs first, provenance-gated).
+    // Precise for free when probe-rust emits `charon-def-id` from the same
+    // charon run that produced the manifest; a no-op otherwise.
+    strategy_charon_def_id(
+        rust_data,
+        lean_data,
+        functions,
+        manifest_charon_version,
+        &mut mappings,
+        &mut matched_rust,
+        &mut matched_lean,
+    );
 
     // Strategy 1: rust-qualified-name matching
     strategy_rust_qualified_name(
@@ -238,6 +260,110 @@ fn is_deferred_entry(func: &FunctionRecord) -> bool {
         None => func.is_extraction_artifact || enrich::is_extraction_artifact(&func.lean_name),
     };
     artifact || func.is_hidden || enrich::is_hidden_by_name(&func.lean_name)
+}
+
+/// Build `def_id → primary lean_name` from the function records.
+///
+/// The primary is the top-level def of a `def_id` family: the entry that is
+/// *not* a loop artifact (`is_loop_artifact != Some(true)`). Loop helpers share
+/// their parent's `def_id`, so they are excluded — the join must land on the
+/// spec-carrying primary, not a helper. Entries without a `def_id` (no manifest
+/// coverage) contribute nothing.
+///
+/// Normally exactly one primary exists per `def_id`. The lexicographically
+/// smallest `lean_name` is the deterministic tie-break, so the map is
+/// independent of `functions` order (P14) even if a family ever exposed more
+/// than one non-loop entry.
+fn build_def_id_to_primary_lean(functions: &[FunctionRecord]) -> HashMap<u64, String> {
+    let mut map: HashMap<u64, String> = HashMap::new();
+    for func in functions {
+        let Some(def_id) = func.def_id else { continue };
+        if func.is_loop_artifact == Some(true) || func.lean_name.is_empty() {
+            continue;
+        }
+        map.entry(def_id)
+            .and_modify(|existing| {
+                if func.lean_name < *existing {
+                    *existing = func.lean_name.clone();
+                }
+            })
+            .or_insert_with(|| func.lean_name.clone());
+    }
+    map
+}
+
+/// Strategy 0: join Rust atoms to Lean translations by charon `FunDeclId`
+/// integer equality — precise, with no name normalization.
+///
+/// Aeneas's `translation.json` `def_id` **is** the charon `FunDeclId`; probe-rust
+/// resolves each atom's `FunDecl` by source span and emits it as the
+/// `charon-def-id` extension. Equal ids therefore denote the same function, so
+/// binding a Rust atom to `primary(def_id)` is exact.
+///
+/// **Provenance gate**: ids from different charon runs point at different
+/// functions, silently corrupting the mapping. The join runs only when
+/// `manifest_charon_version` is present and each atom's own `charon-version`
+/// matches it; otherwise the atom is skipped and the name strategies handle it.
+///
+/// Forward-compatible no-op until probe-rust emits `charon-def-id`: with no such
+/// atoms the loop binds nothing and output is unchanged. Respects
+/// `matched_rust`/`matched_lean` (P11) so later strategies never re-bind.
+#[allow(clippy::too_many_arguments)]
+fn strategy_charon_def_id(
+    rust_data: &BTreeMap<String, Atom>,
+    lean_data: &BTreeMap<String, Atom>,
+    functions: &[FunctionRecord],
+    manifest_charon_version: Option<&str>,
+    mappings: &mut Vec<Mapping>,
+    matched_rust: &mut HashSet<String>,
+    matched_lean: &mut HashSet<String>,
+) {
+    // Without a manifest charon version there is nothing to compare a
+    // `charon-def-id` against, so the integer join is unsafe: bail out.
+    let Some(manifest_version) = manifest_charon_version else {
+        return;
+    };
+
+    let def_id_to_lean = build_def_id_to_primary_lean(functions);
+    if def_id_to_lean.is_empty() {
+        return;
+    }
+
+    for (code_name, atom) in rust_data {
+        if matched_rust.contains(code_name) {
+            continue;
+        }
+        // Per-atom provenance gate: trust the id only when it came from the same
+        // charon run as the manifest.
+        let atom_version = atom
+            .extensions
+            .get("charon-version")
+            .and_then(|v| v.as_str());
+        if atom_version != Some(manifest_version) {
+            continue;
+        }
+        let Some(def_id) = atom
+            .extensions
+            .get("charon-def-id")
+            .and_then(|v| v.as_u64())
+        else {
+            continue;
+        };
+        let Some(lean_name) = def_id_to_lean.get(&def_id) else {
+            continue;
+        };
+        let lean_code_name = format!("probe:{lean_name}");
+        if lean_data.contains_key(&lean_code_name) && !matched_lean.contains(&lean_code_name) {
+            mappings.push(Mapping {
+                from: code_name.clone(),
+                to: lean_code_name.clone(),
+                confidence: "exact".to_string(),
+                method: Some("charon-def-id".to_string()),
+            });
+            matched_rust.insert(code_name.clone());
+            matched_lean.insert(lean_code_name);
+        }
+    }
 }
 
 /// Match Rust atoms to Lean translations via normalized `rust-qualified-name`.
@@ -843,7 +969,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "file-and-name");
         assert_eq!(mappings[0].from, "probe:crate/1.0/reduce()");
@@ -871,7 +997,7 @@ mod tests {
             "L210-L240",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "file-and-lines");
     }
@@ -899,7 +1025,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "exact");
         assert_eq!(mappings[0].method.as_deref(), Some("rust-qualified-name"));
@@ -928,7 +1054,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
         // Should only match once (via strategy 1), not again via strategy 2 or 3
         assert_eq!(mappings.len(), 1);
     }
@@ -979,7 +1105,7 @@ mod tests {
             ),
         ];
 
-        let (mappings, _stats) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _stats) = generate_translations(&rust_atoms, &lean, &funcs, None);
 
         assert_eq!(
             mappings.len(),
@@ -1046,7 +1172,7 @@ mod tests {
         primary.is_loop_artifact = Some(false);
         let funcs = vec![body, loopfn, primary];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
 
         assert_eq!(mappings.len(), 1);
         assert_eq!(
@@ -1090,7 +1216,7 @@ mod tests {
         assert!(enrich::is_extraction_artifact("crate.http.parse_body"));
         assert!(!is_deferred_entry(&func));
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func]);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].to, "probe:crate.http.parse_body");
         assert_eq!(mappings[0].confidence, "exact");
@@ -1178,7 +1304,7 @@ mod tests {
             ),
         ];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
 
         assert_eq!(mappings.len(), 1);
         assert_eq!(
@@ -1214,7 +1340,7 @@ mod tests {
             false,
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
 
         assert_eq!(
             mappings.len(),
@@ -1264,7 +1390,7 @@ mod tests {
             ),
         ];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
         assert_eq!(
             mappings.len(),
             1,
@@ -1323,7 +1449,7 @@ mod tests {
             "L10-L20",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
 
         // With C6 bug: rqn_to_rust.insert() overwrites, so the last Rust atom
         // (in BTreeMap iteration order) wins. The first atom is silently dropped.
@@ -1349,5 +1475,268 @@ mod tests {
         // If this atom is used for enrichment, translation-text will be
         // {"lines-start": 0, "lines-end": 0} which is misleading.
         // The enrichment code should check for this and skip or mark as unknown.
+    }
+
+    // =========================================================================
+    // Strategy 0: charon-def-id integer join (WS1)
+    // =========================================================================
+
+    /// A Rust atom carrying `charon-def-id` and `charon-version` extensions,
+    /// as probe-rust will emit them (WS3).
+    fn make_rust_atom_charon(
+        display: &str,
+        path: &str,
+        start: usize,
+        end: usize,
+        def_id: u64,
+        charon_version: &str,
+    ) -> Atom {
+        let mut atom = make_rust_atom(display, path, start, end);
+        atom.extensions
+            .insert("charon-def-id".to_string(), serde_json::json!(def_id));
+        atom.extensions.insert(
+            "charon-version".to_string(),
+            serde_json::json!(charon_version),
+        );
+        atom
+    }
+
+    /// A manifest-built record: primary defs carry `is_loop_artifact = Some(false)`
+    /// and a `def_id`; loop helpers carry `Some(true)` and share the `def_id`.
+    fn make_func_def_id(lean_name: &str, def_id: u64, is_loop: bool) -> FunctionRecord {
+        FunctionRecord {
+            lean_name: lean_name.to_string(),
+            def_id: Some(def_id),
+            is_loop_artifact: Some(is_loop),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn build_def_id_map_excludes_loop_helpers_and_tiebreaks() {
+        let funcs = vec![
+            make_func_def_id("c.gf.div_impl", 439, false),
+            make_func_def_id("c.gf.div_impl_loop", 439, true),
+            make_func_def_id("c.gf.div_impl_loop.body", 439, true),
+            // A record with no def_id contributes nothing.
+            make_func("c.gf.other", Some("c::gf::other"), "src/gf.rs", "L1-L2"),
+        ];
+        let map = build_def_id_to_primary_lean(&funcs);
+        assert_eq!(map.len(), 1);
+        assert_eq!(map.get(&439).map(String::as_str), Some("c.gf.div_impl"));
+    }
+
+    #[test]
+    fn build_def_id_map_tiebreak_is_order_independent() {
+        // Two non-loop entries share a def_id (pathological): the lexicographically
+        // smallest lean_name wins regardless of insertion order (P14).
+        let forward = build_def_id_to_primary_lean(&[
+            make_func_def_id("c.aaa", 7, false),
+            make_func_def_id("c.zzz", 7, false),
+        ]);
+        let reverse = build_def_id_to_primary_lean(&[
+            make_func_def_id("c.zzz", 7, false),
+            make_func_def_id("c.aaa", 7, false),
+        ]);
+        assert_eq!(forward.get(&7).map(String::as_str), Some("c.aaa"));
+        assert_eq!(reverse.get(&7).map(String::as_str), Some("c.aaa"));
+    }
+
+    #[test]
+    fn charon_def_id_join_binds_when_version_matches() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:spqr/1.5.0/div_impl()".to_string(),
+            make_rust_atom_charon(
+                "GF16::div_impl",
+                "src/encoding/gf.rs",
+                549,
+                559,
+                439,
+                "0.1.217",
+            ),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:spqr.encoding.gf.GF16.div_impl".to_string(),
+            make_lean_atom("div_impl", "Funs.lean"),
+        );
+
+        let funcs = vec![make_func_def_id(
+            "spqr.encoding.gf.GF16.div_impl",
+            439,
+            false,
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].method.as_deref(), Some("charon-def-id"));
+        assert_eq!(mappings[0].confidence, "exact");
+        assert_eq!(mappings[0].from, "probe:spqr/1.5.0/div_impl()");
+        assert_eq!(mappings[0].to, "probe:spqr.encoding.gf.GF16.div_impl");
+    }
+
+    #[test]
+    fn charon_def_id_join_binds_primary_not_loop_helper() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:spqr/1.5.0/div_impl()".to_string(),
+            make_rust_atom_charon(
+                "GF16::div_impl",
+                "src/encoding/gf.rs",
+                549,
+                559,
+                439,
+                "0.1.217",
+            ),
+        );
+
+        let mut lean = BTreeMap::new();
+        for name in [
+            "spqr.encoding.gf.GF16.div_impl",
+            "spqr.encoding.gf.GF16.div_impl_loop",
+            "spqr.encoding.gf.GF16.div_impl_loop.body",
+        ] {
+            lean.insert(
+                format!("probe:{name}"),
+                make_lean_atom(name.rsplit('.').next().unwrap(), "Funs.lean"),
+            );
+        }
+
+        // Family shares def_id 439; only the primary is a valid target.
+        let funcs = vec![
+            make_func_def_id("spqr.encoding.gf.GF16.div_impl_loop.body", 439, true),
+            make_func_def_id("spqr.encoding.gf.GF16.div_impl_loop", 439, true),
+            make_func_def_id("spqr.encoding.gf.GF16.div_impl", 439, false),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].to, "probe:spqr.encoding.gf.GF16.div_impl");
+        assert_eq!(mappings[0].method.as_deref(), Some("charon-def-id"));
+    }
+
+    #[test]
+    fn charon_def_id_join_gated_off_on_version_mismatch() {
+        // The atom's charon-def-id comes from a different charon run than the
+        // manifest, so the id-join must NOT fire. A name fallback still can, but
+        // never via the charon-def-id method.
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom_charon(
+            "GF16::div_impl",
+            "src/encoding/gf.rs",
+            549,
+            559,
+            439,
+            "0.1.174",
+        );
+        atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("spqr::encoding::gf::GF16::div_impl"),
+        );
+        rust_atoms.insert("probe:spqr/1.5.0/div_impl()".to_string(), atom);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:spqr.encoding.gf.GF16.div_impl".to_string(),
+            make_lean_atom("div_impl", "Funs.lean"),
+        );
+
+        // def_id 439 in this (newer) manifest points at a DIFFERENT function;
+        // binding on it would be a silent wrong mapping.
+        let mut func = make_func(
+            "spqr.encoding.gf.GF16.div_impl",
+            Some("spqr::encoding::gf::GF16::div_impl"),
+            "src/encoding/gf.rs",
+            "L549-L559",
+        );
+        func.def_id = Some(439);
+        func.is_loop_artifact = Some(false);
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], Some("0.1.217"));
+
+        // The name strategy still binds it (correctly, by RQN), but the gate
+        // prevented the charon-def-id method from firing.
+        assert!(
+            mappings
+                .iter()
+                .all(|m| m.method.as_deref() != Some("charon-def-id")),
+            "version mismatch must disable the id-join"
+        );
+    }
+
+    #[test]
+    fn charon_def_id_join_gated_off_without_manifest_version() {
+        // No manifest charon version -> nothing to compare against -> join off.
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:spqr/1.5.0/div_impl()".to_string(),
+            make_rust_atom_charon(
+                "GF16::div_impl",
+                "src/encoding/gf.rs",
+                549,
+                559,
+                439,
+                "0.1.217",
+            ),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:spqr.encoding.gf.GF16.div_impl".to_string(),
+            make_lean_atom("div_impl", "Funs.lean"),
+        );
+
+        let funcs = vec![make_func_def_id(
+            "spqr.encoding.gf.GF16.div_impl",
+            439,
+            false,
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+
+        assert!(
+            mappings
+                .iter()
+                .all(|m| m.method.as_deref() != Some("charon-def-id")),
+            "missing manifest charon version must disable the id-join"
+        );
+    }
+
+    #[test]
+    fn charon_def_id_join_noop_when_atoms_lack_field() {
+        // Forward-compatibility: with a matching manifest version but no atom
+        // carrying `charon-def-id`, the join binds nothing (byte-identical output).
+        let mut rust_atoms = BTreeMap::new();
+        let mut atom = make_rust_atom("div_impl", "src/encoding/gf.rs", 549, 559);
+        atom.extensions.insert(
+            "rust-qualified-name".to_string(),
+            serde_json::json!("spqr::encoding::gf::GF16::div_impl"),
+        );
+        rust_atoms.insert("probe:spqr/1.5.0/div_impl()".to_string(), atom);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:spqr.encoding.gf.GF16.div_impl".to_string(),
+            make_lean_atom("div_impl", "Funs.lean"),
+        );
+
+        let mut func = make_func(
+            "spqr.encoding.gf.GF16.div_impl",
+            Some("spqr::encoding::gf::GF16::div_impl"),
+            "src/encoding/gf.rs",
+            "L549-L559",
+        );
+        func.def_id = Some(439);
+        func.is_loop_artifact = Some(false);
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], Some("0.1.217"));
+
+        // Falls back to the name matcher; no charon-def-id method used.
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].method.as_deref(), Some("rust-qualified-name"));
     }
 }

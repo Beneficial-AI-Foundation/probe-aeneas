@@ -234,6 +234,8 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
+| `charon-def-id` | integer | no | The charon `FunDeclId` for this function (from probe-rust's span→`FunDecl` resolution). Equals Aeneas's `translation.json` `def_id`, enabling a precise integer join to the Lean translation. |
+| `charon-version` | string | no | The charon version that produced `charon-def-id`. Provenance-gates the `def_id` join: the join runs only when this matches Aeneas's `translation.json` `charon_version`. |
 | `is-disabled` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is either cfg-inactive in the Aeneas build (its `cfg` predicate is false) or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
 | `is-relevant` | bool | yes | Crate membership, independent of scope: `true` when the atom belongs to the analyzed crate (non-empty `code-path`), `false` for external stubs. |
 | `cfg` | string | no | The combined item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; own gate plus enclosing `impl`/`mod`/`trait` gates, `all(...)`-joined). Omitted when the function has no `#[cfg]` gate. Used to decide `is-disabled` (cfg-inactive ⟹ out of scope). |
@@ -492,15 +494,22 @@ entries with:
 
 | Value | Strategy | Description |
 |-------|----------|-------------|
+| `"exact"` | `charon-def-id` | Matched by charon `FunDeclId` integer equality (atom `charon-def-id` == manifest `def_id`), provenance-gated on matching `charon-version` |
 | `"exact"` | `rust-qualified-name` | Matched via Charon-derived `rust-qualified-name` joined with `functions.json` `rust_name` |
 | `"file-and-name"` | `file+display-name` | Same source file + matching base method name (unambiguous) |
 | `"file-and-lines"` | `file+line-overlap` | Same source file + overlapping line ranges |
 
 ### Strategy Priority
 
-Strategies are applied in order. Once a Rust atom or Lean atom is matched by
-an earlier strategy, it is excluded from later strategies. Each Rust function
-maps to exactly one Lean definition (1-to-1).
+Strategies are applied in order (`charon-def-id` first, then the three
+name/location strategies). Once a Rust atom or Lean atom is matched by an
+earlier strategy, it is excluded from later strategies. Each Rust function maps
+to exactly one Lean definition (1-to-1).
+
+The `charon-def-id` join is precise (no name normalization) but runs only when
+probe-rust emits `charon-def-id` **and** its `charon-version` matches the
+manifest's `charon_version`. Otherwise the name/location strategies handle the
+atom, so output degrades gracefully rather than binding across charon runs.
 
 ---
 

@@ -36,9 +36,16 @@ merge engine from the probe crate.
 ### Phase 1: Generate translations (Aeneas-specific)
 
 Uses `functions.json` (produced by `lake exe listfuns`) as the bridge
-between Rust and Lean namespaces. Three matching strategies, applied in
+between Rust and Lean namespaces. Matching strategies, applied in
 priority order, produce `Mapping` entries:
 
+0. **`charon-def-id`** -- integer join on the charon `FunDeclId`: probe-rust's
+   `charon-def-id` atom field equals Aeneas's `translation.json` `def_id`, so
+   equal ids bind the Rust atom to the family's primary (non-loop) Lean def with
+   no name normalization. Confidence: `exact`. Runs first, but is
+   **provenance-gated** -- it fires only when the atom's `charon-version` matches
+   the manifest's `charon_version` (same charon run); otherwise mismatched ids
+   would point at different functions. A no-op until probe-rust emits the field.
 1. **`rust-qualified-name`** -- exact match via Charon-derived qualified
    names joined with `functions.json` `rust_name` entries. Confidence:
    `exact`.

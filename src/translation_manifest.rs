@@ -42,6 +42,12 @@ use crate::types::FunctionRecord;
 /// `trait_decls` is unused.
 #[derive(Debug, Deserialize)]
 pub struct TranslationManifest {
+    /// charon version that produced this manifest (top-level `charon_version`).
+    /// Used to provenance-gate the `def_id` join: probe-rust's `charon-def-id`s
+    /// are only comparable to these `def_id`s when they come from the same
+    /// charon run (see docs/charon-def-id-matching-plan.md).
+    #[serde(default)]
+    pub charon_version: Option<String>,
     #[serde(default)]
     pub functions: Vec<TranslationFunc>,
     #[serde(default)]
@@ -204,16 +210,27 @@ pub fn resolve_path(project_root: &Path) -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
+/// What overlaying a `translation.json` yields for downstream consumers:
+/// the auxiliary-def Lean names to flag as artifacts, plus the manifest's
+/// charon version for provenance-gating the `def_id` join.
+#[derive(Debug, Default)]
+pub struct ManifestOverlay {
+    /// Lean names of auxiliary defs (type stand-ins + trait-instance wrappers).
+    pub aux_defs: HashSet<String>,
+    /// charon version from the manifest, or `None` when unavailable.
+    pub charon_version: Option<String>,
+}
+
 /// Load Aeneas's `translation.json` from `path` (if any), overlay its
 /// authoritative loop/primary classification onto `functions`, and return the
-/// set of auxiliary-def Lean names (type stand-ins + trait-instance wrappers)
-/// for consumers to flag as extraction artifacts. A `None` path is a silent
-/// no-op; a load error is reported and swallowed. Both return an empty set and
-/// fall back to the name heuristics, never aborting the pipeline. Shared by the
+/// auxiliary-def Lean names (type stand-ins + trait-instance wrappers) plus the
+/// manifest's charon version. A `None` path is a silent no-op; a load error is
+/// reported and swallowed. Both return an empty [`ManifestOverlay`] and fall
+/// back to the name heuristics, never aborting the pipeline. Shared by the
 /// `extract` and `listfuns` flows.
-pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> HashSet<String> {
+pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> ManifestOverlay {
     let Some(path) = path else {
-        return HashSet::new();
+        return ManifestOverlay::default();
     };
     match load(path) {
         Ok(manifest) => {
@@ -222,12 +239,15 @@ pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> HashSet<S
                 "  Applied translation.json overlay: {n}/{} entries classified authoritatively",
                 functions.len()
             );
-            manifest.auxiliary_lean_names()
+            ManifestOverlay {
+                aux_defs: manifest.auxiliary_lean_names(),
+                charon_version: manifest.charon_version,
+            }
         }
         Err(e) => {
             eprintln!("  Warning: could not read {}: {e:#}", path.display());
             eprintln!("  Falling back to name-heuristic classification.");
-            HashSet::new()
+            ManifestOverlay::default()
         }
     }
 }
@@ -393,6 +413,15 @@ mod tests {
             lean_name: lean_name.to_string(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn parses_charon_version() {
+        let m: TranslationManifest = serde_json::from_str(SAMPLE).unwrap();
+        assert_eq!(m.charon_version.as_deref(), Some("y"));
+        // Absent field deserializes to None (legacy manifests, provenance gate off).
+        let bare: TranslationManifest = serde_json::from_str(r#"{"functions": []}"#).unwrap();
+        assert_eq!(bare.charon_version, None);
     }
 
     #[test]
