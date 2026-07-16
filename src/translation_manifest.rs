@@ -141,7 +141,7 @@ impl TranslationFunc {
     fn is_external_template(&self) -> bool {
         self.lean_file
             .as_deref()
-            .is_some_and(|f| f.contains("External_Template"))
+            .is_some_and(|f| f.ends_with("External_Template.lean"))
     }
 
     /// Convert to a [`FunctionRecord`], carrying authoritative loop/primary
@@ -151,10 +151,13 @@ impl TranslationFunc {
             lean_name: self.lean_name.clone(),
             rust_name: self.rust_name.clone(),
             source: self.source.as_ref().map(|s| s.file.clone()),
-            lines: self
-                .source
-                .as_ref()
-                .map(|s| format!("L{}-L{}", s.begin_line, s.end_line)),
+            // Line numbers are 1-based; a 0 span means the manifest omitted
+            // `begin_line`/`end_line`. Omit `lines` rather than emit a sentinel
+            // `L0-L0` range.
+            lines: self.source.as_ref().and_then(|s| {
+                (s.begin_line != 0 || s.end_line != 0)
+                    .then(|| format!("L{}-L{}", s.begin_line, s.end_line))
+            }),
             is_hidden: enrich::is_hidden_by_name(&self.lean_name),
             is_extraction_artifact: enrich::is_extraction_artifact(&self.lean_name),
             is_loop_artifact: Some(self.loop_info.is_some()),
@@ -309,6 +312,43 @@ mod tests {
         let zloop = recs.iter().find(|r| r.lean_name == "c.zeta_loop").unwrap();
         assert_eq!(zloop.is_loop_artifact, Some(true));
         assert_eq!(zloop.parent_lean_name.as_deref(), Some("c.zeta"));
+    }
+
+    #[test]
+    fn omits_lines_when_source_span_missing() {
+        // `source` present but with no line span -> serde defaults both to 0.
+        // A 0 span must yield no `lines`, not a sentinel `L0-L0` range.
+        let json = r#"{
+            "functions": [
+                {"def_id":1,"lean_name":"c.f","rust_name":"c::f","lean_file":"SrcTranslated/Funs.lean",
+                 "source":{"file":"src/a.rs"}}
+            ]
+        }"#;
+        let m: TranslationManifest = serde_json::from_str(json).unwrap();
+        let recs = records_from_manifest(&m);
+        let f = recs.iter().find(|r| r.lean_name == "c.f").unwrap();
+        assert_eq!(f.source.as_deref(), Some("src/a.rs"));
+        assert_eq!(f.lines, None);
+    }
+
+    #[test]
+    fn external_template_match_is_suffix_precise() {
+        // Only files ending in `External_Template.lean` are excluded; an
+        // unrelated path that merely contains the substring is kept.
+        let json = r#"{
+            "functions": [
+                {"def_id":1,"lean_name":"c.kept","rust_name":"c::kept",
+                 "lean_file":"External_Template_Notes/Funs.lean",
+                 "source":{"file":"src/a.rs","begin_line":1,"end_line":2}},
+                {"def_id":2,"lean_name":"c.dropped","rust_name":"c::dropped",
+                 "lean_file":"SrcTranslated/FunsExternal_Template.lean",
+                 "source":{"file":"/rustc/x.rs","begin_line":1,"end_line":1}}
+            ]
+        }"#;
+        let m: TranslationManifest = serde_json::from_str(json).unwrap();
+        let recs = records_from_manifest(&m);
+        let names: Vec<&str> = recs.iter().map(|r| r.lean_name.as_str()).collect();
+        assert_eq!(names, vec!["c.kept"]);
     }
 
     const SAMPLE: &str = r#"{
