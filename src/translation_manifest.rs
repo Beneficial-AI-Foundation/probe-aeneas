@@ -1,5 +1,5 @@
-//! `translation_manifest` module: parse Aeneas's `translation.json` and overlay
-//! its authoritative loop/primary classification onto [`FunctionRecord`]s.
+//! `translation_manifest` module: parse Aeneas's `translation.json` and use it
+//! as the authoritative source of [`FunctionRecord`]s.
 //!
 //! Aeneas emits `translation.json` when the `emit-json` arg is set (see the
 //! project's `aeneas-config.yml`). Every generated Lean item is listed with its
@@ -8,12 +8,16 @@
 //! plus its loop helpers) shares one `def_id`. The top-level def is precisely the
 //! entry with **no** `loop` field.
 //!
-//! probe-aeneas otherwise infers "this is a loop artifact" from name suffixes
-//! (`_loop`, `_body`, `.body`, …). That heuristic is fragile in both directions.
-//! When `translation.json` is available, [`annotate`] joins it to the loaded
-//! `functions.json` records by exact `lean_name` and records the ground truth on
-//! [`FunctionRecord::is_loop_artifact`] / `parent_lean_name` / `def_id`, which the
-//! matcher then prefers over the heuristic.
+//! Two consumption modes:
+//! - [`records_from_manifest`] builds records directly from the manifest — the
+//!   authoritative replacement for the docstring scraper (`gen_functions`).
+//! - [`annotate`]/[`apply`] overlay the authoritative loop/primary classification
+//!   onto records that came from *another* source (a user-supplied
+//!   `functions.json`), joining by exact `lean_name`. probe-aeneas otherwise
+//!   infers "this is a loop artifact" from name suffixes (`_loop`, `_body`,
+//!   `.body`, …), a heuristic that is fragile in both directions; the overlay
+//!   records ground truth on [`FunctionRecord::is_loop_artifact`] /
+//!   `parent_lean_name` / `def_id`, which the matcher prefers over the heuristic.
 //!
 //! ## Error model
 //!
@@ -26,28 +30,43 @@ use std::path::{Path, PathBuf};
 use anyhow::Context as _;
 use serde::Deserialize;
 
+use crate::enrich;
 use crate::types::FunctionRecord;
 
-/// Aeneas `translation.json`. The `functions` array drives loop/primary
-/// classification (only it carries loop metadata); the `types` and `trait_impls`
-/// arrays name the Aeneas-generated auxiliary defs (type stand-ins and
-/// trait-instance wrappers) that carry `rust-source` but correspond to no Rust
-/// `exec` atom (probe-aeneas#26). `globals` and `trait_decls` are unused.
+/// Aeneas `translation.json`. The `functions`, `globals`, and `trait_impls`
+/// arrays are consumed as function-record sources ([`records_from_manifest`]);
+/// `functions` additionally drives loop/primary classification (only it carries
+/// loop metadata). The `types` and `trait_impls` arrays also name the
+/// Aeneas-generated auxiliary defs (type stand-ins and trait-instance wrappers)
+/// for [`auxiliary_lean_names`](TranslationManifest::auxiliary_lean_names).
+/// `trait_decls` is unused.
 #[derive(Debug, Deserialize)]
 pub struct TranslationManifest {
     #[serde(default)]
     pub functions: Vec<TranslationFunc>,
     #[serde(default)]
+    pub globals: Vec<TranslationFunc>,
+    #[serde(default)]
     pub types: Vec<TranslationEntry>,
     #[serde(default)]
-    pub trait_impls: Vec<TranslationEntry>,
+    pub trait_impls: Vec<TranslationFunc>,
 }
 
-/// A `types` or `trait_impls` entry from `translation.json`. Only `lean_name`
-/// is consumed — enough to identify the generated auxiliary def by name.
+/// A `types` entry from `translation.json`. Only `lean_name` is consumed —
+/// enough to identify the generated auxiliary type stand-in by name.
 #[derive(Debug, Deserialize)]
 pub struct TranslationEntry {
     pub lean_name: String,
+}
+
+/// The `source` object on a manifest entry: originating Rust file and span.
+#[derive(Debug, Deserialize)]
+pub struct Source {
+    pub file: String,
+    #[serde(default)]
+    pub begin_line: u32,
+    #[serde(default)]
+    pub end_line: u32,
 }
 
 impl TranslationManifest {
@@ -60,17 +79,53 @@ impl TranslationManifest {
     pub fn auxiliary_lean_names(&self) -> HashSet<String> {
         self.types
             .iter()
-            .chain(self.trait_impls.iter())
             .map(|e| e.lean_name.clone())
+            .chain(self.trait_impls.iter().map(|e| e.lean_name.clone()))
             .collect()
     }
 }
 
-/// A single `functions` entry from `translation.json`.
+/// Build [`FunctionRecord`]s directly from the manifest — the authoritative
+/// replacement for the docstring scraper. Draws from `functions`, `globals`,
+/// and `trait_impls` (single-method trait wrappers are real translation
+/// targets, so the wrappers must be records), excluding entries in
+/// `*External_Template.lean` — external stand-ins with no local Lean atom, the
+/// same files the legacy scraper skips (they lack the Aeneas marker).
+///
+/// Records are sorted by `lean_name` so a possibly-unstable `translation.json`
+/// array order never leaks into probe-aeneas's output (P14). The
+/// `is_hidden`/`is_extraction_artifact` name-heuristic flags are computed as the
+/// scraper did, for output parity; the authoritative loop/primary dimension
+/// rides on `is_loop_artifact`/`parent_lean_name`/`def_id`.
+pub fn records_from_manifest(manifest: &TranslationManifest) -> Vec<FunctionRecord> {
+    let mut records: Vec<FunctionRecord> = manifest
+        .functions
+        .iter()
+        .chain(manifest.globals.iter())
+        .chain(manifest.trait_impls.iter())
+        .filter(|f| !f.is_external_template())
+        .map(TranslationFunc::to_record)
+        .collect();
+    records.sort_by(|a, b| a.lean_name.cmp(&b.lean_name));
+    records
+}
+
+/// A single `functions`, `globals`, or `trait_impls` entry from
+/// `translation.json`. (Extra `trait_impls`-only fields like `impl_trait_*` are
+/// present in the JSON but not deserialized.)
 #[derive(Debug, Deserialize)]
 pub struct TranslationFunc {
     pub def_id: u64,
     pub lean_name: String,
+    /// Charon-derived qualified Rust name.
+    #[serde(default)]
+    pub rust_name: Option<String>,
+    /// Originating Rust file + span.
+    #[serde(default)]
+    pub source: Option<Source>,
+    /// Which generated Lean file the def lives in (e.g. `SrcTranslated/Funs.lean`).
+    #[serde(default)]
+    pub lean_file: Option<String>,
     /// Present only on loop-generated helpers. `loop` is a Rust keyword, hence
     /// the rename.
     #[serde(rename = "loop", default)]
@@ -78,6 +133,38 @@ pub struct TranslationFunc {
     /// `lean_name` of the enclosing top-level def (loop helpers only).
     #[serde(default)]
     pub parent_lean_name: Option<String>,
+}
+
+impl TranslationFunc {
+    /// Whether this entry lives in an `*External_Template.lean` file — an
+    /// external stand-in with no local Lean atom, excluded from records.
+    fn is_external_template(&self) -> bool {
+        self.lean_file
+            .as_deref()
+            .is_some_and(|f| f.ends_with("External_Template.lean"))
+    }
+
+    /// Convert to a [`FunctionRecord`], carrying authoritative loop/primary
+    /// classification directly (no post-hoc overlay needed).
+    fn to_record(&self) -> FunctionRecord {
+        FunctionRecord {
+            lean_name: self.lean_name.clone(),
+            rust_name: self.rust_name.clone(),
+            source: self.source.as_ref().map(|s| s.file.clone()),
+            // Line numbers are 1-based; a 0 span means the manifest omitted
+            // `begin_line`/`end_line`. Omit `lines` rather than emit a sentinel
+            // `L0-L0` range.
+            lines: self.source.as_ref().and_then(|s| {
+                (s.begin_line != 0 || s.end_line != 0)
+                    .then(|| format!("L{}-L{}", s.begin_line, s.end_line))
+            }),
+            is_hidden: enrich::is_hidden_by_name(&self.lean_name),
+            is_extraction_artifact: enrich::is_extraction_artifact(&self.lean_name),
+            is_loop_artifact: Some(self.loop_info.is_some()),
+            parent_lean_name: self.parent_lean_name.clone(),
+            def_id: Some(self.def_id),
+        }
+    }
 }
 
 /// The `loop` object on a loop-helper entry. Only presence (loop vs. not) drives
@@ -180,6 +267,89 @@ pub fn annotate(functions: &mut [FunctionRecord], manifest: &TranslationManifest
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn records_from_manifest_builds_sorts_and_excludes_templates() {
+        let json = r#"{
+            "functions": [
+                {"def_id":1,"lean_name":"c.zeta","rust_name":"c::zeta","lean_file":"SrcTranslated/Funs.lean",
+                 "source":{"file":"src/a.rs","begin_line":10,"end_line":20}},
+                {"def_id":2,"lean_name":"c.zeta_loop","rust_name":"c::zeta","lean_file":"SrcTranslated/Funs.lean",
+                 "source":{"file":"src/a.rs","begin_line":12,"end_line":18},
+                 "loop":{"id":0,"pos":[0],"is_body":false},"parent_lean_name":"c.zeta"},
+                {"def_id":3,"lean_name":"c.ext_fn","rust_name":"core::ext",
+                 "lean_file":"SrcTranslated/FunsExternal_Template.lean",
+                 "source":{"file":"/rustc/x.rs","begin_line":1,"end_line":1}}
+            ],
+            "globals":[
+                {"def_id":4,"lean_name":"c.alpha","rust_name":"c::ALPHA","lean_file":"SrcTranslated/Funs.lean",
+                 "source":{"file":"src/a.rs","begin_line":1,"end_line":1}}
+            ],
+            "trait_impls":[
+                {"def_id":5,"lean_name":"c.T.Insts.Tr","rust_name":"c::{impl Tr for T}",
+                 "lean_file":"SrcTranslated/Funs.lean","source":{"file":"src/a.rs","begin_line":30,"end_line":40}}
+            ]
+        }"#;
+        let m: TranslationManifest = serde_json::from_str(json).unwrap();
+        let recs = records_from_manifest(&m);
+
+        // Sorted by lean_name (P14); the External_Template entry is excluded;
+        // functions + globals + trait_impls are all included.
+        let names: Vec<&str> = recs.iter().map(|r| r.lean_name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["c.T.Insts.Tr", "c.alpha", "c.zeta", "c.zeta_loop"]
+        );
+
+        // Field mapping + authoritative loop/primary classification.
+        let zeta = recs.iter().find(|r| r.lean_name == "c.zeta").unwrap();
+        assert_eq!(zeta.rust_name.as_deref(), Some("c::zeta"));
+        assert_eq!(zeta.source.as_deref(), Some("src/a.rs"));
+        assert_eq!(zeta.lines.as_deref(), Some("L10-L20"));
+        assert_eq!(zeta.is_loop_artifact, Some(false));
+        assert_eq!(zeta.def_id, Some(1));
+
+        let zloop = recs.iter().find(|r| r.lean_name == "c.zeta_loop").unwrap();
+        assert_eq!(zloop.is_loop_artifact, Some(true));
+        assert_eq!(zloop.parent_lean_name.as_deref(), Some("c.zeta"));
+    }
+
+    #[test]
+    fn omits_lines_when_source_span_missing() {
+        // `source` present but with no line span -> serde defaults both to 0.
+        // A 0 span must yield no `lines`, not a sentinel `L0-L0` range.
+        let json = r#"{
+            "functions": [
+                {"def_id":1,"lean_name":"c.f","rust_name":"c::f","lean_file":"SrcTranslated/Funs.lean",
+                 "source":{"file":"src/a.rs"}}
+            ]
+        }"#;
+        let m: TranslationManifest = serde_json::from_str(json).unwrap();
+        let recs = records_from_manifest(&m);
+        let f = recs.iter().find(|r| r.lean_name == "c.f").unwrap();
+        assert_eq!(f.source.as_deref(), Some("src/a.rs"));
+        assert_eq!(f.lines, None);
+    }
+
+    #[test]
+    fn external_template_match_is_suffix_precise() {
+        // Only files ending in `External_Template.lean` are excluded; an
+        // unrelated path that merely contains the substring is kept.
+        let json = r#"{
+            "functions": [
+                {"def_id":1,"lean_name":"c.kept","rust_name":"c::kept",
+                 "lean_file":"External_Template_Notes/Funs.lean",
+                 "source":{"file":"src/a.rs","begin_line":1,"end_line":2}},
+                {"def_id":2,"lean_name":"c.dropped","rust_name":"c::dropped",
+                 "lean_file":"SrcTranslated/FunsExternal_Template.lean",
+                 "source":{"file":"/rustc/x.rs","begin_line":1,"end_line":1}}
+            ]
+        }"#;
+        let m: TranslationManifest = serde_json::from_str(json).unwrap();
+        let recs = records_from_manifest(&m);
+        let names: Vec<&str> = recs.iter().map(|r| r.lean_name.as_str()).collect();
+        assert_eq!(names, vec!["c.kept"]);
+    }
 
     const SAMPLE: &str = r#"{
         "aeneas_version": "x",

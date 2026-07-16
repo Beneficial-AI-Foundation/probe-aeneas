@@ -3,6 +3,7 @@ pub mod cfg_eval;
 pub mod enrich;
 pub mod extract;
 pub mod extract_runner;
+pub mod function_source;
 pub mod gen_functions;
 pub mod listfuns;
 pub mod setup;

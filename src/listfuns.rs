@@ -24,7 +24,6 @@ use probe::types::Atom;
 use crate::aeneas_config::AeneasConfig;
 use crate::enrich::{self, EnrichedFunctionsFile};
 use crate::extract_runner::{self, ExtractRunnerError};
-use crate::gen_functions;
 
 // ---------------------------------------------------------------------------
 // Typed error
@@ -99,6 +98,24 @@ pub fn run_listfuns(lean_project: &Path, output: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Generate a basic (non-enriched) `functions.json` via the single record
+/// source dispatch: built from `translation.json` when present, else the legacy
+/// docstring scrape. Replaces the direct `gen_functions::generate_functions_json`
+/// call so this path also benefits from the manifest.
+pub fn run_basic_listfuns(lean_project: &Path, output: &Path) -> Result<()> {
+    let translation_path = crate::translation_manifest::resolve_path(lean_project);
+    let resolved = crate::function_source::resolve(
+        Some(lean_project),
+        None,
+        translation_path.as_deref(),
+        false,
+    )
+    .context("resolve function records")?;
+    crate::gen_functions::write_functions_json(&resolved.records, output)
+        .map_err(anyhow::Error::new)?;
+    Ok(())
+}
+
 /// Generate an enriched functions.json: parse Aeneas files, run probe-lean
 /// extract internally, and enrich with verification data.
 ///
@@ -111,18 +128,20 @@ pub fn run_enriched_listfuns(
     module_prefix: Option<&str>,
     aeneas_config_path: Option<&Path>,
 ) -> Result<()> {
-    let mut records =
-        gen_functions::parse_aeneas_project(lean_project).context("parse Aeneas project")?;
-    println!(
-        "Parsed {} function entries from Aeneas files",
-        records.len()
-    );
-
-    // Overlay Aeneas's translation.json (authoritative loop/primary
-    // classification) when present. Optional: heuristic fallback otherwise.
-    // `resolve_path` honors `aeneas_args.dest`, matching the `extract` flow.
+    // Resolve records through the single source dispatch. `resolve_path` honors
+    // `aeneas_args.dest`, matching the `extract` flow; the manifest overlay (or
+    // legacy scrape when absent) happens inside `function_source::resolve`.
     let translation_path = crate::translation_manifest::resolve_path(lean_project);
-    let aux_defs = crate::translation_manifest::apply(&mut records, translation_path.as_deref());
+    let resolved = crate::function_source::resolve(
+        Some(lean_project),
+        None,
+        translation_path.as_deref(),
+        false,
+    )
+    .context("resolve function records")?;
+    let records = resolved.records;
+    let aux_defs = resolved.aux_defs;
+    println!("Resolved {} function records", records.len());
 
     let atoms = load_atoms(lean_project, atoms_path, module_prefix)?;
     println!("Loaded {} atoms from probe-lean", atoms.len());

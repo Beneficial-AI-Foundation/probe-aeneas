@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use probe_aeneas::{extract, extract_runner, gen_functions, listfuns, setup};
+use probe_aeneas::{extract, extract_runner, listfuns, setup};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -293,8 +293,7 @@ fn main() {
             if lake {
                 listfuns::run_listfuns(&lean_project, &output).map_err(anyhow::Error::new)
             } else if no_enrich {
-                gen_functions::generate_functions_json(&lean_project, &output)
-                    .map_err(anyhow::Error::new)
+                listfuns::run_basic_listfuns(&lean_project, &output).map_err(anyhow::Error::new)
             } else {
                 listfuns::run_enriched_listfuns(
                     &lean_project,
