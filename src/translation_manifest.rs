@@ -42,6 +42,13 @@ use crate::types::FunctionRecord;
 /// `trait_decls` is unused.
 #[derive(Debug, Deserialize)]
 pub struct TranslationManifest {
+    /// charon version that produced this manifest (top-level `charon_version`).
+    /// Used to provenance-gate the `def_id` join: probe-rust's `charon-def-id`s
+    /// are only comparable to these `def_id`s when they come from the same
+    /// charon *version* (best-effort provenance, not proof of an identical run;
+    /// see docs/charon-def-id-matching-plan.md).
+    #[serde(default)]
+    pub charon_version: Option<String>,
     #[serde(default)]
     pub functions: Vec<TranslationFunc>,
     #[serde(default)]
@@ -98,14 +105,22 @@ impl TranslationManifest {
 /// scraper did, for output parity; the authoritative loop/primary dimension
 /// rides on `is_loop_artifact`/`parent_lean_name`/`def_id`.
 pub fn records_from_manifest(manifest: &TranslationManifest) -> Vec<FunctionRecord> {
-    let mut records: Vec<FunctionRecord> = manifest
+    // Only `functions` entries carry a charon `FunDeclId` in `def_id`; `globals`
+    // and `trait_impls` are numbered in charon's separate `GlobalDeclId`/
+    // `TraitImplId` id spaces, so their `def_id`s must not feed the integer join
+    // (an int collision across kinds would be a silent wrong mapping).
+    let funcs = manifest
         .functions
         .iter()
-        .chain(manifest.globals.iter())
+        .filter(|f| !f.is_external_template())
+        .map(|f| f.to_record(true));
+    let others = manifest
+        .globals
+        .iter()
         .chain(manifest.trait_impls.iter())
         .filter(|f| !f.is_external_template())
-        .map(TranslationFunc::to_record)
-        .collect();
+        .map(|f| f.to_record(false));
+    let mut records: Vec<FunctionRecord> = funcs.chain(others).collect();
     records.sort_by(|a, b| a.lean_name.cmp(&b.lean_name));
     records
 }
@@ -146,7 +161,11 @@ impl TranslationFunc {
 
     /// Convert to a [`FunctionRecord`], carrying authoritative loop/primary
     /// classification directly (no post-hoc overlay needed).
-    fn to_record(&self) -> FunctionRecord {
+    ///
+    /// `is_fun_decl` is `true` only for entries from the manifest's `functions`
+    /// array, whose `def_id` is a charon `FunDeclId` (the one comparable to
+    /// probe-rust's `charon-def-id`). Globals and trait-impls pass `false`.
+    fn to_record(&self, is_fun_decl: bool) -> FunctionRecord {
         FunctionRecord {
             lean_name: self.lean_name.clone(),
             rust_name: self.rust_name.clone(),
@@ -163,6 +182,7 @@ impl TranslationFunc {
             is_loop_artifact: Some(self.loop_info.is_some()),
             parent_lean_name: self.parent_lean_name.clone(),
             def_id: Some(self.def_id),
+            def_id_is_fun_decl: is_fun_decl,
         }
     }
 }
@@ -204,16 +224,27 @@ pub fn resolve_path(project_root: &Path) -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
+/// What overlaying a `translation.json` yields for downstream consumers:
+/// the auxiliary-def Lean names to flag as artifacts, plus the manifest's
+/// charon version for provenance-gating the `def_id` join.
+#[derive(Debug, Default)]
+pub struct ManifestOverlay {
+    /// Lean names of auxiliary defs (type stand-ins + trait-instance wrappers).
+    pub aux_defs: HashSet<String>,
+    /// charon version from the manifest, or `None` when unavailable.
+    pub charon_version: Option<String>,
+}
+
 /// Load Aeneas's `translation.json` from `path` (if any), overlay its
 /// authoritative loop/primary classification onto `functions`, and return the
-/// set of auxiliary-def Lean names (type stand-ins + trait-instance wrappers)
-/// for consumers to flag as extraction artifacts. A `None` path is a silent
-/// no-op; a load error is reported and swallowed. Both return an empty set and
-/// fall back to the name heuristics, never aborting the pipeline. Shared by the
+/// auxiliary-def Lean names (type stand-ins + trait-instance wrappers) plus the
+/// manifest's charon version. A `None` path is a silent no-op; a load error is
+/// reported and swallowed. Both return an empty [`ManifestOverlay`] and fall
+/// back to the name heuristics, never aborting the pipeline. Shared by the
 /// `extract` and `listfuns` flows.
-pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> HashSet<String> {
+pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> ManifestOverlay {
     let Some(path) = path else {
-        return HashSet::new();
+        return ManifestOverlay::default();
     };
     match load(path) {
         Ok(manifest) => {
@@ -222,12 +253,15 @@ pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> HashSet<S
                 "  Applied translation.json overlay: {n}/{} entries classified authoritatively",
                 functions.len()
             );
-            manifest.auxiliary_lean_names()
+            ManifestOverlay {
+                aux_defs: manifest.auxiliary_lean_names(),
+                charon_version: manifest.charon_version,
+            }
         }
         Err(e) => {
             eprintln!("  Warning: could not read {}: {e:#}", path.display());
             eprintln!("  Falling back to name-heuristic classification.");
-            HashSet::new()
+            ManifestOverlay::default()
         }
     }
 }
@@ -258,6 +292,9 @@ pub fn annotate(functions: &mut [FunctionRecord], manifest: &TranslationManifest
             rec.is_loop_artifact = Some(tf.loop_info.is_some());
             rec.parent_lean_name = tf.parent_lean_name.clone();
             rec.def_id = Some(tf.def_id);
+            // `by_lean_name` is built only from `manifest.functions`, so every
+            // annotated `def_id` here is a charon `FunDeclId`.
+            rec.def_id_is_fun_decl = true;
             annotated += 1;
         }
     }
@@ -312,6 +349,19 @@ mod tests {
         let zloop = recs.iter().find(|r| r.lean_name == "c.zeta_loop").unwrap();
         assert_eq!(zloop.is_loop_artifact, Some(true));
         assert_eq!(zloop.parent_lean_name.as_deref(), Some("c.zeta"));
+
+        // Only `functions`-array entries carry a charon `FunDeclId`; the global
+        // (`c.alpha`) and trait-impl (`c.T.Insts.Tr`) records must not, so their
+        // `def_id`s never feed the integer join.
+        assert!(zeta.def_id_is_fun_decl);
+        assert!(zloop.def_id_is_fun_decl);
+        let alpha = recs.iter().find(|r| r.lean_name == "c.alpha").unwrap();
+        let trait_impl = recs.iter().find(|r| r.lean_name == "c.T.Insts.Tr").unwrap();
+        assert!(!alpha.def_id_is_fun_decl, "global def_id is a GlobalDeclId");
+        assert!(
+            !trait_impl.def_id_is_fun_decl,
+            "trait-impl def_id is a TraitImplId"
+        );
     }
 
     #[test]
@@ -393,6 +443,15 @@ mod tests {
             lean_name: lean_name.to_string(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn parses_charon_version() {
+        let m: TranslationManifest = serde_json::from_str(SAMPLE).unwrap();
+        assert_eq!(m.charon_version.as_deref(), Some("y"));
+        // Absent field deserializes to None (legacy manifests, provenance gate off).
+        let bare: TranslationManifest = serde_json::from_str(r#"{"functions": []}"#).unwrap();
+        assert_eq!(bare.charon_version, None);
     }
 
     #[test]

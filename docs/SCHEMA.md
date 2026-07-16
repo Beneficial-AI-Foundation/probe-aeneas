@@ -11,7 +11,7 @@ the `data` field and the output of non-enveloped commands.
 
 ---
 
-## Common: Schema 2.0 Envelope
+## Common: Envelope (Schema 2.x)
 
 Both `extract` and `translate` commands wrap their output in a standardized
 metadata envelope. The envelope fields vary slightly between commands (see
@@ -20,7 +20,7 @@ sections below), but share this structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema` | string | Data type identifier (e.g. `"probe-aeneas/extract"`) |
-| `schema-version` | string | Interchange spec version (`"2.0"`) |
+| `schema-version` | string | Interchange spec version (`"2.1"` for `extract`, `"2.0"` for `translate`) |
 | `tool.name` | string | Always `"probe-aeneas"` |
 | `tool.version` | string | Semver version of the probe-aeneas binary |
 | `tool.command` | string | Subcommand that produced the file |
@@ -38,7 +38,7 @@ sections below), but share this structure:
 ```json
 {
   "schema": "probe-aeneas/extract",
-  "schema-version": "2.0",
+  "schema-version": "2.1",
   "tool": {
     "name": "probe-aeneas",
     "version": "0.9.0",
@@ -234,6 +234,8 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
+| `charon-def-id` | integer | no | The charon `FunDeclId` for this function (from probe-rust's span→`FunDecl` resolution). Equals Aeneas's `translation.json` `def_id`, enabling a precise integer join to the Lean translation. Always emitted **together with** `charon-version` (see below). |
+| `charon-version` | string | no | The charon version that produced `charon-def-id`. Provenance-gates the `def_id` join: the join runs only when this matches Aeneas's `translation.json` `charon_version`. |
 | `is-disabled` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is either cfg-inactive in the Aeneas build (its `cfg` predicate is false) or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
 | `is-relevant` | bool | yes | Crate membership, independent of scope: `true` when the atom belongs to the analyzed crate (non-empty `code-path`), `false` for external stubs. |
 | `cfg` | string | no | The combined item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; own gate plus enclosing `impl`/`mod`/`trait` gates, `all(...)`-joined). Omitted when the function has no `#[cfg]` gate. Used to decide `is-disabled` (cfg-inactive ⟹ out of scope). |
@@ -243,6 +245,8 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
+
+> **Coupling invariant.** `charon-def-id` and `charon-version` are emitted **together or not at all**. A `FunDeclId` is only interpretable relative to the charon run that produced it, so probe-rust never emits an id without its version. Consumers may therefore treat a present `charon-def-id` as always accompanied by a `charon-version`. Note the version match is **best-effort provenance**: two runs of the same charon version with different cargo flags or sources can still assign different ids, which the version check cannot detect. A charon commit hash or LLBC digest would be the durable fix.
 
 #### Lean-specific fields
 
@@ -492,15 +496,22 @@ entries with:
 
 | Value | Strategy | Description |
 |-------|----------|-------------|
+| `"exact"` | `charon-def-id` | Matched by charon `FunDeclId` integer equality (atom `charon-def-id` == manifest `def_id`), provenance-gated on matching `charon-version` |
 | `"exact"` | `rust-qualified-name` | Matched via Charon-derived `rust-qualified-name` joined with `functions.json` `rust_name` |
 | `"file-and-name"` | `file+display-name` | Same source file + matching base method name (unambiguous) |
 | `"file-and-lines"` | `file+line-overlap` | Same source file + overlapping line ranges |
 
 ### Strategy Priority
 
-Strategies are applied in order. Once a Rust atom or Lean atom is matched by
-an earlier strategy, it is excluded from later strategies. Each Rust function
-maps to exactly one Lean definition (1-to-1).
+Strategies are applied in order (`charon-def-id` first, then the three
+name/location strategies). Once a Rust atom or Lean atom is matched by an
+earlier strategy, it is excluded from later strategies. Each Rust function maps
+to exactly one Lean definition (1-to-1).
+
+The `charon-def-id` join is precise (no name normalization) but runs only when
+probe-rust emits `charon-def-id` **and** its `charon-version` matches the
+manifest's `charon_version`. Otherwise the name/location strategies handle the
+atom, so output degrades gracefully rather than binding across charon versions.
 
 ---
 
@@ -607,7 +618,14 @@ When changing required fields or their semantics, increment the major version
 (`2.0` -> `3.0`).
 
 Consumers should check `schema-version` and reject files with an unsupported
-major version.
+major version. A minor bump is backward-compatible: a `2.0` consumer can read a
+`2.1` file (the new fields are optional).
+
+The `probe-aeneas/extract` envelope is at `2.1`: it carries the optional
+`charon-def-id`/`charon-version` atom fields (passed through from probe-rust).
+The `probe/mappings` (`translate`) envelope remains `2.0` — it gained no new
+fields (the `charon-def-id` `method` value is a backward-compatible addition to
+an existing field).
 
 ---
 
@@ -615,9 +633,11 @@ major version.
 
 ### With probe-rust
 
-probe-aeneas consumes `probe-rust/extract` (Schema 2.0) files as input.
-The `--with-charon` flag on `probe-rust extract` is recommended for best
-translation accuracy (enables strategy 1: `rust-qualified-name`).
+probe-aeneas consumes `probe-rust/extract` (Schema 2.x — probe-rust emits `2.1`)
+files as input. Charon enrichment on `probe-rust extract` is recommended for best
+translation accuracy: `--with-charon` (or `--translation <manifest>`, which reads
+charon `def_id`s from an Aeneas `translation.json`) enables the `charon-def-id`
+join (strategy 0) and `rust-qualified-name` (strategy 1).
 
 ### With probe-lean
 

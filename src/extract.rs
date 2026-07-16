@@ -566,6 +566,7 @@ pub fn run_extract(
         lean_json,
         lean_project,
         with_public_api,
+        translation_json,
     )?;
 
     // --- Resolve function records (single source dispatch) ---
@@ -593,7 +594,12 @@ pub fn run_extract(
     let config = AeneasConfig::load(aeneas_config, lean_project).context("load aeneas config")?;
 
     // --- Generate translations ---
-    let translations_result = run_translate(&rust_path, &lean_path, &resolved.records)?;
+    let translations_result = run_translate(
+        &rust_path,
+        &lean_path,
+        &resolved.records,
+        resolved.charon_version.as_deref(),
+    )?;
     let aux_defs = resolved.aux_defs;
 
     // --- Merge atom maps ---
@@ -616,12 +622,14 @@ pub fn run_extract(
 ///
 /// When `lean_project` is available, intermediate extractor outputs are saved
 /// to `<lean_project>/.verilib/probes/` alongside the final merged output.
+#[allow(clippy::too_many_arguments)]
 fn resolve_inputs(
     rust_json: Option<&Path>,
     rust_project: Option<&Path>,
     lean_json: Option<&Path>,
     lean_project: Option<&Path>,
     with_public_api: bool,
+    translation_json: Option<&Path>,
 ) -> Result<(PathBuf, PathBuf)> {
     let need_rust_extract = rust_json.is_none();
     // When --lean is given (pre-computed JSON), skip Lean extraction even if
@@ -642,7 +650,12 @@ fn resolve_inputs(
         println!("Extracting Rust and Lean atoms in parallel...\n");
         let (rust_result, lean_result) = std::thread::scope(|s| {
             let rust_handle = s.spawn(|| {
-                extract_runner::run_probe_rust_extract(rust_proj, probes_dir_ref, with_public_api)
+                extract_runner::run_probe_rust_extract(
+                    rust_proj,
+                    probes_dir_ref,
+                    with_public_api,
+                    translation_json,
+                )
             });
             let lean_handle =
                 s.spawn(|| extract_runner::run_probe_lean_extract(lean_proj, probes_dir_ref));
@@ -669,6 +682,7 @@ fn resolve_inputs(
                 rust_project.unwrap(),
                 probes_dir_ref,
                 with_public_api,
+                translation_json,
             )?
         };
 
@@ -690,10 +704,13 @@ fn resolve_inputs(
 ///
 /// `functions` are the resolved records (source-blind: manifest-built or
 /// legacy-scraped, already carrying any `translation.json` overlay).
+/// `manifest_charon_version` provenance-gates the charon-`def_id` join (see
+/// [`generate_translations`]).
 fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
     functions: &[FunctionRecord],
+    manifest_charon_version: Option<&str>,
 ) -> Result<MappingMaps> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
@@ -706,7 +723,8 @@ fn run_translate(
     println!("  {} atoms", lean_data.len());
 
     println!("\nGenerating translations...");
-    let (mappings, stats) = generate_translations(&rust_data, &lean_data, functions);
+    let (mappings, stats) =
+        generate_translations(&rust_data, &lean_data, functions, manifest_charon_version);
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {
@@ -990,7 +1008,7 @@ fn write_aeneas_envelope(
 
     let envelope = MergedAtomEnvelope {
         schema: "probe-aeneas/extract".to_string(),
-        schema_version: "2.0".to_string(),
+        schema_version: "2.1".to_string(),
         tool: Tool {
             name: "probe-aeneas".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -1134,7 +1152,12 @@ pub fn run_translate_only(
     println!("  {} entries", resolved.records.len());
 
     println!("\nGenerating translations...");
-    let (mappings, stats) = generate_translations(&rust_data, &lean_data, &resolved.records);
+    let (mappings, stats) = generate_translations(
+        &rust_data,
+        &lean_data,
+        &resolved.records,
+        resolved.charon_version.as_deref(),
+    );
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {

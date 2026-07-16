@@ -49,6 +49,9 @@ pub struct ResolvedRecords {
     pub aux_defs: HashSet<String>,
     /// How `records` were produced.
     pub source: RecordSource,
+    /// charon version recorded in `translation.json`, for provenance-gating the
+    /// `def_id` join. `None` when no manifest is available (lake/legacy arms).
+    pub charon_version: Option<String>,
 }
 
 /// Resolve function records in memory.
@@ -73,11 +76,12 @@ pub fn resolve(
     // Override: honor the user's file, enriched by the manifest overlay if present.
     if let Some(path) = functions_override {
         let mut records = translate::load_functions(path)?;
-        let aux_defs = translation_manifest::apply(&mut records, translation_json);
+        let overlay = translation_manifest::apply(&mut records, translation_json);
         return Ok(ResolvedRecords {
             records,
-            aux_defs,
+            aux_defs: overlay.aux_defs,
             source: RecordSource::Override,
+            charon_version: overlay.charon_version,
         });
     }
 
@@ -97,6 +101,7 @@ pub fn resolve(
                     records,
                     aux_defs,
                     source: RecordSource::Manifest,
+                    charon_version: manifest.charon_version,
                 });
             }
             Err(e) => {
@@ -132,5 +137,6 @@ pub fn resolve(
         records,
         aux_defs: HashSet::new(),
         source,
+        charon_version: None,
     })
 }

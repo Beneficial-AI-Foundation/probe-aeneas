@@ -1,0 +1,1819 @@
+{
+  "_note": "Join-correctness + naming-noise oracle for the charon-def-id matcher (see docs/charon-def-id-matching-plan.md, consumed by src/translate.rs tests). matched: [probe-rust RQN, translation.json rust_name] pairs from real spqr+dalek extracts that are the SAME charon function rendered two ways; they MUST normalize-equal (the name matcher's job; the id-join sidesteps this by joining on the integer FunDeclId). distinct: [rust_name_a, rust_name_b] genuinely-different impls. The '&'-differentiated pairs (owned/borrowed, Shared0/SharedA) COLLAPSE under normalize_rust_name and are the must-split cases the id-join fixes: given distinct def_ids they map to distinct Lean defs. Concrete-type-only pairs (e.g. From<Version>/From<Direction> for i32) have no rust atoms and are conservative-only. Pins the RQN naming noise so a future normalizer change is deliberate.",
+  "matched": [
+    [
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::mac_ct",
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::mac_ct"
+    ],
+    [
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::mac_hdr",
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::mac_hdr"
+    ],
+    [
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::update",
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::update"
+    ],
+    [
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::verify_ct",
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::verify_ct"
+    ],
+    [
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::verify_hdr",
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::verify_hdr"
+    ],
+    [
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::new",
+      "spqr::authenticator::{spqr::authenticator::Authenticator}::new"
+    ],
+    [
+      "spqr::authenticator::serialize::{spqr::authenticator::Authenticator}::into_pb",
+      "spqr::authenticator::serialize::{spqr::authenticator::Authenticator}::into_pb"
+    ],
+    [
+      "spqr::authenticator::serialize::{spqr::authenticator::Authenticator}::from_pb",
+      "spqr::authenticator::serialize::{spqr::authenticator::Authenticator}::from_pb"
+    ],
+    [
+      "spqr::chain::{spqr::chain::Chain}::epoch_idx",
+      "spqr::chain::{spqr::chain::Chain}::epoch_idx"
+    ],
+    [
+      "spqr::chain::{spqr::chain::Chain}::recv_key",
+      "spqr::chain::{spqr::chain::Chain}::recv_key"
+    ],
+    [
+      "spqr::chain::{spqr::chain::Chain}::send_key",
+      "spqr::chain::{spqr::chain::Chain}::send_key"
+    ],
+    [
+      "spqr::chain::{spqr::chain::Chain}::add_epoch",
+      "spqr::chain::{spqr::chain::Chain}::add_epoch"
+    ],
+    [
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::clear_next",
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::clear_next"
+    ],
+    [
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::next_key",
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::next_key"
+    ],
+    [
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::key",
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::key"
+    ],
+    [
+      "spqr::chain::{spqr::proto::pq_ratchet::ChainParams}::max_jump_or_default",
+      "spqr::chain::{spqr::proto::pq_ratchet::ChainParams}::max_jump_or_default"
+    ],
+    [
+      "spqr::chain::{spqr::proto::pq_ratchet::ChainParams}::max_ooo_keys_or_default",
+      "spqr::chain::{spqr::proto::pq_ratchet::ChainParams}::max_ooo_keys_or_default"
+    ],
+    [
+      "spqr::chain::{spqr::proto::pq_ratchet::ChainParams}::trim_size",
+      "spqr::chain::{spqr::proto::pq_ratchet::ChainParams}::trim_size"
+    ],
+    [
+      "spqr::chain::{spqr::chain::KeyHistory}::clear",
+      "spqr::chain::{spqr::chain::KeyHistory}::clear"
+    ],
+    [
+      "spqr::chain::{spqr::chain::KeyHistory}::add",
+      "spqr::chain::{spqr::chain::KeyHistory}::add"
+    ],
+    [
+      "spqr::chain::{spqr::chain::KeyHistory}::gc",
+      "spqr::chain::{spqr::chain::KeyHistory}::gc"
+    ],
+    [
+      "spqr::chain::{spqr::chain::KeyHistory}::get",
+      "spqr::chain::{spqr::chain::KeyHistory}::get"
+    ],
+    [
+      "spqr::chain::{spqr::chain::KeyHistory}::remove",
+      "spqr::chain::{spqr::chain::KeyHistory}::remove"
+    ],
+    [
+      "spqr::chain::{spqr::chain::Chain}::into_pb",
+      "spqr::chain::{spqr::chain::Chain}::into_pb"
+    ],
+    [
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::into_pb",
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::into_pb"
+    ],
+    [
+      "spqr::chain::{spqr::chain::ChainParams}::into_pb",
+      "spqr::chain::{spqr::chain::ChainParams}::into_pb"
+    ],
+    [
+      "spqr::chain::{core::default::Default for spqr::chain::ChainParams}::default",
+      "spqr::chain::{impl core::default::Default for spqr::chain::ChainParams}::default"
+    ],
+    [
+      "spqr::chain::{spqr::chain::KeyHistory}::new",
+      "spqr::chain::{spqr::chain::KeyHistory}::new"
+    ],
+    [
+      "spqr::chain::{spqr::chain::Chain}::ced_for_direction",
+      "spqr::chain::{spqr::chain::Chain}::ced_for_direction"
+    ],
+    [
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::new",
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::new"
+    ],
+    [
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::next_key_internal",
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::next_key_internal"
+    ],
+    [
+      "spqr::chain::{spqr::chain::Chain}::new",
+      "spqr::chain::{spqr::chain::Chain}::new"
+    ],
+    [
+      "spqr::chain::{spqr::chain::Chain}::from_pb",
+      "spqr::chain::{spqr::chain::Chain}::from_pb"
+    ],
+    [
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::from_pb",
+      "spqr::chain::{spqr::chain::ChainEpochDirection}::from_pb"
+    ],
+    [
+      "spqr::chain_from",
+      "spqr::chain_from"
+    ],
+    [
+      "spqr::chain_from_version_negotiation",
+      "spqr::chain_from_version_negotiation"
+    ],
+    [
+      "spqr::current_version",
+      "spqr::current_version"
+    ],
+    [
+      "spqr::decode_state",
+      "spqr::decode_state"
+    ],
+    [
+      "spqr::empty_state",
+      "spqr::empty_state"
+    ],
+    [
+      "spqr::encoding::{spqr::encoding::Decoder for core::option::Option}::add_chunk",
+      "spqr::encoding::{impl spqr::encoding::Decoder for core::option::Option<T>}::add_chunk"
+    ],
+    [
+      "spqr::encoding::{spqr::encoding::Encoder for core::option::Option}::next_chunk",
+      "spqr::encoding::{impl spqr::encoding::Encoder for core::option::Option<T>}::next_chunk"
+    ],
+    [
+      "spqr::encoding::{spqr::encoding::Decoder for core::option::Option}::decoded_message",
+      "spqr::encoding::{impl spqr::encoding::Decoder for core::option::Option<T>}::decoded_message"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::AddAssign<&'0 (spqr::encoding::gf::GF16)> for spqr::encoding::gf::GF16}::add_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::AddAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add_assign"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::DivAssign<&'0 (spqr::encoding::gf::GF16)> for spqr::encoding::gf::GF16}::div_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::DivAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div_assign"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::MulAssign<&'0 (spqr::encoding::gf::GF16)> for spqr::encoding::gf::GF16}::mul_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::MulAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul_assign"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::SubAssign<&'0 (spqr::encoding::gf::GF16)> for spqr::encoding::gf::GF16}::sub_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::SubAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub_assign"
+    ],
+    [
+      "spqr::encoding::gf::GF16::const_div",
+      "spqr::encoding::gf::{spqr::encoding::gf::GF16}::const_div"
+    ],
+    [
+      "spqr::encoding::gf::GF16::const_mul",
+      "spqr::encoding::gf::{spqr::encoding::gf::GF16}::const_mul"
+    ],
+    [
+      "spqr::encoding::gf::GF16::const_sub",
+      "spqr::encoding::gf::{spqr::encoding::gf::GF16}::const_sub"
+    ],
+    [
+      "spqr::encoding::gf::GF16::div_impl",
+      "spqr::encoding::gf::{spqr::encoding::gf::GF16}::div_impl"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::AddAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::AddAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add_assign"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::DivAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::DivAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div_assign"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::MulAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::MulAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul_assign"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::SubAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::SubAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub_assign"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::Add<&'0 (spqr::encoding::gf::GF16), spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add",
+      "spqr::encoding::gf::{impl core::ops::arith::Add<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::Div<&'0 (spqr::encoding::gf::GF16), spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div",
+      "spqr::encoding::gf::{impl core::ops::arith::Div<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::Mul<&'0 (spqr::encoding::gf::GF16), spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul",
+      "spqr::encoding::gf::{impl core::ops::arith::Mul<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::Sub<&'0 (spqr::encoding::gf::GF16), spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub",
+      "spqr::encoding::gf::{impl core::ops::arith::Sub<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::Add<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add",
+      "spqr::encoding::gf::{impl core::ops::arith::Add<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::Div<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div",
+      "spqr::encoding::gf::{impl core::ops::arith::Div<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::Mul<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul",
+      "spqr::encoding::gf::{impl core::ops::arith::Mul<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul"
+    ],
+    [
+      "spqr::encoding::gf::{core::ops::arith::Sub<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub",
+      "spqr::encoding::gf::{impl core::ops::arith::Sub<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub"
+    ],
+    [
+      "spqr::encoding::gf::GF16::new",
+      "spqr::encoding::gf::{spqr::encoding::gf::GF16}::new"
+    ],
+    [
+      "spqr::encoding::gf::mul2_u16",
+      "spqr::encoding::gf::mul2_u16"
+    ],
+    [
+      "spqr::encoding::gf::parallel_mult",
+      "spqr::encoding::gf::parallel_mult"
+    ],
+    [
+      "spqr::encoding::gf::reduce::poly_reduce",
+      "spqr::encoding::gf::reduce::poly_reduce"
+    ],
+    [
+      "spqr::encoding::gf::reduce::reduce_bytes",
+      "spqr::encoding::gf::reduce::reduce_bytes"
+    ],
+    [
+      "spqr::encoding::gf::reduce::reduce_from_byte",
+      "spqr::encoding::gf::reduce::reduce_from_byte"
+    ],
+    [
+      "spqr::encoding::gf::unaccelerated::mul",
+      "spqr::encoding::gf::unaccelerated::mul"
+    ],
+    [
+      "spqr::encoding::gf::unaccelerated::mul2",
+      "spqr::encoding::gf::unaccelerated::mul2"
+    ],
+    [
+      "spqr::encoding::gf::unaccelerated::poly_mul",
+      "spqr::encoding::gf::unaccelerated::poly_mul"
+    ],
+    [
+      "spqr::encoding::{spqr::encoding::Encoder for core::option::Option}::encode_bytes",
+      "spqr::encoding::{impl spqr::encoding::Encoder for core::option::Option<T>}::encode_bytes"
+    ],
+    [
+      "spqr::encoding::{core::convert::From<spqr::encoding::polynomial::PolynomialError> for spqr::encoding::EncodingError}::from",
+      "spqr::encoding::{impl core::convert::From<spqr::encoding::polynomial::PolynomialError> for spqr::encoding::EncodingError}::from"
+    ],
+    [
+      "spqr::encoding::{spqr::encoding::Decoder for core::option::Option}::new",
+      "spqr::encoding::{impl spqr::encoding::Decoder for core::option::Option<T>}::new"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::add_assign",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::add_assign"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_interpolate_complete",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_interpolate_complete"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::compute_at",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::compute_at"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::mult_assign",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::mult_assign"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::serialize",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::serialize"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::mult_xdiff_assign_trailing",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::mult_xdiff_assign_trailing"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyConst}::mult",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyConst<N>}::mult"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyConst}::mult_xdiff",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyConst<N>}::mult_xdiff"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyConst}::to_poly",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyConst<N>}::to_poly"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::Decoder for spqr::encoding::polynomial::PolyDecoder}::add_chunk",
+      "spqr::encoding::polynomial::{impl spqr::encoding::Decoder for spqr::encoding::polynomial::PolyDecoder}::add_chunk"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::Decoder for spqr::encoding::polynomial::PolyDecoder}::decoded_message",
+      "spqr::encoding::polynomial::{impl spqr::encoding::Decoder for spqr::encoding::polynomial::PolyDecoder}"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::get_pts_needed",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::get_pts_needed"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::necessary_points",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::necessary_points"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::Encoder for spqr::encoding::polynomial::PolyEncoder}::next_chunk",
+      "spqr::encoding::polynomial::{impl spqr::encoding::Encoder for spqr::encoding::polynomial::PolyEncoder}::next_chunk"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::get_encoder_state",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::get_encoder_state"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::chunk_at",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::chunk_at"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::point_at",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::point_at"
+    ],
+    [
+      "spqr::encoding::polynomial::{core::cmp::Ord for spqr::encoding::polynomial::Pt}::cmp",
+      "spqr::encoding::polynomial::{impl core::cmp::Ord for spqr::encoding::polynomial::Pt}::cmp"
+    ],
+    [
+      "spqr::encoding::polynomial::{core::cmp::PartialEq<spqr::encoding::polynomial::Pt> for spqr::encoding::polynomial::Pt}::eq",
+      "spqr::encoding::polynomial::{impl core::cmp::PartialEq<spqr::encoding::polynomial::Pt> for spqr::encoding::polynomial::Pt}::eq"
+    ],
+    [
+      "spqr::encoding::polynomial::{core::cmp::PartialOrd<spqr::encoding::polynomial::Pt> for spqr::encoding::polynomial::Pt}::partial_cmp",
+      "spqr::encoding::polynomial::{impl core::cmp::PartialOrd<spqr::encoding::polynomial::Pt> for spqr::encoding::polynomial::Pt}::partial_cmp"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Pt}::serialize",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Pt}::serialize"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::into_pb",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::into_pb"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::into_pb",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::into_pb"
+    ],
+    [
+      "spqr::encoding::polynomial::const_polys_to_polys",
+      "spqr::encoding::polynomial::const_polys_to_polys"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_sum",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_sum"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::from_complete_points",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::from_complete_points"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_interpolate",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_interpolate"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_interpolate_prepare",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_interpolate_prepare"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::Encoder for spqr::encoding::polynomial::PolyEncoder}::encode_bytes",
+      "spqr::encoding::polynomial::{impl spqr::encoding::Encoder for spqr::encoding::polynomial::PolyEncoder}::encode_bytes"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::encode_bytes_base",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::encode_bytes_base"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::deserialize",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::deserialize"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::from_pb",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::from_pb"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::from_pb",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyEncoder}::from_pb"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Pt}::deserialize",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Pt}::deserialize"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::Decoder for spqr::encoding::polynomial::PolyDecoder}::new",
+      "spqr::encoding::polynomial::{impl spqr::encoding::Decoder for spqr::encoding::polynomial::PolyDecoder}::new"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::new_with_poly_count",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyDecoder}::new_with_poly_count"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_interpolate_pt",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::lagrange_interpolate_pt"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::zero",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::Poly}::zero"
+    ],
+    [
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyConst}::lagrange_interpolate_pt",
+      "spqr::encoding::polynomial::{spqr::encoding::polynomial::PolyConst<N>}::lagrange_interpolate_pt"
+    ],
+    [
+      "spqr::encoding::polynomial::lagrange_polys_for_complete_points",
+      "spqr::encoding::polynomial::lagrange_polys_for_complete_points"
+    ],
+    [
+      "spqr::{spqr::proto::pq_ratchet::Direction}::switch",
+      "spqr::{spqr::proto::pq_ratchet::Direction}::switch"
+    ],
+    [
+      "spqr::SecretOutput::recv_secret",
+      "spqr::{spqr::SecretOutput}::recv_secret"
+    ],
+    [
+      "spqr::SecretOutput::secret",
+      "spqr::{spqr::SecretOutput}::secret"
+    ],
+    [
+      "spqr::SecretOutput::send_secret",
+      "spqr::{spqr::SecretOutput}::send_secret"
+    ],
+    [
+      "spqr::{impl core::convert::From}::from",
+      "spqr::{impl core::convert::From<spqr::proto::pq_ratchet::Version> for u8}::from"
+    ],
+    [
+      "spqr::{core::convert::From<spqr::authenticator::Error> for spqr::Error}::from",
+      "spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}::from"
+    ],
+    [
+      "spqr::SecretOutput::has_secret",
+      "spqr::{spqr::SecretOutput}::has_secret"
+    ],
+    [
+      "spqr::Error::from",
+      "spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}"
+    ],
+    [
+      "spqr::Version::try_from",
+      "spqr::{impl core::convert::TryFrom<u8, alloc::string::String> for spqr::proto::pq_ratchet::Version}::try_from"
+    ],
+    [
+      "spqr::incremental_mlkem768::decaps",
+      "spqr::incremental_mlkem768::decaps"
+    ],
+    [
+      "spqr::incremental_mlkem768::ek_matches_header",
+      "spqr::incremental_mlkem768::ek_matches_header"
+    ],
+    [
+      "spqr::incremental_mlkem768::encaps1",
+      "spqr::incremental_mlkem768::encaps1"
+    ],
+    [
+      "spqr::incremental_mlkem768::encaps2",
+      "spqr::incremental_mlkem768::encaps2"
+    ],
+    [
+      "spqr::incremental_mlkem768::flip_endianness_of_encapsulation_state",
+      "spqr::incremental_mlkem768::flip_endianness_of_encapsulation_state"
+    ],
+    [
+      "spqr::incremental_mlkem768::generate",
+      "spqr::incremental_mlkem768::generate"
+    ],
+    [
+      "spqr::init_inner",
+      "spqr::init_inner"
+    ],
+    [
+      "spqr::initial_state",
+      "spqr::initial_state"
+    ],
+    [
+      "spqr::kdf::hkdf_to_vec",
+      "spqr::kdf::hkdf_to_vec"
+    ],
+    [
+      "spqr::msg_version",
+      "spqr::msg_version"
+    ],
+    [
+      "spqr::recv",
+      "spqr::recv"
+    ],
+    [
+      "spqr::send",
+      "spqr::send"
+    ],
+    [
+      "spqr::serialize::{core::convert::From<spqr::encoding::polynomial::PolynomialError> for spqr::serialize::Error}::from",
+      "spqr::serialize::{impl core::convert::From<spqr::encoding::polynomial::PolynomialError> for spqr::serialize::Error}::from"
+    ],
+    [
+      "spqr::state_version",
+      "spqr::state_version"
+    ],
+    [
+      "spqr::util::compare",
+      "spqr::util::compare"
+    ],
+    [
+      "spqr::util::inz",
+      "spqr::util::inz"
+    ],
+    [
+      "spqr::util::is_non_zero",
+      "spqr::util::is_non_zero"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Acknowledged}::epoch",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Acknowledged}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Sampled}::epoch",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Sampled}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct2Sampled}::epoch",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct2Sampled}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::epoch",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::HeaderReceived}::epoch",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::HeaderReceived}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::NoHeaderReceived}::epoch",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::NoHeaderReceived}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Acknowledged}::recv_ek_chunk",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Acknowledged}::recv_ek_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Sampled}::send_ct1_chunk",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Sampled}::send_ct1_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Sampled}::recv_ek_chunk",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct1Sampled}::recv_ek_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct2Sampled}::send_ct2_chunk",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct2Sampled}::send_ct2_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct2Sampled}::recv_next_epoch",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::Ct2Sampled}::recv_next_epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::send_ct1_chunk",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::send_ct1_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::recv_ct1_ack",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::recv_ct1_ack"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::HeaderReceived}::send_ct1_chunk",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::HeaderReceived}::send_ct1_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::NoHeaderReceived}::recv_hdr_chunk",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::NoHeaderReceived}::recv_hdr_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::NoHeaderReceived}::new",
+      "spqr::v1::chunked::send_ct::{spqr::v1::chunked::send_ct::NoHeaderReceived}::new"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::send_ct2_encoder",
+      "spqr::v1::chunked::send_ct::send_ct2_encoder"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct1Acknowledged}::into_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct1Acknowledged}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct1Sampled}::into_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct1Sampled}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct2Sampled}::into_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct2Sampled}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::into_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::HeaderReceived}::into_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::HeaderReceived}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::NoHeaderReceived}::into_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::NoHeaderReceived}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct1Acknowledged}::from_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct1Acknowledged}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct1Sampled}::from_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct1Sampled}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct2Sampled}::from_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::Ct2Sampled}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::from_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::EkReceivedCt1Sampled}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::HeaderReceived}::from_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::HeaderReceived}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::NoHeaderReceived}::from_pb",
+      "spqr::v1::chunked::send_ct::serialize::{spqr::v1::chunked::send_ct::NoHeaderReceived}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::Ct1Received}::epoch",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::Ct1Received}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::EkSentCt1Received}::epoch",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::EkSentCt1Received}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::HeaderSent}::epoch",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::HeaderSent}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysSampled}::epoch",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysSampled}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysUnsampled}::epoch",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysUnsampled}::epoch"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::Ct1Received}::send_ek_chunk",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::Ct1Received}::send_ek_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::Ct1Received}::recv_ct2_chunk",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::Ct1Received}::recv_ct2_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::EkSentCt1Received}::recv_ct2_chunk",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::EkSentCt1Received}::recv_ct2_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::HeaderSent}::send_ek_chunk",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::HeaderSent}::send_ek_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::HeaderSent}::recv_ct1_chunk",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::HeaderSent}::recv_ct1_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysSampled}::send_hdr_chunk",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysSampled}::send_hdr_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysSampled}::recv_ct1_chunk",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysSampled}::recv_ct1_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysUnsampled}::send_hdr_chunk",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysUnsampled}::send_hdr_chunk"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysUnsampled}::new",
+      "spqr::v1::chunked::send_ek::{spqr::v1::chunked::send_ek::KeysUnsampled}::new"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::Ct1Received}::into_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::Ct1Received}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::EkSentCt1Received}::into_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::EkSentCt1Received}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::HeaderSent}::into_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::HeaderSent}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::KeysSampled}::into_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::KeysSampled}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::KeysUnsampled}::into_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::KeysUnsampled}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::Ct1Received}::from_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::Ct1Received}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::EkSentCt1Received}::from_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::EkSentCt1Received}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::HeaderSent}::from_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::HeaderSent}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::KeysSampled}::from_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::KeysSampled}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::KeysUnsampled}::from_pb",
+      "spqr::v1::chunked::send_ek::serialize::{spqr::v1::chunked::send_ek::KeysUnsampled}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::states::{spqr::v1::chunked::states::States}::recv",
+      "spqr::v1::chunked::states::{spqr::v1::chunked::states::States}::recv"
+    ],
+    [
+      "spqr::v1::chunked::states::{spqr::v1::chunked::states::States}::send",
+      "spqr::v1::chunked::states::{spqr::v1::chunked::states::States}::send"
+    ],
+    [
+      "spqr::v1::chunked::states::{spqr::v1::chunked::states::States}::init_a",
+      "spqr::v1::chunked::states::{spqr::v1::chunked::states::States}::init_a"
+    ],
+    [
+      "spqr::v1::chunked::states::{spqr::v1::chunked::states::States}::init_b",
+      "spqr::v1::chunked::states::{spqr::v1::chunked::states::States}::init_b"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::Message}::serialize",
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::Message}::serialize"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::States}::into_pb",
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::States}::into_pb"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::decode_chunk",
+      "spqr::v1::chunked::states::serialize::decode_chunk"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::decode_varint",
+      "spqr::v1::chunked::states::serialize::decode_varint"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::encode_chunk",
+      "spqr::v1::chunked::states::serialize::encode_chunk"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::encode_varint",
+      "spqr::v1::chunked::states::serialize::encode_varint"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::serialize::MessageType}::from_payload",
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::serialize::MessageType}::from_payload"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::Message}::deserialize",
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::Message}::deserialize"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::States}::from_pb",
+      "spqr::v1::chunked::states::serialize::{spqr::v1::chunked::states::States}::from_pb"
+    ],
+    [
+      "spqr::v1::chunked::states::serialize::{core::convert::TryFrom<alloc::string::String> for spqr::v1::chunked::states::serialize::MessageType}::try_from",
+      "spqr::v1::chunked::states::serialize::{impl core::convert::TryFrom<u8, alloc::string::String> for spqr::v1::chunked::states::serialize::MessageType}::try_from"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::Ct1Sent}::recv_ek",
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::Ct1Sent}::recv_ek"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::Ct1SentEkReceived}::send_ct2",
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::Ct1SentEkReceived}::send_ct2"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::Ct2Sent}::recv_next_epoch",
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::Ct2Sent}::recv_next_epoch"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::HeaderReceived}::send_ct1",
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::HeaderReceived}::send_ct1"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::NoHeaderReceived}::recv_header",
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::NoHeaderReceived}::recv_header"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::NoHeaderReceived}::new",
+      "spqr::v1::unchunked::send_ct::{spqr::v1::unchunked::send_ct::NoHeaderReceived}::new"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct1Sent}::into_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct1Sent}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct1SentEkReceived}::into_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct1SentEkReceived}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct2Sent}::into_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct2Sent}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::HeaderReceived}::into_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::HeaderReceived}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::NoHeaderReceived}::into_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::NoHeaderReceived}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct1Sent}::from_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct1Sent}::from_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct1SentEkReceived}::from_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct1SentEkReceived}::from_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct2Sent}::from_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::Ct2Sent}::from_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::HeaderReceived}::from_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::HeaderReceived}::from_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::NoHeaderReceived}::from_pb",
+      "spqr::v1::unchunked::send_ct::serialize::{spqr::v1::unchunked::send_ct::NoHeaderReceived}::from_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::EkSent}::recv_ct1",
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::EkSent}::recv_ct1"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::EkSentCt1Received}::recv_ct2",
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::EkSentCt1Received}::recv_ct2"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::HeaderSent}::send_ek",
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::HeaderSent}::send_ek"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::KeysUnsampled}::send_header",
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::KeysUnsampled}::send_header"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::KeysUnsampled}::new",
+      "spqr::v1::unchunked::send_ek::{spqr::v1::unchunked::send_ek::KeysUnsampled}::new"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::EkSent}::into_pb",
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::EkSent}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::EkSentCt1Received}::into_pb",
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::EkSentCt1Received}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::HeaderSent}::into_pb",
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::HeaderSent}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::KeysUnsampled}::into_pb",
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::KeysUnsampled}::into_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::EkSent}::from_pb",
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::EkSent}::from_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::EkSentCt1Received}::from_pb",
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::EkSentCt1Received}::from_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::HeaderSent}::from_pb",
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::HeaderSent}::from_pb"
+    ],
+    [
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::KeysUnsampled}::from_pb",
+      "spqr::v1::unchunked::send_ek::serialize::{spqr::v1::unchunked::send_ek::KeysUnsampled}::from_pb"
+    ],
+    [
+      "curve25519_dalek::backend::get_selected_backend",
+      "curve25519_dalek::backend::get_selected_backend"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::curve_models::AffineNielsPoint}::conditional_assign",
+      "curve25519_dalek::backend::serial::curve_models::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::curve_models::AffineNielsPoint}::conditional_assign"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Neg<curve25519_dalek::backend::serial::curve_models::AffineNielsPoint> for &'0 (curve25519_dalek::backend::serial::curve_models::AffineNielsPoint)}::neg",
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Neg<curve25519_dalek::backend::serial::curve_models::AffineNielsPoint> for &0 (curve25519_dalek::backend::serial::curve_models::AffineNielsPoint)}::neg"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::backend::serial::curve_models::CompletedPoint}::as_extended",
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::backend::serial::curve_models::CompletedPoint}::as_extended"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::backend::serial::curve_models::CompletedPoint}::as_projective",
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::backend::serial::curve_models::CompletedPoint}::as_projective"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Add<&'0 (curve25519_dalek::backend::serial::curve_models::AffineNielsPoint), curve25519_dalek::backend::serial::curve_models::CompletedPoint> for &'1 (curve25519_dalek::edwards::EdwardsPoint)}::add",
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Add<&'a (curve25519_dalek::backend::serial::curve_models::AffineNielsPoint), curve25519_dalek::backend::serial::curve_models::CompletedPoint> for &1 (curve25519_dalek::edwards::EdwardsPoint)}::add"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Sub<&'0 (curve25519_dalek::backend::serial::curve_models::AffineNielsPoint), curve25519_dalek::backend::serial::curve_models::CompletedPoint> for &'1 (curve25519_dalek::edwards::EdwardsPoint)}::sub",
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Sub<&'a (curve25519_dalek::backend::serial::curve_models::AffineNielsPoint), curve25519_dalek::backend::serial::curve_models::CompletedPoint> for &1 (curve25519_dalek::edwards::EdwardsPoint)}::sub"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Add<&'0 (curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint), curve25519_dalek::backend::serial::curve_models::CompletedPoint> for &'1 (curve25519_dalek::edwards::EdwardsPoint)}::add",
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Add<&'a (curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint), curve25519_dalek::backend::serial::curve_models::CompletedPoint> for &1 (curve25519_dalek::edwards::EdwardsPoint)}::add"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Sub<&'0 (curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint), curve25519_dalek::backend::serial::curve_models::CompletedPoint> for &'1 (curve25519_dalek::edwards::EdwardsPoint)}::sub",
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Sub<&'a (curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint), curve25519_dalek::backend::serial::curve_models::CompletedPoint> for &1 (curve25519_dalek::edwards::EdwardsPoint)}::sub"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint}::conditional_assign",
+      "curve25519_dalek::backend::serial::curve_models::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint}::conditional_assign"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Neg<curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint> for &'0 (curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint)}::neg",
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Neg<curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint> for &0 (curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint)}::neg"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::backend::serial::curve_models::ProjectivePoint}::double",
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::backend::serial::curve_models::ProjectivePoint}::double"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::backend::serial::curve_models::ProjectivePoint}::as_extended",
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::backend::serial::curve_models::ProjectivePoint}::as_extended"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Neg<curve25519_dalek::backend::serial::curve_models::AffineNielsPoint> for curve25519_dalek::backend::serial::curve_models::AffineNielsPoint}::neg",
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Neg<curve25519_dalek::backend::serial::curve_models::AffineNielsPoint> for curve25519_dalek::backend::serial::curve_models::AffineNielsPoint}::neg"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Neg<curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint> for curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint}::neg",
+      "curve25519_dalek::backend::serial::curve_models::{core::ops::arith::Neg<curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint> for curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint}::neg"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::curve_models::AffineNielsPoint}::conditional_select",
+      "curve25519_dalek::backend::serial::curve_models::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::curve_models::AffineNielsPoint}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint}::conditional_select",
+      "curve25519_dalek::backend::serial::curve_models::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::traits::Identity for curve25519_dalek::backend::serial::curve_models::AffineNielsPoint}::identity",
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::traits::Identity for curve25519_dalek::backend::serial::curve_models::AffineNielsPoint}::identity"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::traits::Identity for curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint}::identity",
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::traits::Identity for curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint}::identity"
+    ],
+    [
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::traits::Identity for curve25519_dalek::backend::serial::curve_models::ProjectivePoint}::identity",
+      "curve25519_dalek::backend::serial::curve_models::{curve25519_dalek::traits::Identity for curve25519_dalek::backend::serial::curve_models::ProjectivePoint}::identity"
+    ],
+    [
+      "curve25519_dalek::backend::serial::scalar_mul::variable_base::mul",
+      "curve25519_dalek::backend::serial::scalar_mul::variable_base::mul"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::negate",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::negate"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::u64::field::FieldElement51}::conditional_assign",
+      "curve25519_dalek::backend::serial::u64::field::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::u64::field::FieldElement51}::conditional_assign"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::AddAssign<&'0 (curve25519_dalek::backend::serial::u64::field::FieldElement51)> for curve25519_dalek::backend::serial::u64::field::FieldElement51}::add_assign",
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::AddAssign<&'a (curve25519_dalek::backend::serial::u64::field::FieldElement51)> for curve25519_dalek::backend::serial::u64::field::FieldElement51}::add_assign"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::SubAssign<&'0 (curve25519_dalek::backend::serial::u64::field::FieldElement51)> for curve25519_dalek::backend::serial::u64::field::FieldElement51}::sub_assign",
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::SubAssign<&'a (curve25519_dalek::backend::serial::u64::field::FieldElement51)> for curve25519_dalek::backend::serial::u64::field::FieldElement51}::sub_assign"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Add<&'0 (curve25519_dalek::backend::serial::u64::field::FieldElement51), curve25519_dalek::backend::serial::u64::field::FieldElement51> for &'1 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::add",
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Add<&'a (curve25519_dalek::backend::serial::u64::field::FieldElement51), curve25519_dalek::backend::serial::u64::field::FieldElement51> for &1 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::add"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Mul<&'0 (curve25519_dalek::backend::serial::u64::field::FieldElement51), curve25519_dalek::backend::serial::u64::field::FieldElement51> for &'1 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::mul",
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Mul<&'a (curve25519_dalek::backend::serial::u64::field::FieldElement51), curve25519_dalek::backend::serial::u64::field::FieldElement51> for &1 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::mul"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Sub<&'0 (curve25519_dalek::backend::serial::u64::field::FieldElement51), curve25519_dalek::backend::serial::u64::field::FieldElement51> for &'1 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::sub",
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Sub<&'a (curve25519_dalek::backend::serial::u64::field::FieldElement51), curve25519_dalek::backend::serial::u64::field::FieldElement51> for &1 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::sub"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::FieldElement51::square",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::square"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::FieldElement51::square2",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::square2"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Neg<curve25519_dalek::backend::serial::u64::field::FieldElement51> for &'0 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::neg",
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Neg<curve25519_dalek::backend::serial::u64::field::FieldElement51> for &0 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::neg"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::as_bytes",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::as_bytes"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::pow2k",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::pow2k"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::to_bytes",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::to_bytes"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::u64::field::FieldElement51}::conditional_select",
+      "curve25519_dalek::backend::serial::u64::field::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::u64::field::FieldElement51}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::u64::field::FieldElement51}::conditional_swap",
+      "curve25519_dalek::backend::serial::u64::field::{subtle::ConditionallySelectable for curve25519_dalek::backend::serial::u64::field::FieldElement51}::conditional_swap"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::from_bytes",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::from_bytes"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::from_limbs",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::from_limbs"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::reduce",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::reduce"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::load8_at",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::from_bytes::load8_at"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::m",
+      "curve25519_dalek::backend::serial::u64::field::{core::ops::arith::Mul<&'a (curve25519_dalek::backend::serial::u64::field::FieldElement51), curve25519_dalek::backend::serial::u64::field::FieldElement51> for &1 (curve25519_dalek::backend::serial::u64::field::FieldElement51)}::mul::m"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::field::m",
+      "curve25519_dalek::backend::serial::u64::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::pow2k::m"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{zeroize::Zeroize for curve25519_dalek::backend::serial::u64::scalar::Scalar52}::zeroize",
+      "curve25519_dalek::backend::serial::u64::scalar::{zeroize::Zeroize for curve25519_dalek::backend::serial::u64::scalar::Scalar52}::zeroize"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::Scalar52::as_montgomery",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::as_montgomery"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::from_montgomery",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::from_montgomery"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::Scalar52::montgomery_square",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_square"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::square",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::square"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::conditional_add_l",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::conditional_add_l"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{core::ops::index::Index for curve25519_dalek::backend::serial::u64::scalar::Scalar52}::index",
+      "curve25519_dalek::backend::serial::u64::scalar::{core::ops::index::Index<usize, u64> for curve25519_dalek::backend::serial::u64::scalar::Scalar52}::index"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{core::ops::index::IndexMut for curve25519_dalek::backend::serial::u64::scalar::Scalar52}::index_mut",
+      "curve25519_dalek::backend::serial::u64::scalar::{core::ops::index::IndexMut<usize, u64> for curve25519_dalek::backend::serial::u64::scalar::Scalar52}::index_mut"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::to_bytes",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::to_bytes"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::add",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::add"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::Scalar52::montgomery_mul",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_mul"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::mul",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::mul"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::square_internal",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::square_internal"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::sub",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::sub"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::from_bytes",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::from_bytes"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::from_bytes_wide",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::from_bytes_wide"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_reduce",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_reduce"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::mul_internal",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::mul_internal"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::m",
+      "curve25519_dalek::backend::serial::u64::scalar::m"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::part1",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_reduce::part1"
+    ],
+    [
+      "curve25519_dalek::backend::serial::u64::scalar::part2",
+      "curve25519_dalek::backend::serial::u64::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_reduce::part2"
+    ],
+    [
+      "curve25519_dalek::backend::variable_base_mul",
+      "curve25519_dalek::backend::variable_base_mul"
+    ],
+    [
+      "curve25519_dalek::edwards::{subtle::ConstantTimeEq for curve25519_dalek::edwards::CompressedEdwardsY}::ct_eq",
+      "curve25519_dalek::edwards::{subtle::ConstantTimeEq for curve25519_dalek::edwards::CompressedEdwardsY}::ct_eq"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::decompress",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::decompress"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::as_bytes",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::as_bytes"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::to_bytes",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::to_bytes"
+    ],
+    [
+      "curve25519_dalek::edwards::{subtle::ConstantTimeEq for curve25519_dalek::edwards::EdwardsPoint}::ct_eq",
+      "curve25519_dalek::edwards::{subtle::ConstantTimeEq for curve25519_dalek::edwards::EdwardsPoint}::ct_eq"
+    ],
+    [
+      "curve25519_dalek::edwards::{core::cmp::PartialEq<curve25519_dalek::edwards::EdwardsPoint> for curve25519_dalek::edwards::EdwardsPoint}::eq",
+      "curve25519_dalek::edwards::{core::cmp::PartialEq<curve25519_dalek::edwards::EdwardsPoint> for curve25519_dalek::edwards::EdwardsPoint}::eq"
+    ],
+    [
+      "curve25519_dalek::edwards::{core::ops::arith::Add<&'0 (curve25519_dalek::edwards::EdwardsPoint), curve25519_dalek::edwards::EdwardsPoint> for &'1 (curve25519_dalek::edwards::EdwardsPoint)}::add",
+      "curve25519_dalek::edwards::{core::ops::arith::Add<&'a (curve25519_dalek::edwards::EdwardsPoint), curve25519_dalek::edwards::EdwardsPoint> for &1 (curve25519_dalek::edwards::EdwardsPoint)}::add"
+    ],
+    [
+      "curve25519_dalek::edwards::{core::ops::arith::Sub<&'0 (curve25519_dalek::edwards::EdwardsPoint), curve25519_dalek::edwards::EdwardsPoint> for &'1 (curve25519_dalek::edwards::EdwardsPoint)}::sub",
+      "curve25519_dalek::edwards::{core::ops::arith::Sub<&'a (curve25519_dalek::edwards::EdwardsPoint), curve25519_dalek::edwards::EdwardsPoint> for &1 (curve25519_dalek::edwards::EdwardsPoint)}::sub"
+    ],
+    [
+      "curve25519_dalek::edwards::{core::ops::arith::Mul<&'0 (curve25519_dalek::scalar::Scalar), curve25519_dalek::edwards::EdwardsPoint> for &'1 (curve25519_dalek::edwards::EdwardsPoint)}::mul",
+      "curve25519_dalek::edwards::{core::ops::arith::Mul<&'a (curve25519_dalek::scalar::Scalar), curve25519_dalek::edwards::EdwardsPoint> for &1 (curve25519_dalek::edwards::EdwardsPoint)}::mul"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::as_affine_niels",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::as_affine_niels"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::compress",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::compress"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::double",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::double"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_by_cofactor",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_by_cofactor"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_by_pow_2",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_by_pow_2"
+    ],
+    [
+      "curve25519_dalek::edwards::{core::ops::arith::Neg<curve25519_dalek::edwards::EdwardsPoint> for &'0 (curve25519_dalek::edwards::EdwardsPoint)}::neg",
+      "curve25519_dalek::edwards::{core::ops::arith::Neg<curve25519_dalek::edwards::EdwardsPoint> for &0 (curve25519_dalek::edwards::EdwardsPoint)}::neg"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::to_montgomery",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::to_montgomery"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::as_projective_niels",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::as_projective_niels"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::as_projective",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::as_projective"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::is_small_order",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::is_small_order"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::is_torsion_free",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::is_torsion_free"
+    ],
+    [
+      "curve25519_dalek::edwards::{core::ops::arith::Mul<&'0 (curve25519_dalek::edwards::EdwardsPoint), curve25519_dalek::edwards::EdwardsPoint> for &'1 (curve25519_dalek::scalar::Scalar)}::mul",
+      "curve25519_dalek::edwards::{core::ops::arith::Mul<&'a (curve25519_dalek::edwards::EdwardsPoint), curve25519_dalek::edwards::EdwardsPoint> for &1 (curve25519_dalek::scalar::Scalar)}::mul"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::to_affine",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::to_affine"
+    ],
+    [
+      "curve25519_dalek::edwards::{core::ops::arith::Neg<curve25519_dalek::edwards::EdwardsPoint> for curve25519_dalek::edwards::EdwardsPoint}::neg",
+      "curve25519_dalek::edwards::{core::ops::arith::Neg<curve25519_dalek::edwards::EdwardsPoint> for curve25519_dalek::edwards::EdwardsPoint}::neg"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_clamped",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_clamped"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{subtle::ConstantTimeEq for curve25519_dalek::edwards::affine::AffinePoint}::ct_eq",
+      "curve25519_dalek::edwards::affine::{subtle::ConstantTimeEq for curve25519_dalek::edwards::affine::AffinePoint}::ct_eq"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{core::cmp::PartialEq<curve25519_dalek::edwards::affine::AffinePoint> for curve25519_dalek::edwards::affine::AffinePoint}::eq",
+      "curve25519_dalek::edwards::affine::{core::cmp::PartialEq<curve25519_dalek::edwards::affine::AffinePoint> for curve25519_dalek::edwards::affine::AffinePoint}::eq"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{curve25519_dalek::edwards::affine::AffinePoint}::compress",
+      "curve25519_dalek::edwards::affine::{curve25519_dalek::edwards::affine::AffinePoint}::compress"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{curve25519_dalek::edwards::affine::AffinePoint}::to_edwards",
+      "curve25519_dalek::edwards::affine::{curve25519_dalek::edwards::affine::AffinePoint}::to_edwards"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{core::ops::arith::Mul<&'0 (curve25519_dalek::edwards::affine::AffinePoint), curve25519_dalek::edwards::EdwardsPoint> for curve25519_dalek::scalar::Scalar}::mul",
+      "curve25519_dalek::edwards::affine::{core::ops::arith::Mul<&0 (curve25519_dalek::edwards::affine::AffinePoint), curve25519_dalek::edwards::EdwardsPoint> for curve25519_dalek::scalar::Scalar}::mul"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{core::ops::arith::Mul<curve25519_dalek::edwards::affine::AffinePoint, curve25519_dalek::edwards::EdwardsPoint> for curve25519_dalek::scalar::Scalar}::mul",
+      "curve25519_dalek::edwards::affine::{core::ops::arith::Mul<curve25519_dalek::edwards::affine::AffinePoint, curve25519_dalek::edwards::EdwardsPoint> for curve25519_dalek::scalar::Scalar}::mul"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{subtle::ConditionallySelectable for curve25519_dalek::edwards::affine::AffinePoint}::conditional_select",
+      "curve25519_dalek::edwards::affine::{subtle::ConditionallySelectable for curve25519_dalek::edwards::affine::AffinePoint}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{core::default::Default for curve25519_dalek::edwards::affine::AffinePoint}::default",
+      "curve25519_dalek::edwards::affine::{core::default::Default for curve25519_dalek::edwards::affine::AffinePoint}::default"
+    ],
+    [
+      "curve25519_dalek::edwards::affine::{curve25519_dalek::traits::Identity for curve25519_dalek::edwards::affine::AffinePoint}::identity",
+      "curve25519_dalek::edwards::affine::{curve25519_dalek::traits::Identity for curve25519_dalek::edwards::affine::AffinePoint}::identity"
+    ],
+    [
+      "curve25519_dalek::edwards::decompress::step_1",
+      "curve25519_dalek::edwards::decompress::step_1"
+    ],
+    [
+      "curve25519_dalek::edwards::decompress::step_2",
+      "curve25519_dalek::edwards::decompress::step_2"
+    ],
+    [
+      "curve25519_dalek::edwards::{subtle::ConditionallySelectable for curve25519_dalek::edwards::EdwardsPoint}::conditional_select",
+      "curve25519_dalek::edwards::{subtle::ConditionallySelectable for curve25519_dalek::edwards::EdwardsPoint}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_base",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_base"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::from_slice",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::from_slice"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::traits::Identity for curve25519_dalek::edwards::CompressedEdwardsY}::identity",
+      "curve25519_dalek::edwards::{curve25519_dalek::traits::Identity for curve25519_dalek::edwards::CompressedEdwardsY}::identity"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::traits::Identity for curve25519_dalek::edwards::EdwardsPoint}::identity",
+      "curve25519_dalek::edwards::{curve25519_dalek::traits::Identity for curve25519_dalek::edwards::EdwardsPoint}::identity"
+    ],
+    [
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_base_clamped",
+      "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_base_clamped"
+    ],
+    [
+      "curve25519_dalek::field::{subtle::ConstantTimeEq for curve25519_dalek::backend::serial::u64::field::FieldElement51}::ct_eq",
+      "curve25519_dalek::field::{subtle::ConstantTimeEq for curve25519_dalek::backend::serial::u64::field::FieldElement51}::ct_eq"
+    ],
+    [
+      "curve25519_dalek::field::{core::cmp::PartialEq<curve25519_dalek::backend::serial::u64::field::FieldElement51> for curve25519_dalek::backend::serial::u64::field::FieldElement51}::eq",
+      "curve25519_dalek::field::{core::cmp::PartialEq<curve25519_dalek::backend::serial::u64::field::FieldElement51> for curve25519_dalek::backend::serial::u64::field::FieldElement51}::eq"
+    ],
+    [
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::invsqrt",
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::invsqrt"
+    ],
+    [
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::pow22501",
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::pow22501"
+    ],
+    [
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::is_negative",
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::is_negative"
+    ],
+    [
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::is_zero",
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::is_zero"
+    ],
+    [
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::invert",
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::invert"
+    ],
+    [
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::pow_p58",
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::pow_p58"
+    ],
+    [
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::sqrt_ratio_i",
+      "curve25519_dalek::field::{curve25519_dalek::backend::serial::u64::field::FieldElement51}::sqrt_ratio_i"
+    ],
+    [
+      "curve25519_dalek::montgomery::{subtle::ConstantTimeEq for curve25519_dalek::montgomery::MontgomeryPoint}::ct_eq",
+      "curve25519_dalek::montgomery::{subtle::ConstantTimeEq for curve25519_dalek::montgomery::MontgomeryPoint}::ct_eq"
+    ],
+    [
+      "curve25519_dalek::montgomery::{core::cmp::PartialEq<curve25519_dalek::montgomery::MontgomeryPoint> for curve25519_dalek::montgomery::MontgomeryPoint}::eq",
+      "curve25519_dalek::montgomery::{core::cmp::PartialEq<curve25519_dalek::montgomery::MontgomeryPoint> for curve25519_dalek::montgomery::MontgomeryPoint}::eq"
+    ],
+    [
+      "curve25519_dalek::montgomery::{core::ops::arith::MulAssign<&'0 (curve25519_dalek::scalar::Scalar)> for curve25519_dalek::montgomery::MontgomeryPoint}::mul_assign",
+      "curve25519_dalek::montgomery::{core::ops::arith::MulAssign<&0 (curve25519_dalek::scalar::Scalar)> for curve25519_dalek::montgomery::MontgomeryPoint}::mul_assign"
+    ],
+    [
+      "curve25519_dalek::montgomery::{core::ops::arith::Mul<&'0 (curve25519_dalek::scalar::Scalar), curve25519_dalek::montgomery::MontgomeryPoint> for &'1 (curve25519_dalek::montgomery::MontgomeryPoint)}::mul",
+      "curve25519_dalek::montgomery::{core::ops::arith::Mul<&0 (curve25519_dalek::scalar::Scalar), curve25519_dalek::montgomery::MontgomeryPoint> for &1 (curve25519_dalek::montgomery::MontgomeryPoint)}::mul"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::as_bytes",
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::as_bytes"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::to_bytes",
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::to_bytes"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::to_edwards",
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::to_edwards"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::ProjectivePoint}::as_affine",
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::ProjectivePoint}::as_affine"
+    ],
+    [
+      "curve25519_dalek::montgomery::{core::ops::arith::Mul<&'0 (curve25519_dalek::montgomery::MontgomeryPoint), curve25519_dalek::montgomery::MontgomeryPoint> for &'1 (curve25519_dalek::scalar::Scalar)}::mul",
+      "curve25519_dalek::montgomery::{core::ops::arith::Mul<&0 (curve25519_dalek::montgomery::MontgomeryPoint), curve25519_dalek::montgomery::MontgomeryPoint> for &1 (curve25519_dalek::scalar::Scalar)}::mul"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::mul_clamped",
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::mul_clamped"
+    ],
+    [
+      "curve25519_dalek::montgomery::differential_add_and_double",
+      "curve25519_dalek::montgomery::differential_add_and_double"
+    ],
+    [
+      "curve25519_dalek::montgomery::elligator_encode",
+      "curve25519_dalek::montgomery::elligator_encode"
+    ],
+    [
+      "curve25519_dalek::montgomery::{subtle::ConditionallySelectable for curve25519_dalek::montgomery::ProjectivePoint}::conditional_select",
+      "curve25519_dalek::montgomery::{subtle::ConditionallySelectable for curve25519_dalek::montgomery::ProjectivePoint}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::mul_base",
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::mul_base"
+    ],
+    [
+      "curve25519_dalek::montgomery::{subtle::ConditionallySelectable for curve25519_dalek::montgomery::MontgomeryPoint}::conditional_select",
+      "curve25519_dalek::montgomery::{subtle::ConditionallySelectable for curve25519_dalek::montgomery::MontgomeryPoint}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::traits::Identity for curve25519_dalek::montgomery::MontgomeryPoint}::identity",
+      "curve25519_dalek::montgomery::{curve25519_dalek::traits::Identity for curve25519_dalek::montgomery::MontgomeryPoint}::identity"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::traits::Identity for curve25519_dalek::montgomery::ProjectivePoint}::identity",
+      "curve25519_dalek::montgomery::{curve25519_dalek::traits::Identity for curve25519_dalek::montgomery::ProjectivePoint}::identity"
+    ],
+    [
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::mul_base_clamped",
+      "curve25519_dalek::montgomery::{curve25519_dalek::montgomery::MontgomeryPoint}::mul_base_clamped"
+    ],
+    [
+      "curve25519_dalek::ristretto::{subtle::ConstantTimeEq for curve25519_dalek::ristretto::CompressedRistretto}::ct_eq",
+      "curve25519_dalek::ristretto::{subtle::ConstantTimeEq for curve25519_dalek::ristretto::CompressedRistretto}::ct_eq"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::decompress",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::decompress"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::as_bytes",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::as_bytes"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::to_bytes",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::to_bytes"
+    ],
+    [
+      "curve25519_dalek::ristretto::{subtle::ConstantTimeEq for curve25519_dalek::ristretto::RistrettoPoint}::ct_eq",
+      "curve25519_dalek::ristretto::{subtle::ConstantTimeEq for curve25519_dalek::ristretto::RistrettoPoint}::ct_eq"
+    ],
+    [
+      "curve25519_dalek::ristretto::{core::cmp::PartialEq<curve25519_dalek::ristretto::RistrettoPoint> for curve25519_dalek::ristretto::RistrettoPoint}::eq",
+      "curve25519_dalek::ristretto::{core::cmp::PartialEq<curve25519_dalek::ristretto::RistrettoPoint> for curve25519_dalek::ristretto::RistrettoPoint}::eq"
+    ],
+    [
+      "curve25519_dalek::ristretto::{core::ops::arith::Add<&'0 (curve25519_dalek::ristretto::RistrettoPoint), curve25519_dalek::ristretto::RistrettoPoint> for &'1 (curve25519_dalek::ristretto::RistrettoPoint)}::add",
+      "curve25519_dalek::ristretto::{core::ops::arith::Add<&'a (curve25519_dalek::ristretto::RistrettoPoint), curve25519_dalek::ristretto::RistrettoPoint> for &1 (curve25519_dalek::ristretto::RistrettoPoint)}::add"
+    ],
+    [
+      "curve25519_dalek::ristretto::{core::ops::arith::Sub<&'0 (curve25519_dalek::ristretto::RistrettoPoint), curve25519_dalek::ristretto::RistrettoPoint> for &'1 (curve25519_dalek::ristretto::RistrettoPoint)}::sub",
+      "curve25519_dalek::ristretto::{core::ops::arith::Sub<&'a (curve25519_dalek::ristretto::RistrettoPoint), curve25519_dalek::ristretto::RistrettoPoint> for &1 (curve25519_dalek::ristretto::RistrettoPoint)}::sub"
+    ],
+    [
+      "curve25519_dalek::ristretto::{core::ops::arith::Mul<&'0 (curve25519_dalek::scalar::Scalar), curve25519_dalek::ristretto::RistrettoPoint> for &'1 (curve25519_dalek::ristretto::RistrettoPoint)}::mul",
+      "curve25519_dalek::ristretto::{core::ops::arith::Mul<&'a (curve25519_dalek::scalar::Scalar), curve25519_dalek::ristretto::RistrettoPoint> for &1 (curve25519_dalek::ristretto::RistrettoPoint)}::mul"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::compress",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::compress"
+    ],
+    [
+      "curve25519_dalek::ristretto::{core::ops::arith::Neg<curve25519_dalek::ristretto::RistrettoPoint> for &'0 (curve25519_dalek::ristretto::RistrettoPoint)}::neg",
+      "curve25519_dalek::ristretto::{core::ops::arith::Neg<curve25519_dalek::ristretto::RistrettoPoint> for &0 (curve25519_dalek::ristretto::RistrettoPoint)}::neg"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::coset4",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::coset4"
+    ],
+    [
+      "curve25519_dalek::ristretto::{core::ops::arith::Mul<&'0 (curve25519_dalek::ristretto::RistrettoPoint), curve25519_dalek::ristretto::RistrettoPoint> for &'1 (curve25519_dalek::scalar::Scalar)}::mul",
+      "curve25519_dalek::ristretto::{core::ops::arith::Mul<&'a (curve25519_dalek::ristretto::RistrettoPoint), curve25519_dalek::ristretto::RistrettoPoint> for &1 (curve25519_dalek::scalar::Scalar)}::mul"
+    ],
+    [
+      "curve25519_dalek::ristretto::{core::ops::arith::Neg<curve25519_dalek::ristretto::RistrettoPoint> for curve25519_dalek::ristretto::RistrettoPoint}::neg",
+      "curve25519_dalek::ristretto::{core::ops::arith::Neg<curve25519_dalek::ristretto::RistrettoPoint> for curve25519_dalek::ristretto::RistrettoPoint}::neg"
+    ],
+    [
+      "curve25519_dalek::ristretto::decompress::step_1",
+      "curve25519_dalek::ristretto::decompress::step_1"
+    ],
+    [
+      "curve25519_dalek::ristretto::decompress::step_2",
+      "curve25519_dalek::ristretto::decompress::step_2"
+    ],
+    [
+      "curve25519_dalek::ristretto::{subtle::ConditionallySelectable for curve25519_dalek::ristretto::RistrettoPoint}::conditional_select",
+      "curve25519_dalek::ristretto::{subtle::ConditionallySelectable for curve25519_dalek::ristretto::RistrettoPoint}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::mul_base",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::mul_base"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::from_uniform_bytes",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::from_uniform_bytes"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::from_slice",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::from_slice"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::traits::Identity for curve25519_dalek::ristretto::CompressedRistretto}::identity",
+      "curve25519_dalek::ristretto::{curve25519_dalek::traits::Identity for curve25519_dalek::ristretto::CompressedRistretto}::identity"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::traits::Identity for curve25519_dalek::ristretto::RistrettoPoint}::identity",
+      "curve25519_dalek::ristretto::{curve25519_dalek::traits::Identity for curve25519_dalek::ristretto::RistrettoPoint}::identity"
+    ],
+    [
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::elligator_ristretto_flavor",
+      "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::elligator_ristretto_flavor"
+    ],
+    [
+      "curve25519_dalek::scalar::{zeroize::Zeroize for curve25519_dalek::scalar::Scalar}::zeroize",
+      "curve25519_dalek::scalar::{zeroize::Zeroize for curve25519_dalek::scalar::Scalar}::zeroize"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::ops::arith::MulAssign<&'0 (curve25519_dalek::scalar::Scalar)> for curve25519_dalek::scalar::Scalar}::mul_assign",
+      "curve25519_dalek::scalar::{core::ops::arith::MulAssign<&'a (curve25519_dalek::scalar::Scalar)> for curve25519_dalek::scalar::Scalar}::mul_assign"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::ops::arith::Add<&'0 (curve25519_dalek::scalar::Scalar), curve25519_dalek::scalar::Scalar> for &'1 (curve25519_dalek::scalar::Scalar)}::add",
+      "curve25519_dalek::scalar::{core::ops::arith::Add<&'a (curve25519_dalek::scalar::Scalar), curve25519_dalek::scalar::Scalar> for &1 (curve25519_dalek::scalar::Scalar)}::add"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::ops::arith::Mul<&'0 (curve25519_dalek::scalar::Scalar), curve25519_dalek::scalar::Scalar> for &'1 (curve25519_dalek::scalar::Scalar)}::mul",
+      "curve25519_dalek::scalar::{core::ops::arith::Mul<&'a (curve25519_dalek::scalar::Scalar), curve25519_dalek::scalar::Scalar> for &1 (curve25519_dalek::scalar::Scalar)}::mul"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::ops::arith::Sub<&'0 (curve25519_dalek::scalar::Scalar), curve25519_dalek::scalar::Scalar> for &'1 (curve25519_dalek::scalar::Scalar)}::sub",
+      "curve25519_dalek::scalar::{core::ops::arith::Sub<&'a (curve25519_dalek::scalar::Scalar), curve25519_dalek::scalar::Scalar> for &1 (curve25519_dalek::scalar::Scalar)}::sub"
+    ],
+    [
+      "curve25519_dalek::scalar::{subtle::ConstantTimeEq for curve25519_dalek::scalar::Scalar}::ct_eq",
+      "curve25519_dalek::scalar::{subtle::ConstantTimeEq for curve25519_dalek::scalar::Scalar}::ct_eq"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::cmp::PartialEq<curve25519_dalek::scalar::Scalar> for curve25519_dalek::scalar::Scalar}::eq",
+      "curve25519_dalek::scalar::{core::cmp::PartialEq<curve25519_dalek::scalar::Scalar> for curve25519_dalek::scalar::Scalar}::eq"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::is_canonical",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::is_canonical"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::invert",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::invert"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::reduce",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::reduce"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::ops::arith::Neg<curve25519_dalek::scalar::Scalar> for &'0 (curve25519_dalek::scalar::Scalar)}::neg",
+      "curve25519_dalek::scalar::{core::ops::arith::Neg<curve25519_dalek::scalar::Scalar> for &0 (curve25519_dalek::scalar::Scalar)}::neg"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::unpack",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::unpack"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::as_radix_16",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::as_radix_16"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::as_radix_2w",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::as_radix_2w"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::non_adjacent_form",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::non_adjacent_form"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::as_bytes",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::as_bytes"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::to_bytes",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::to_bytes"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::ops::index::Index for curve25519_dalek::scalar::Scalar}::index",
+      "curve25519_dalek::scalar::{core::ops::index::Index<usize, u8> for curve25519_dalek::scalar::Scalar}::index"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::pack",
+      "curve25519_dalek::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::pack"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::invert",
+      "curve25519_dalek::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::invert"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_invert",
+      "curve25519_dalek::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_invert"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::ops::arith::Neg<curve25519_dalek::scalar::Scalar> for curve25519_dalek::scalar::Scalar}::neg",
+      "curve25519_dalek::scalar::{core::ops::arith::Neg<curve25519_dalek::scalar::Scalar> for curve25519_dalek::scalar::Scalar}::neg"
+    ],
+    [
+      "curve25519_dalek::scalar::bot_half",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::as_radix_16::bot_half"
+    ],
+    [
+      "curve25519_dalek::scalar::clamp_integer",
+      "curve25519_dalek::scalar::clamp_integer"
+    ],
+    [
+      "curve25519_dalek::scalar::{subtle::ConditionallySelectable for curve25519_dalek::scalar::Scalar}::conditional_select",
+      "curve25519_dalek::scalar::{subtle::ConditionallySelectable for curve25519_dalek::scalar::Scalar}::conditional_select"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::batch_invert",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::batch_invert"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::from_bytes_mod_order_wide",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::from_bytes_mod_order_wide"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::default::Default for curve25519_dalek::scalar::Scalar}::default",
+      "curve25519_dalek::scalar::{core::default::Default for curve25519_dalek::scalar::Scalar}::default"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::from_bytes_mod_order",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::from_bytes_mod_order"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::from_canonical_bytes",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::from_canonical_bytes"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::convert::From for curve25519_dalek::scalar::Scalar}::from",
+      "curve25519_dalek::scalar::{core::convert::From<u128> for curve25519_dalek::scalar::Scalar}::from"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::convert::From for curve25519_dalek::scalar::Scalar}::from",
+      "curve25519_dalek::scalar::{core::convert::From<u16> for curve25519_dalek::scalar::Scalar}::from"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::convert::From for curve25519_dalek::scalar::Scalar}::from",
+      "curve25519_dalek::scalar::{core::convert::From<u32> for curve25519_dalek::scalar::Scalar}::from"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::convert::From for curve25519_dalek::scalar::Scalar}::from",
+      "curve25519_dalek::scalar::{core::convert::From<u64> for curve25519_dalek::scalar::Scalar}::from"
+    ],
+    [
+      "curve25519_dalek::scalar::{core::convert::From for curve25519_dalek::scalar::Scalar}::from",
+      "curve25519_dalek::scalar::{core::convert::From<u8> for curve25519_dalek::scalar::Scalar}::from"
+    ],
+    [
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::to_radix_2w_size_hint",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::to_radix_2w_size_hint"
+    ],
+    [
+      "curve25519_dalek::scalar::read_le_u64_into",
+      "curve25519_dalek::scalar::read_le_u64_into"
+    ],
+    [
+      "curve25519_dalek::scalar::square_multiply",
+      "curve25519_dalek::scalar::{curve25519_dalek::backend::serial::u64::scalar::Scalar52}::montgomery_invert::square_multiply"
+    ],
+    [
+      "curve25519_dalek::scalar::top_half",
+      "curve25519_dalek::scalar::{curve25519_dalek::scalar::Scalar}::as_radix_16::top_half"
+    ],
+    [
+      "curve25519_dalek::traits::{curve25519_dalek::traits::IsIdentity for T0}::is_identity",
+      "curve25519_dalek::traits::{curve25519_dalek::traits::IsIdentity for T}::is_identity"
+    ],
+    [
+      "curve25519_dalek::window::{curve25519_dalek::window::NafLookupTable5}::select",
+      "curve25519_dalek::window::{curve25519_dalek::window::LookupTable<T>}::select"
+    ],
+    [
+      "curve25519_dalek::window::{core::convert::From<&'0 (curve25519_dalek::edwards::EdwardsPoint)> for curve25519_dalek::window::NafLookupTable5}::from",
+      "curve25519_dalek::window::{core::convert::From<&'a (curve25519_dalek::edwards::EdwardsPoint)> for curve25519_dalek::window::LookupTable<curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint>}::from"
+    ]
+  ],
+  "distinct": [
+    [
+      "spqr::proto::pq_ratchet::{impl core::convert::From<spqr::proto::pq_ratchet::Direction> for i32}::from",
+      "spqr::proto::pq_ratchet::{impl core::convert::From<spqr::proto::pq_ratchet::Version> for i32}::from"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::AddAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::AddAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add_assign"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::Add<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add",
+      "spqr::encoding::gf::{impl core::ops::arith::Add<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::add"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::SubAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::SubAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub_assign"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::Sub<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub",
+      "spqr::encoding::gf::{impl core::ops::arith::Sub<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::sub"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::MulAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::MulAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul_assign"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::Mul<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul",
+      "spqr::encoding::gf::{impl core::ops::arith::Mul<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::mul"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::DivAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div_assign",
+      "spqr::encoding::gf::{impl core::ops::arith::DivAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div_assign"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::Div<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div",
+      "spqr::encoding::gf::{impl core::ops::arith::Div<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}::div"
+    ],
+    [
+      "spqr::{impl core::convert::From<spqr::authenticator::Error> for spqr::Error}::from",
+      "spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}::from"
+    ],
+    [
+      "spqr::proto::pq_ratchet::{impl core::convert::From<spqr::proto::pq_ratchet::Direction> for i32}",
+      "spqr::proto::pq_ratchet::{impl core::convert::From<spqr::proto::pq_ratchet::Version> for i32}"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::AddAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}",
+      "spqr::encoding::gf::{impl core::ops::arith::AddAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::Add<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}",
+      "spqr::encoding::gf::{impl core::ops::arith::Add<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::SubAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}",
+      "spqr::encoding::gf::{impl core::ops::arith::SubAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::Sub<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}",
+      "spqr::encoding::gf::{impl core::ops::arith::Sub<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::MulAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}",
+      "spqr::encoding::gf::{impl core::ops::arith::MulAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::Mul<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}",
+      "spqr::encoding::gf::{impl core::ops::arith::Mul<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::DivAssign<&'_0 spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}",
+      "spqr::encoding::gf::{impl core::ops::arith::DivAssign<spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}"
+    ],
+    [
+      "spqr::encoding::gf::{impl core::ops::arith::Div<&'_0 spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}",
+      "spqr::encoding::gf::{impl core::ops::arith::Div<spqr::encoding::gf::GF16, spqr::encoding::gf::GF16> for spqr::encoding::gf::GF16}"
+    ],
+    [
+      "spqr::{impl core::convert::From<spqr::authenticator::Error> for spqr::Error}",
+      "spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}"
+    ]
+  ]
+}

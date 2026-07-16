@@ -210,9 +210,15 @@ fn resolve_and_extract(
             )
         };
 
-    // Pre-flight: generate charon LLBC with aeneas-config.yml args
-    if let (Some(ref rp), Some(ref cc)) = (&rust_project, &charon_config) {
-        extract_runner::ensure_charon_llbc(rp, cc)?;
+    // Pre-flight: generate the charon LLBC with aeneas-config.yml args — but
+    // ONLY when there is no Aeneas manifest. With a `translation.json`, probe-rust
+    // reads charon `def_id`s from it (charon already ran once inside Aeneas), so
+    // a second charon run is pure waste. Skipping it is the point of the manifest
+    // path; the LLBC pre-flight remains for legacy (no-manifest) projects.
+    if translation.is_none() {
+        if let (Some(ref rp), Some(ref cc)) = (&rust_project, &charon_config) {
+            extract_runner::ensure_charon_llbc(rp, cc)?;
+        }
     }
 
     // Resolve the Aeneas build's active cargo feature set so cfg predicates on
