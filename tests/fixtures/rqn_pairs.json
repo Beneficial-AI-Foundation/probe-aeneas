@@ -1350,10 +1350,6 @@
       "curve25519_dalek::edwards::{curve25519_dalek::edwards::EdwardsPoint}::mul_base"
     ],
     [
-      "curve25519_dalek::edwards::{core::convert::TryFrom<core::array::TryFromSliceError> for curve25519_dalek::edwards::CompressedEdwardsY}::try_from",
-      "curve25519_dalek::edwards::{core::convert::TryFrom<&0 ("
-    ],
-    [
       "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::from_slice",
       "curve25519_dalek::edwards::{curve25519_dalek::edwards::CompressedEdwardsY}::from_slice"
     ],
@@ -1552,10 +1548,6 @@
     [
       "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::from_uniform_bytes",
       "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::RistrettoPoint}::from_uniform_bytes"
-    ],
-    [
-      "curve25519_dalek::ristretto::{core::convert::TryFrom<core::array::TryFromSliceError> for curve25519_dalek::ristretto::CompressedRistretto}::try_from",
-      "curve25519_dalek::ristretto::{core::convert::TryFrom<&0 ("
     ],
     [
       "curve25519_dalek::ristretto::{curve25519_dalek::ristretto::CompressedRistretto}::from_slice",

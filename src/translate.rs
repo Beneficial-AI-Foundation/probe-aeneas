@@ -2068,7 +2068,7 @@ mod tests {
     fn rqn_fixture_matched_pairs_mostly_normalize_equal() {
         // Renderings the current normalizer does NOT bridge. The id-join makes
         // this count irrelevant; lower is better, so this is an upper bound.
-        const KNOWN_UNRECONCILED: usize = 29;
+        const KNOWN_UNRECONCILED: usize = 27;
 
         let fixture = load_rqn_fixture();
         assert!(
