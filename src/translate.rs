@@ -1739,4 +1739,142 @@ mod tests {
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].method.as_deref(), Some("rust-qualified-name"));
     }
+
+    // =========================================================================
+    // RQN-pair fixture oracle (tests/fixtures/rqn_pairs.json)
+    //
+    // The fixture holds real spqr+dalek pairs. `matched` = the same charon
+    // function rendered two ways (probe-rust RQN vs translation.json rust_name),
+    // which the name matcher must reconcile via `normalize_rust_name`. `distinct`
+    // = genuinely-different impls, some of which the normalizer *collapses*
+    // (owned vs borrowed, `Shared0` vs `SharedA`) — the exact collisions the
+    // charon-def-id join eliminates. These tests pin both the naming noise (so a
+    // future normalizer change is deliberate) and the join's correctness on the
+    // must-split shapes.
+    // =========================================================================
+
+    #[derive(serde::Deserialize)]
+    struct RqnFixture {
+        matched: Vec<[String; 2]>,
+        distinct: Vec<[String; 2]>,
+    }
+
+    fn load_rqn_fixture() -> RqnFixture {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/rqn_pairs.json");
+        let content = std::fs::read_to_string(path).expect("read rqn_pairs.json fixture");
+        serde_json::from_str(&content).expect("parse rqn_pairs.json fixture")
+    }
+
+    /// A borrow/owned distinct pair the normalizer collapses (its `&` is stripped
+    /// by `RE_REF`), used to anchor the join-split test. `None` if the fixture
+    /// ever loses such a case.
+    fn first_normalizer_collision(fixture: &RqnFixture) -> Option<&[String; 2]> {
+        fixture.distinct.iter().find(|[a, b]| {
+            (a.contains('&') || b.contains('&')) && normalize_rust_name(a) == normalize_rust_name(b)
+        })
+    }
+
+    /// `matched` pairs are the same charon function rendered two ways. The name
+    /// matcher reconciles them only via `normalize_rust_name`, and it does not
+    /// bridge every rendering: a residual set (e.g. probe-rust's short
+    /// `GF16::const_div` vs the manifest's brace-qualified `{...GF16}::const_div`)
+    /// stays unreconciled, so strategy-1 name matching misses those functions.
+    ///
+    /// This is precisely the noise the charon-def-id join removes — the join is
+    /// name-agnostic, so it binds all matched pairs regardless of rendering. The
+    /// bound is a regression pin: the normalizer must reconcile at least as many
+    /// as it does today (the count can only improve).
+    #[test]
+    fn rqn_fixture_matched_pairs_mostly_normalize_equal() {
+        // Renderings the current normalizer does NOT bridge. The id-join makes
+        // this count irrelevant; lower is better, so this is an upper bound.
+        const KNOWN_UNRECONCILED: usize = 29;
+
+        let fixture = load_rqn_fixture();
+        assert!(
+            !fixture.matched.is_empty(),
+            "fixture should have matched pairs"
+        );
+        let unreconciled = fixture
+            .matched
+            .iter()
+            .filter(|[a, b]| normalize_rust_name(a) != normalize_rust_name(b))
+            .count();
+        assert!(
+            unreconciled <= KNOWN_UNRECONCILED,
+            "normalizer regressed: {unreconciled} matched pairs now fail to \
+             normalize-equal (was {KNOWN_UNRECONCILED}). The id-join binds these \
+             regardless, but strategy-1 name matching relies on this reconciliation."
+        );
+    }
+
+    /// Oracle: the normalizer *does* collapse some genuinely-distinct impls
+    /// (owned vs borrowed). Pinning this documents why the id-join exists — a
+    /// future `normalize_rust_name` change that silently split or merged these is
+    /// caught here.
+    #[test]
+    fn rqn_fixture_documents_normalizer_collisions() {
+        let fixture = load_rqn_fixture();
+        assert!(
+            first_normalizer_collision(&fixture).is_some(),
+            "expected a borrow/owned pair that the normalizer collapses — the \
+             id-join's motivation; did normalize_rust_name change?"
+        );
+    }
+
+    /// Join-correctness: take a real distinct pair the normalizer collapses, give
+    /// the two atoms distinct `charon-def-id`s, and confirm the id-join maps each
+    /// to its own Lean def — the split the name matcher cannot make.
+    #[test]
+    fn charon_def_id_join_splits_a_normalizer_collision() {
+        let fixture = load_rqn_fixture();
+        let [rqn_a, rqn_b] = first_normalizer_collision(&fixture)
+            .expect("a borrow/owned normalizer collision in the fixture")
+            .clone();
+        // Precondition: the name matcher cannot tell these apart.
+        assert_eq!(normalize_rust_name(&rqn_a), normalize_rust_name(&rqn_b));
+
+        let mut rust = BTreeMap::new();
+        let mut a = make_rust_atom_charon("add_assign", "src/encoding/gf.rs", 10, 12, 100, "v1");
+        a.extensions
+            .insert("rust-qualified-name".to_string(), serde_json::json!(rqn_a));
+        let mut b = make_rust_atom_charon("add_assign", "src/encoding/gf.rs", 20, 22, 101, "v1");
+        b.extensions
+            .insert("rust-qualified-name".to_string(), serde_json::json!(rqn_b));
+        rust.insert("probe:x/1/a()".to_string(), a);
+        rust.insert("probe:x/1/b()".to_string(), b);
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:x.add_assign_owned".to_string(),
+            make_lean_atom("add_assign_owned", "Funs.lean"),
+        );
+        lean.insert(
+            "probe:x.add_assign_shared".to_string(),
+            make_lean_atom("add_assign_shared", "Funs.lean"),
+        );
+
+        // Distinct def_ids: what the same-run LLBC would assign to the two impls.
+        let funcs = vec![
+            make_func_def_id("x.add_assign_owned", 100, false),
+            make_func_def_id("x.add_assign_shared", 101, false),
+        ];
+
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, Some("v1"));
+
+        assert_eq!(mappings.len(), 2, "both colliding-name atoms must map");
+        assert!(
+            mappings
+                .iter()
+                .all(|m| m.method.as_deref() == Some("charon-def-id")),
+            "both must bind via the id-join, not names"
+        );
+        let targets: std::collections::BTreeSet<&str> =
+            mappings.iter().map(|m| m.to.as_str()).collect();
+        assert_eq!(
+            targets.len(),
+            2,
+            "the id-join must send the two atoms to distinct Lean defs"
+        );
+    }
 }
