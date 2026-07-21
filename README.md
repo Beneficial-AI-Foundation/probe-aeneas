@@ -49,8 +49,10 @@ Download from [GitHub Releases](https://github.com/Beneficial-AI-Foundation/prob
 ```bash
 # Example: Linux x86_64
 curl -sL https://github.com/Beneficial-AI-Foundation/probe-aeneas/releases/latest/download/probe-aeneas-x86_64-unknown-linux-gnu.tar.xz \
-  | tar -xJ -C ~/.local/bin probe-aeneas
+  | tar -xJ --strip-components=1 -C ~/.local/bin probe-aeneas-x86_64-unknown-linux-gnu/probe-aeneas
 ```
+
+The archive contains a `probe-aeneas-<target>/` directory, so `--strip-components=1` drops just the `probe-aeneas` binary into `~/.local/bin`. For other platforms, substitute the target triple (e.g. `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin`) in both the URL and the archive path.
 
 Binaries are available for Linux (x86_64, ARM64) and macOS (Apple Silicon, Intel).
 
