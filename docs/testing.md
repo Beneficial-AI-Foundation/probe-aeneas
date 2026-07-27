@@ -117,8 +117,8 @@ workspace root.
 | Inductives | 1 |
 | With `specs` | 404 |
 | With `primary-spec` | 207 |
-| `is-disabled=false` (Rust) | 207 |
-| `is-disabled=true` (Rust) | 396 |
+| `untracked=false` (Rust) | 207 |
+| `untracked=true` (Rust) | 396 |
 
 **Changes from previous run (2026-03-17, 1532 Lean atoms):**
 
@@ -188,4 +188,4 @@ cargo test
 - `test_does_not_double_claim_lean` -- same Lean atom not claimed by two Rust atoms
 - `test_duplicate_rqn_last_wins` -- duplicate RQN collision handling
 - `test_lean_atom_no_location_has_default_code_text` -- Lean atom default code-text
-- `test_build_functions_rust_names` -- `is-disabled` name set from functions.json
+- `test_build_functions_rust_names` -- `untracked` name set from functions.json

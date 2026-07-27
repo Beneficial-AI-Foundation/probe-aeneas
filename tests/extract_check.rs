@@ -13,7 +13,7 @@ fn example_merged_json_has_valid_structure() {
 
     // Merged envelope fields.
     assert_eq!(json["schema"], "probe-aeneas/extract");
-    assert_eq!(json["schema-version"], "2.1");
+    assert_eq!(json["schema-version"], "3.0");
     assert!(json["tool"]["name"].is_string());
     assert!(
         json["inputs"].is_array(),
@@ -66,11 +66,11 @@ fn example_merged_json_rust_atoms_have_translations() {
         "expected Rust atoms in merged output"
     );
 
-    // All Rust atoms should have is-disabled field.
+    // All Rust atoms should have the untracked scope field.
     for (key, atom) in &rust_atoms {
         assert!(
-            atom.get("is-disabled").is_some(),
-            "Rust atom {key} missing 'is-disabled' field"
+            atom.get("untracked").is_some(),
+            "Rust atom {key} missing 'untracked' field"
         );
     }
 

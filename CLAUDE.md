@@ -55,7 +55,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 ### Pipeline
 
-1. **Extract Pipeline** (`extract` command): resolve project (parse `aeneas-config.yml` if positional arg given) → resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → merge atom maps → Schema 2.1 envelope → output
+1. **Extract Pipeline** (`extract` command): resolve project (parse `aeneas-config.yml` if positional arg given) → resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → merge atom maps → Schema 3.0 envelope → output
 2. **Translate Pipeline** (`translate` command): load Rust atoms + Lean atoms + functions.json → priority-ordered matching → translations JSON
 3. **Listfuns Pipeline** (`listfuns` command): `lake exe listfuns` → functions.json
 
@@ -67,7 +67,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 2. `file+display-name` -- same source file path + matching base method name (unambiguous only)
 3. `file+line-overlap` -- same source file + overlapping line ranges (best overlap wins)
 
-**Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `is-disabled` following the KB P24/P25 two-state scope model: `false` (tracked backlog) by default for every compiled function; `true` (out of scope, no `verification-status`) only when the function has no status **and** is cfg-inactive in the Aeneas build (its probe-rust `cfg` predicate is false) or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does not affect scope — a compiled-but-untranslated function is backlog, not disabled. The active feature set is resolved via `cargo metadata` (default features overlaid by `charon.cargo_args`) in `cfg_eval.rs`; when unresolvable, cfg classification is skipped (conservative).
+**Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `untracked` following the KB P24/P25 two-state scope model: `false` (tracked backlog) by default for every compiled function; `true` (out of scope, no `verification-status`) only when the function has no status **and** is cfg-inactive in the Aeneas build (its probe-rust `cfg` predicate is false) or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does not affect scope — a compiled-but-untranslated function is backlog, not disabled. The active feature set is resolved via `cargo metadata` (default features overlaid by `charon.cargo_args`) in `cfg_eval.rs`; when unresolvable, cfg classification is skipped (conservative).
 
 **Project Auto-Detection**: When a positional `PROJECT` path is given, `aeneas-config.yml` is parsed to derive `rust_project` (from `crate.dir`) and `lean_project` (the project root). If `crate.dir` lacks its own `Cargo.toml` but the project root is a Cargo `[workspace]`, the workspace root is used as `rust_project` (so probe-rust indexes all member crates), and the target member is validated via `cargo metadata --no-deps` using `crate.name`, `charon.package`, or `-p` from `charon.cargo_args`. The resolved package name is backfilled into `charon_config.package` to ensure `ensure_charon_llbc()` targets the correct crate. If `functions.json` exists at the project root, it is reused.
 
@@ -75,9 +75,9 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 **Auto-Install**: `probe-rust` is installed via `cargo install --git`. `probe-lean` is version-aware: the target project's `lean-toolchain` is read, then a versioned binary (`~/.local/bin/probe-lean-<version>`) is looked up or installed (pre-built download from GitHub Releases, falling back to source build with `lake build`). A `~/.local/bin/probe-lean` symlink points to the active version.
 
-**Schema 2.x Metadata Envelope**: Merged output uses the `probe-aeneas/extract` schema (`schema-version: "2.1"`, for the optional `charon-def-id`/`charon-version` atom fields); translation output uses the `probe/mappings` schema (`schema-version: "2.0"`). Both wrap payloads with tool info, source provenance, and timestamps.
+**Schema 3.0 Metadata Envelope**: Merged output uses the `probe-aeneas/extract` schema (`schema-version: "3.0"`, for the optional `charon-def-id`/`charon-version` atom fields); translation output uses the `probe/mappings` schema (`schema-version: "3.0"`). Both wrap payloads with tool info, source provenance, and timestamps.
 
-**Relationship to `probe merge`**: probe-aeneas's `extract` command is an instantiation of the generic `probe merge` engine for the Aeneas Rust-to-Lean case. It generates translations (Aeneas-specific), calls `merge_atom_maps` from `probe::commands::merge` for the generic combine + cross-language-edge step, then enriches the result with Aeneas-specific metadata (`translation-*`, `is-disabled`). See [docs/architecture.md](docs/architecture.md) for the full picture. Shared types (`Atom`, `Mapping`, `MergedAtomEnvelope`, `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
+**Relationship to `probe merge`**: probe-aeneas's `extract` command is an instantiation of the generic `probe merge` engine for the Aeneas Rust-to-Lean case. It generates translations (Aeneas-specific), calls `merge_atom_maps` from `probe::commands::merge` for the generic combine + cross-language-edge step, then enriches the result with Aeneas-specific metadata (`translation-*`, `untracked`). See [docs/architecture.md](docs/architecture.md) for the full picture. Shared types (`Atom`, `Mapping`, `MergedAtomEnvelope`, `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
 
 ### Key Types
 

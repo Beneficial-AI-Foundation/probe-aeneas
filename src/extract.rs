@@ -751,7 +751,7 @@ fn run_translate(
 ///
 /// The pipeline has three clearly separated phases:
 /// 1. **Merge** — generic `probe merge` operation via `merge_atom_files`.
-/// 2. **Enrich** — Aeneas-specific metadata (`translation-*`, `is-disabled`).
+/// 2. **Enrich** — Aeneas-specific metadata (`translation-*`, `untracked`).
 /// 3. **Write** — envelope construction and output.
 ///
 /// When `output_path` is `None`, writes to
@@ -865,7 +865,7 @@ fn resolve_verification_status(
     }
 }
 
-/// Add Aeneas-specific metadata to merged atoms, and set `is-disabled` per the
+/// Add Aeneas-specific metadata to merged atoms, and set `untracked` per the
 /// two-state scope model (KB P24/P25).
 ///
 /// Two enrichment passes:
@@ -874,7 +874,7 @@ fn resolve_verification_status(
 ///    (spec-based) from the Lean atom and its primary spec — **unless** the
 ///    translation carries `@[out_of_scope]`, in which case no status is set
 ///    (an out-of-scope atom carries no `verification-status`).
-/// 2. For every Rust atom, default `is-disabled` to `false` (tracked backlog),
+/// 2. For every Rust atom, default `untracked` to `false` (tracked backlog),
 ///    and set it to `true` only when the atom has **no** `verification-status`
 ///    **and** it is genuinely out of scope: its `#[cfg]` predicate is inactive
 ///    in the Aeneas build (`cfg_config`), or its translation is `@[out_of_scope]`.
@@ -934,7 +934,7 @@ fn enrich_with_aeneas_metadata(
                 );
             }
             // An out-of-scope translation carries no verification-status
-            // (P24: has-status ⟹ ¬is-disabled).
+            // (P24: has-status ⟹ ¬untracked).
             if !out_of_scope {
                 atom.extensions
                     .insert("verification-status".to_string(), vs);
@@ -978,10 +978,10 @@ fn enrich_with_aeneas_metadata(
         };
         // Tracked backlog by default; disabled only when out of scope and not
         // status-bearing (P24/P25).
-        let is_disabled =
+        let untracked =
             !has_status && (cfg_inactive || out_of_scope || non_lib_target || config_oos);
         atom.extensions
-            .insert("is-disabled".to_string(), serde_json::json!(is_disabled));
+            .insert("untracked".to_string(), serde_json::json!(untracked));
         // Relevance is crate membership, independent of scope: external stubs
         // (empty code-path) reference other crates and are not relevant.
         atom.extensions.insert(
@@ -1008,7 +1008,7 @@ fn write_aeneas_envelope(
 
     let envelope = MergedAtomEnvelope {
         schema: "probe-aeneas/extract".to_string(),
-        schema_version: "2.1".to_string(),
+        schema_version: "3.0".to_string(),
         tool: Tool {
             name: "probe-aeneas".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -1822,7 +1822,7 @@ charon:
             .get("probe:my-crate/1.0/ristretto/decompress/step_2()")
             .unwrap();
         assert_eq!(
-            atom.extensions.get("is-disabled"),
+            atom.extensions.get("untracked"),
             Some(&serde_json::json!(false)),
             "a translated (status-bearing) atom is tracked, never disabled"
         );
@@ -1848,7 +1848,7 @@ charon:
     #[test]
     fn enrich_untranslated_compiled_atom_is_backlog() {
         // A compiled Rust function Aeneas did not translate (no from_to entry,
-        // no cfg gate) is unverified backlog: is-disabled false, no status.
+        // no cfg gate) is unverified backlog: untracked false, no status.
         let mut merged = std::collections::BTreeMap::new();
         merged.insert("probe:crate/1.0/foo()".to_string(), make_rust_atom("foo"));
 
@@ -1857,7 +1857,7 @@ charon:
 
         let atom = merged.get("probe:crate/1.0/foo()").unwrap();
         assert_eq!(
-            atom.extensions.get("is-disabled"),
+            atom.extensions.get("untracked"),
             Some(&serde_json::json!(false)),
             "untranslated compiled function is tracked backlog, not disabled"
         );
@@ -1868,7 +1868,7 @@ charon:
     }
 
     #[test]
-    fn enrich_cfg_inactive_atom_is_disabled() {
+    fn enrich_cfg_inactive_atom_untracked() {
         let mut merged = std::collections::BTreeMap::new();
         let mut atom = make_rust_atom("serde_only");
         atom.extensions
@@ -1884,7 +1884,7 @@ charon:
 
         let atom = merged.get("probe:crate/1.0/serde_only()").unwrap();
         assert_eq!(
-            atom.extensions.get("is-disabled"),
+            atom.extensions.get("untracked"),
             Some(&serde_json::json!(true)),
             "a cfg-inactive function is out of scope"
         );
@@ -1907,14 +1907,14 @@ charon:
 
         let atom = merged.get("probe:crate/1.0/alloc_gated()").unwrap();
         assert_eq!(
-            atom.extensions.get("is-disabled"),
+            atom.extensions.get("untracked"),
             Some(&serde_json::json!(false)),
             "an active-feature-gated function stays tracked backlog"
         );
     }
 
     #[test]
-    fn enrich_non_library_target_is_disabled() {
+    fn enrich_non_library_target_untracked() {
         let mut merged = std::collections::BTreeMap::new();
         // A benchmark function: compiled outside the verified library, no cfg,
         // no translation → out of scope, not backlog (KB P25).
@@ -1937,7 +1937,7 @@ charon:
             "probe:crate/1.0/build/main()",
         ] {
             assert_eq!(
-                merged[k].extensions.get("is-disabled"),
+                merged[k].extensions.get("untracked"),
                 Some(&serde_json::json!(true)),
                 "non-library target {k} should be out of scope"
             );
@@ -1946,7 +1946,7 @@ charon:
         assert_eq!(
             merged["probe:crate/1.0/lib_fn()"]
                 .extensions
-                .get("is-disabled"),
+                .get("untracked"),
             Some(&serde_json::json!(false)),
             "library function stays tracked backlog"
         );
@@ -1978,21 +1978,21 @@ charon:
         assert_eq!(
             merged["probe:crate/1.0/edwards/EdwardsPoint_fmt()"]
                 .extensions
-                .get("is-disabled"),
+                .get("untracked"),
             Some(&serde_json::json!(true)),
             "config out-of-scope pattern should disable the matching fn"
         );
         assert_eq!(
             merged["probe:crate/1.0/edwards/compress()"]
                 .extensions
-                .get("is-disabled"),
+                .get("untracked"),
             Some(&serde_json::json!(false)),
             "a non-matching library fn stays tracked backlog"
         );
     }
 
     #[test]
-    fn enrich_out_of_scope_translation_is_disabled() {
+    fn enrich_out_of_scope_translation_untracked() {
         let mut merged = std::collections::BTreeMap::new();
 
         let rust_atom = make_rust_atom("opt_out");
@@ -2015,7 +2015,7 @@ charon:
 
         let atom = merged.get("probe:my-crate/1.0/opt_out()").unwrap();
         assert_eq!(
-            atom.extensions.get("is-disabled"),
+            atom.extensions.get("untracked"),
             Some(&serde_json::json!(true)),
             "@[out_of_scope] translation marks the Rust function out of scope"
         );

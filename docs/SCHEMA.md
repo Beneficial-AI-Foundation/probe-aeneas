@@ -20,7 +20,7 @@ sections below), but share this structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema` | string | Data type identifier (e.g. `"probe-aeneas/extract"`) |
-| `schema-version` | string | Interchange spec version (`"2.1"` for `extract`, `"2.0"` for `translate`) |
+| `schema-version` | string | Interchange spec version (`"3.0"` for both `extract` and `translate`) |
 | `tool.name` | string | Always `"probe-aeneas"` |
 | `tool.version` | string | Semver version of the probe-aeneas binary |
 | `tool.command` | string | Subcommand that produced the file |
@@ -38,7 +38,7 @@ sections below), but share this structure:
 ```json
 {
   "schema": "probe-aeneas/extract",
-  "schema-version": "2.1",
+  "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
     "version": "0.9.0",
@@ -117,7 +117,7 @@ extension fields passed through verbatim.
     "kind": "exec",
     "language": "rust",
     "rust-qualified-name": "curve25519_dalek::scalar::Scalar::from_bytes_mod_order",
-    "is-disabled": false,
+    "untracked": false,
     "is-public": true,
     "is-public-api": true,
     "verification-status": "verified",
@@ -236,9 +236,9 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
 | `charon-def-id` | integer | no | The charon `FunDeclId` for this function (from probe-rust's span→`FunDecl` resolution). Equals Aeneas's `translation.json` `def_id`, enabling a precise integer join to the Lean translation. Always emitted **together with** `charon-version` (see below). |
 | `charon-version` | string | no | The charon version that produced `charon-def-id`. Provenance-gates the `def_id` join: the join runs only when this matches Aeneas's `translation.json` `charon_version`. |
-| `is-disabled` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is either cfg-inactive in the Aeneas build (its `cfg` predicate is false) or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
+| `untracked` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is either cfg-inactive in the Aeneas build (its `cfg` predicate is false) or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
 | `is-relevant` | bool | yes | Crate membership, independent of scope: `true` when the atom belongs to the analyzed crate (non-empty `code-path`), `false` for external stubs. |
-| `cfg` | string | no | The combined item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; own gate plus enclosing `impl`/`mod`/`trait` gates, `all(...)`-joined). Omitted when the function has no `#[cfg]` gate. Used to decide `is-disabled` (cfg-inactive ⟹ out of scope). |
+| `cfg` | string | no | The combined item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; own gate plus enclosing `impl`/`mod`/`trait` gates, `all(...)`-joined). Omitted when the function has no `#[cfg]` gate. Used to decide `untracked` (cfg-inactive ⟹ out of scope). |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
 | `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Derived from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is propagated directly. Otherwise, if a primary spec exists, the spec's status is used; if no spec exists, the status is `"unverified"`. After enrichment (default, `--skip-enrich` to disable): `"verified"` is upgraded to `"transitively-verified"` when all transitive deps are verified/trusted. |
@@ -274,18 +274,18 @@ the enrichment pass:
 > **Note on spec discovery**: probe-aeneas resolves the primary spec via the `primary-spec` extension on the definition atom, falling back to the `<name>_spec` naming convention. It does not currently walk the `specs` array. Definitions whose specs do not match either pattern will be classified as `"unverified"` on the Rust side.
 | `rust-source` | string or null | no | Rust source reference from Aeneas docstring |
 
-### `is-disabled` -- Aeneas Scope Indicator (KB P24/P25)
+### `untracked` -- Aeneas Scope Indicator (KB P24/P25)
 
-Every Rust atom in the merged output carries an `is-disabled` boolean marking
+Every Rust atom in the merged output carries an `untracked` boolean marking
 whether the function is in verification scope. probe-aeneas follows the
 two-state scope model of KB P24/P25.
 
 **Semantics:**
-- `is-disabled: false` -- **in scope**. Every compiled Rust function is tracked
+- `untracked: false` -- **in scope**. Every compiled Rust function is tracked
   by default. This includes the *backlog*: compiled functions that Aeneas has
   not translated (or has translated but not yet verified) carry
-  `is-disabled: false` and no or `"unverified"` `verification-status`.
-- `is-disabled: true` -- **out of scope**, and carries no `verification-status`.
+  `untracked: false` and no or `"unverified"` `verification-status`.
+- `untracked: true` -- **out of scope**, and carries no `verification-status`.
   A function is out of scope only when:
   1. **cfg-inactive** -- its `cfg` predicate is false under the Aeneas build's
      active feature set (e.g. `#[cfg(test)]`, an inactive feature). It is not
@@ -294,13 +294,13 @@ two-state scope model of KB P24/P25.
      `@[out_of_scope]` attribute, an explicit opt-out.
 
 **Not a scope signal:** absence from `functions.json`. A compiled Rust function
-Aeneas has not translated is backlog (`is-disabled: false`), not out of scope.
+Aeneas has not translated is backlog (`untracked: false`), not out of scope.
 `functions.json` remains the translation-matching bridge, not the scope oracle.
 
 **How it is computed:** During the `extract` merge step, probe-aeneas populates
 `translation-name`/`verification-status` for translated Rust atoms (a status is
 skipped when the translation is `@[out_of_scope]`). Then, for each Rust atom,
-`is-disabled` defaults to `false` and is set to `true` only when the atom has no
+`untracked` defaults to `false` and is set to `true` only when the atom has no
 `verification-status` **and** is cfg-inactive or `@[out_of_scope]`. The active
 feature set is resolved via `cargo metadata` (default features overlaid by
 `charon.cargo_args`); when it cannot be resolved, cfg classification is skipped
@@ -309,7 +309,7 @@ status-bearing atom is never disabled (P24).
 
 **Consumer guidance:** partition the Rust call graph into in-scope (`false`) and
 out-of-scope (`true`). The verification backlog is exactly the in-scope,
-unspecified functions: `is-disabled: false` with no/`"unverified"` status.
+unspecified functions: `untracked: false` with no/`"unverified"` status.
 
 ### `is-public` -- Rust Visibility Indicator
 
@@ -331,7 +331,7 @@ atoms. During the `extract` merge step, probe-aeneas preserves any existing
 `is-public` value from the Rust atoms and defaults missing ones to `false`.
 
 **Consumer guidance:** Downstream tools can use `is-public` together with
-`is-disabled` to identify functions that are both part of the public API and
+`untracked` to identify functions that are both part of the public API and
 in scope for verification, useful for prioritizing verification effort.
 
 ### Computed Fields: Auto vs Manual
@@ -345,7 +345,7 @@ needed for each field.
 |-------|--------|---------------------|
 | `is-extraction-artifact` | **AUTO** | `true` for Aeneas-generated auxiliary defs that carry `rust-source` but correspond to no Rust `exec` atom, so consumers keep them out of implementation counts (probe-aeneas#26). Covers: (1) loop/body split helpers — display name ends with `_body`, `_loop`, `_loop0`–`_loop3` (universal Aeneas suffixes); (2) **trait-instance wrappers** — one per `impl Trait for Type` block, named `<Type>.Insts.<Trait>` with no method leaf (the exec's `translation-name` targets the method body, not the wrapper); (3) **type stand-ins** — Rust types are never execs; (4) **function-split parts** — `<fn>.part1`/`.part2`, only the main def is a translation target. Categories 2–3 are authoritative from Aeneas's `translation.json` (`trait_impls` + `types` arrays) when present, falling back to name/kind heuristics (`.Insts.<one-segment>`, reducible type aliases, `.part<N>`) otherwise. **Guard:** a def carrying a primary spec is a genuine implementation and is never flagged. No config needed. |
 | `is-hidden` | **HYBRID** | **Auto:** `true` when `attributes` contains `"rust_trait_impl"`, OR the name matches a boilerplate `.Insts.` trait (Clone, Copy, Default, Zeroize), OR the name is a borrow-pattern delegator variant (`SharedA`/`SharedB` in receiver or `SharedB` in trait args — `Shared0` primary forms are kept visible), OR the name ends with `.mutual` (loop mutual recursion), OR the name contains `.closure` (closures), OR the name contains `.Blanket.` (blanket impls), OR the name contains `DOC_HIDDEN` (doc-hidden constants), OR the entry is an `.Insts.` parent with exactly one nested child method (single-child parent collapsing). **Manual:** project-specific entries via `aeneas.json` config (inner constants, project-specific helpers). |
-| `is-relevant` | **AUTO** | For Lean atoms without `rust-source`: inherits `is-in-package` from probe-lean. For Lean atoms with `rust-source`: `true` when the source path contains the Rust crate name, does not start with `/`, and does not contain `/cargo/registry/`. This subsumes `excluded-namespace-prefixes` — external Rust dependencies that Aeneas transpiled will have `rust-source` paths from other crates. For Rust atoms: `is-relevant` = `!is-disabled` (i.e. `true` when in `functions.json` or has a translation). |
+| `is-relevant` | **AUTO** | For Lean atoms without `rust-source`: inherits `is-in-package` from probe-lean. For Lean atoms with `rust-source`: `true` when the source path contains the Rust crate name, does not start with `/`, and does not contain `/cargo/registry/`. This subsumes `excluded-namespace-prefixes` — external Rust dependencies that Aeneas transpiled will have `rust-source` paths from other crates. For Rust atoms: `is-relevant` = `!code-path.is_empty()` (crate membership) — `true` for every atom with a source path, `false` for external stubs that reference other crates. This is independent of `untracked` (scope). |
 | `is-ignored` | **MANUAL** | Always requires explicit configuration in `aeneas.json`. This is a human editorial decision about what to exclude from verification progress percentages. probe-aeneas never auto-sets this to `true`. |
 | `is-externally-verified` | **AUTO** | `true` when `attributes` (from probe-lean) contains `"externally_verified"`. Applied to spec theorems where the proof uses `sorry` but is verified externally (e.g. in Verus). |
 
@@ -384,7 +384,7 @@ the Rust atom with explicit translation metadata:
   "probe:curve25519-dalek/4.1.3/.../add_assign()": {
     "display-name": "impl::add_assign",
     "language": "rust",
-    "is-disabled": false,
+    "untracked": false,
     "translation-name": "probe:curve25519_dalek...add_assign",
     "translation-path": "Curve25519Dalek/Funs.lean",
     "translation-text": { "lines-start": 446, "lines-end": 456 },
@@ -435,7 +435,7 @@ entries with:
 ```json
 {
   "schema": "probe/mappings",
-  "schema-version": "2.0",
+  "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
     "version": "0.9.0",
@@ -642,7 +642,7 @@ join (strategy 0) and `rust-qualified-name` (strategy 1).
 ### With probe-lean
 
 probe-aeneas consumes `probe-lean/extract` files as input. These follow a
-similar Schema 2.0 envelope with `"lean"` language atoms.
+similar Schema 3.0 envelope with `"lean"` language atoms.
 
 ### With probe (shared crate)
 
@@ -650,7 +650,7 @@ probe-aeneas is an instantiation of the generic `probe merge` engine for
 the Aeneas Rust-to-Lean case. The `extract` command generates
 Aeneas-specific translations, calls `merge_atom_maps` from
 `probe::commands::merge` for the combine + cross-language-edge step, then
-enriches the result with Aeneas metadata (`translation-*`, `is-disabled`).
+enriches the result with Aeneas metadata (`translation-*`, `untracked`).
 Shared types (`Atom`, `Mapping`, `MergedAtomEnvelope`,
 `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
 See [architecture.md](architecture.md) for the full architectural

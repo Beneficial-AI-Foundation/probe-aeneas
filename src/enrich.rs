@@ -244,7 +244,7 @@ pub fn is_config_out_of_scope(rqn: &str, display_name: &str, globs: &[regex::Reg
 ///
 /// A Lean translation carrying this attribute declares "this translation will
 /// not be verified", so the corresponding Rust function is out of verification
-/// scope (`is-disabled: true`, no status) per KB P25. probe-lean surfaces Lean
+/// scope (`untracked: true`, no status) per KB P25. probe-lean surfaces Lean
 /// attributes stripped of their `@[...]` syntax, so the bare `out_of_scope`
 /// form is the expected value; the bracketed form is accepted defensively.
 pub fn is_out_of_scope(attrs: &[String]) -> bool {

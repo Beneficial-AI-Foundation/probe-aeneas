@@ -12,7 +12,7 @@ FILE=examples/aeneas_curve25519-dalek_4.1.3.json
 Rust functions that Aeneas transpiles to Lean receive a `verification-status`
 field (`verified` or `trusted`). Functions outside Aeneas's scope (excluded
 by `aeneas-config.yml`, feature-gated trait impls, functions Charon cannot
-extract) have no `verification-status` and are marked `is-disabled: true`.
+extract) have no `verification-status` and are marked `untracked: true`.
 The ratios below use `verification-status != null` as the denominator so
 they reflect only functions Aeneas actually processed.
 
@@ -167,7 +167,7 @@ jq '[.data | to_entries[] | select(.value."verification-status" == "trusted")] |
 transpiled them to Lean and the Lean proof was verified). Functions outside
 scope (464 Rust functions with no status) are excluded from Charon extraction,
 feature-gated ecosystem trait impls, or functions Charon cannot extract.
-These are marked `is-disabled: true`.
+These are marked `untracked: true`.
 
 | Trust base | Count |
 |------------|------:|

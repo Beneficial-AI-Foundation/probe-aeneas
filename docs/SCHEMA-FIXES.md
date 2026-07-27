@@ -88,7 +88,7 @@ in other producers".
 `probe merge` (it calls `merge_atom_maps` for the generic
 combine + cross-language-edge step), but the output is semantically
 richer than a plain merge: it includes Aeneas-specific `translation-*`
-metadata and `is-disabled` flags added in a post-merge enrichment phase.
+metadata and `untracked` flags added in a post-merge enrichment phase.
 The distinct schema name lets downstream consumers distinguish the two
 and apply appropriate validation.
 

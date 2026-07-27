@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+- **Renamed atom extension key `is-disabled` to `untracked`** (KB P24/P25).
+  Semantics and polarity are unchanged: the field marks an atom as out of
+  verification scope (`untracked: true` ≡ former `is-disabled: true`). Breaking
+  wire change — consumers reading the `is-disabled` key must switch to `untracked`.
+- **Bumped `schema-version` to `3.0`** across the ecosystem's unified schema.
+  Both the `probe-aeneas/extract` envelope (was `2.1`) and the `probe/mappings`
+  (`translate`) envelope (was `2.0`) now emit `3.0`. Breaking — the major bump
+  reflects the `is-disabled` → `untracked` rename above.
+
 ## [0.16.0] - 2026-07-16
 
 ### Added

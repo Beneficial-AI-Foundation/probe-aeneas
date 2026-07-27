@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "probe"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "clap",
@@ -434,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "probe-aeneas"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "chrono",

@@ -7,7 +7,7 @@
   "package": "Curve25519Dalek",
   "language": "lean",
   "commit": "df8fb499e1cee086c23de96cba57622326863c8e"},
- "schema-version": "2.0",
+ "schema-version": "3.0",
  "schema": "probe-lean/extract",
  "data":
  {"probe:tacticExpand_With_":

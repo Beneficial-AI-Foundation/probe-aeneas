@@ -2,7 +2,7 @@
 
 Cross-language extract tool for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects.
 
-`probe-aeneas` bridges `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms) by generating translation mappings and producing a combined call graph with cross-language dependency edges. Output follows the Schema 2.0 envelope format; see [docs/SCHEMA.md](docs/SCHEMA.md) for the full specification.
+`probe-aeneas` bridges `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms) by generating translation mappings and producing a combined call graph with cross-language dependency edges. Output follows the Schema 3.0 envelope format; see [docs/SCHEMA.md](docs/SCHEMA.md) for the full specification.
 
 ## Prerequisites
 
@@ -119,7 +119,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 ```json
 {
   "schema": "probe-aeneas/extract",
-  "schema-version": "2.0",
+  "schema-version": "3.0",
   "tool": { "name": "probe-aeneas", "version": "0.9.0", "command": "extract" },
   "inputs": [
     { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
@@ -138,7 +138,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
       "translation-name": "probe:Curve25519Dalek.Scalar.add",
       "translation-path": "Curve25519Dalek/Scalar.lean",
       "translation-text": { "lines-start": 10, "lines-end": 25 },
-      "is-disabled": false
+      "untracked": false
     }
   }
 }
@@ -154,8 +154,8 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
    2. `file+display-name` -- same source file + matching base method name
    3. `file+line-overlap` -- same source file + overlapping line ranges
 5. **Merge** -- combines Rust and Lean atom maps, adding cross-language dependency edges where translations exist.
-6. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `is-disabled` to Rust atoms.
-7. **Schema 2.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
+6. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `untracked` to Rust atoms.
+7. **Schema 3.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
 ## How probe-aeneas decides what to analyze
 
