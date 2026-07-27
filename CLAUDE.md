@@ -55,7 +55,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 ### Pipeline
 
-1. **Extract Pipeline** (`extract` command): resolve project (parse `aeneas-config.yml` if positional arg given) → resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → merge atom maps → Schema 2.1 envelope → output
+1. **Extract Pipeline** (`extract` command): resolve project (parse `aeneas-config.yml` if positional arg given) → resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → merge atom maps → Schema 3.0 envelope → output
 2. **Translate Pipeline** (`translate` command): load Rust atoms + Lean atoms + functions.json → priority-ordered matching → translations JSON
 3. **Listfuns Pipeline** (`listfuns` command): `lake exe listfuns` → functions.json
 

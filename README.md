@@ -2,7 +2,7 @@
 
 Cross-language extract tool for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects.
 
-`probe-aeneas` bridges `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms) by generating translation mappings and producing a combined call graph with cross-language dependency edges. Output follows the Schema 2.0 envelope format; see [docs/SCHEMA.md](docs/SCHEMA.md) for the full specification.
+`probe-aeneas` bridges `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms) by generating translation mappings and producing a combined call graph with cross-language dependency edges. Output follows the Schema 3.0 envelope format; see [docs/SCHEMA.md](docs/SCHEMA.md) for the full specification.
 
 ## Prerequisites
 
@@ -155,7 +155,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
    3. `file+line-overlap` -- same source file + overlapping line ranges
 5. **Merge** -- combines Rust and Lean atom maps, adding cross-language dependency edges where translations exist.
 6. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `untracked` to Rust atoms.
-7. **Schema 2.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
+7. **Schema 3.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
 ## How probe-aeneas decides what to analyze
 

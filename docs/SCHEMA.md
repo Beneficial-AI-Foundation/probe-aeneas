@@ -642,7 +642,7 @@ join (strategy 0) and `rust-qualified-name` (strategy 1).
 ### With probe-lean
 
 probe-aeneas consumes `probe-lean/extract` files as input. These follow a
-similar Schema 2.0 envelope with `"lean"` language atoms.
+similar Schema 3.0 envelope with `"lean"` language atoms.
 
 ### With probe (shared crate)
 
