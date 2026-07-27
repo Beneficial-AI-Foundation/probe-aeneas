@@ -20,7 +20,7 @@ sections below), but share this structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema` | string | Data type identifier (e.g. `"probe-aeneas/extract"`) |
-| `schema-version` | string | Interchange spec version (`"2.1"` for `extract`, `"2.0"` for `translate`) |
+| `schema-version` | string | Interchange spec version (`"3.0"` for both `extract` and `translate`) |
 | `tool.name` | string | Always `"probe-aeneas"` |
 | `tool.version` | string | Semver version of the probe-aeneas binary |
 | `tool.command` | string | Subcommand that produced the file |
@@ -38,7 +38,7 @@ sections below), but share this structure:
 ```json
 {
   "schema": "probe-aeneas/extract",
-  "schema-version": "2.1",
+  "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
     "version": "0.9.0",
@@ -435,7 +435,7 @@ entries with:
 ```json
 {
   "schema": "probe/mappings",
-  "schema-version": "2.0",
+  "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
     "version": "0.9.0",

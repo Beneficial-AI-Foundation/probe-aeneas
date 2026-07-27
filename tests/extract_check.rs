@@ -13,7 +13,7 @@ fn example_merged_json_has_valid_structure() {
 
     // Merged envelope fields.
     assert_eq!(json["schema"], "probe-aeneas/extract");
-    assert_eq!(json["schema-version"], "2.1");
+    assert_eq!(json["schema-version"], "3.0");
     assert!(json["tool"]["name"].is_string());
     assert!(
         json["inputs"].is_array(),

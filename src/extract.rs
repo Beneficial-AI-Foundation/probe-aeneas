@@ -1008,7 +1008,7 @@ fn write_aeneas_envelope(
 
     let envelope = MergedAtomEnvelope {
         schema: "probe-aeneas/extract".to_string(),
-        schema_version: "2.1".to_string(),
+        schema_version: "3.0".to_string(),
         tool: Tool {
             name: "probe-aeneas".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),

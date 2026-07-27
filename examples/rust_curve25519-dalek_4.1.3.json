@@ -1,6 +1,6 @@
 {
   "schema": "probe-rust/extract",
-  "schema-version": "2.3",
+  "schema-version": "3.0",
   "tool": {
     "name": "probe-rust",
     "version": "0.4.0",

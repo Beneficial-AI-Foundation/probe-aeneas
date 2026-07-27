@@ -75,7 +75,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 **Auto-Install**: `probe-rust` is installed via `cargo install --git`. `probe-lean` is version-aware: the target project's `lean-toolchain` is read, then a versioned binary (`~/.local/bin/probe-lean-<version>`) is looked up or installed (pre-built download from GitHub Releases, falling back to source build with `lake build`). A `~/.local/bin/probe-lean` symlink points to the active version.
 
-**Schema 2.x Metadata Envelope**: Merged output uses the `probe-aeneas/extract` schema (`schema-version: "2.1"`, for the optional `charon-def-id`/`charon-version` atom fields); translation output uses the `probe/mappings` schema (`schema-version: "2.0"`). Both wrap payloads with tool info, source provenance, and timestamps.
+**Schema 3.0 Metadata Envelope**: Merged output uses the `probe-aeneas/extract` schema (`schema-version: "3.0"`, for the optional `charon-def-id`/`charon-version` atom fields); translation output uses the `probe/mappings` schema (`schema-version: "3.0"`). Both wrap payloads with tool info, source provenance, and timestamps.
 
 **Relationship to `probe merge`**: probe-aeneas's `extract` command is an instantiation of the generic `probe merge` engine for the Aeneas Rust-to-Lean case. It generates translations (Aeneas-specific), calls `merge_atom_maps` from `probe::commands::merge` for the generic combine + cross-language-edge step, then enriches the result with Aeneas-specific metadata (`translation-*`, `untracked`). See [docs/architecture.md](docs/architecture.md) for the full picture. Shared types (`Atom`, `Mapping`, `MergedAtomEnvelope`, `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
 

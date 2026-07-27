@@ -974,7 +974,7 @@
     }
   ],
   "schema": "probe/mappings",
-  "schema-version": "2.0",
+  "schema-version": "3.0",
   "sources": {
     "from": {
       "package": "curve25519-dalek",
