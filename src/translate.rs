@@ -212,7 +212,7 @@ pub fn generate_translations(
 
 /// Build a set of normalized Rust qualified names from `functions.json` entries.
 ///
-/// Used to determine which Rust atoms Aeneas processed (`is-disabled: false`).
+/// Used to determine which Rust atoms Aeneas processed (`untracked: false`).
 pub fn build_functions_rust_names(functions: &[FunctionRecord]) -> HashSet<String> {
     functions
         .iter()

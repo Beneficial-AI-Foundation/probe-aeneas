@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+- **Renamed atom extension key `is-disabled` to `untracked`** (KB P24/P25).
+  Semantics and polarity are unchanged: the field marks an atom as out of
+  verification scope (`untracked: true` ≡ former `is-disabled: true`). Breaking
+  wire change — consumers reading the `is-disabled` key must switch to `untracked`.
+
 ## [0.16.0] - 2026-07-16
 
 ### Added

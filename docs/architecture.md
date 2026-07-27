@@ -124,10 +124,10 @@ the merged atom map:
    propagated directly. Otherwise, the spec's status is used; if no
    spec exists, the status is `"unverified"`.
 
-3. **`is-disabled` flag**: for every Rust atom, `is-disabled` is `false`
+3. **`untracked` flag**: for every Rust atom, `untracked` is `false`
    when its `rust-qualified-name` appears as a `rust_name` in
    `functions.json` or the atom already has a `translation-name` from
-   step 1. Otherwise it is out of scope (`is-disabled: true`).
+   step 1. Otherwise it is out of scope (`untracked: true`).
 
 Implementation: `src/extract.rs::enrich_with_aeneas_metadata`.
 
@@ -136,7 +136,7 @@ Implementation: `src/extract.rs::enrich_with_aeneas_metadata`.
 The output carries `"schema": "probe-aeneas/extract"` rather than the
 generic `"probe/merged-atoms"` used by `probe merge`. This is because
 the enrichment in phase 3 makes the output semantically richer than a
-plain merge: it contains `translation-*` fields and `is-disabled` that
+plain merge: it contains `translation-*` fields and `untracked` that
 the generic merge engine does not produce. The distinct schema name lets
 downstream consumers distinguish the two and apply appropriate
 validation or display logic.

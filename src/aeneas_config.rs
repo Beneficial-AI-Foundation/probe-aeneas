@@ -29,7 +29,7 @@ pub struct AeneasConfigFile {
     #[serde(default, rename = "is-ignored")]
     pub is_ignored: Vec<String>,
 
-    /// Rust functions to mark **out of verification scope** (`is-disabled: true`,
+    /// Rust functions to mark **out of verification scope** (`untracked: true`,
     /// no status), given as glob patterns (`*` matches any run of characters)
     /// matched against each Rust atom's `rust-qualified-name` and `display-name`.
     /// For functions Aeneas structurally does not translate — e.g. `Debug`/

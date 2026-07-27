@@ -37,7 +37,7 @@ Run only unit tests: `cargo test --lib`
 |------|---------------|
 | `example_merged_json_has_valid_structure` | Validates `MergedEnvelope` top-level fields: schema (`probe-aeneas/extract`), schema-version, tool, inputs array, timestamp, data object |
 | `example_merged_json_atoms_have_required_fields` | All atoms have `probe:` key prefix, non-empty `display-name`, `kind`, and `language` |
-| `example_merged_json_rust_atoms_have_translations` | Rust atoms have `is-disabled` field; at least some have `translation-name` |
+| `example_merged_json_rust_atoms_have_translations` | Rust atoms have `untracked` field; at least some have `translation-name` |
 | `micro_fixture_structural_check` | Loads the `aeneas_micro` fixture from `probe-extract-check` as `AtomEnvelope` and runs `check_all` (skips gracefully if fixture not found) |
 | `library_extract_with_pregenerated_json` | Runs `run_extract` via the library API with pre-generated example files (`examples/rust_*.json`, `examples/lean_*.json`, `examples/functions.json`). Validates the merged output has both Rust and Lean atoms with translation metadata. |
 
