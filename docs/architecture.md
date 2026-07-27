@@ -124,10 +124,14 @@ the merged atom map:
    propagated directly. Otherwise, the spec's status is used; if no
    spec exists, the status is `"unverified"`.
 
-3. **`untracked` flag**: for every Rust atom, `untracked` is `false`
-   when its `rust-qualified-name` appears as a `rust_name` in
-   `functions.json` or the atom already has a `translation-name` from
-   step 1. Otherwise it is out of scope (`untracked: true`).
+3. **`untracked` flag**: every Rust atom is tracked backlog by default
+   (`untracked: false`); membership in `functions.json` or the presence of
+   a `translation-name` does **not** decide scope. An atom flips to
+   `untracked: true` only when it carries no `verification-status` **and**
+   is genuinely out of the Aeneas verification build — cfg-inactive in the
+   resolved feature set, its Lean translation carries `@[out_of_scope]`, it
+   is a non-library target (`build.rs`/`tests`/`examples`/`benches`), or it
+   matches a curated `out-of-scope` glob in `aeneas.json` (KB P24/P25).
 
 Implementation: `src/extract.rs::enrich_with_aeneas_metadata`.
 

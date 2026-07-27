@@ -212,7 +212,11 @@ pub fn generate_translations(
 
 /// Build a set of normalized Rust qualified names from `functions.json` entries.
 ///
-/// Used to determine which Rust atoms Aeneas processed (`untracked: false`).
+/// A normalized view of the `rust_name` fields for name-based lookups. It does
+/// **not** decide scope: `untracked` is computed separately in
+/// `extract.rs::enrich_with_aeneas_metadata` from out-of-scope conditions
+/// (cfg-inactive / `@[out_of_scope]` / non-library target / config glob, KB P25),
+/// not from `functions.json` membership.
 pub fn build_functions_rust_names(functions: &[FunctionRecord]) -> HashSet<String> {
     functions
         .iter()

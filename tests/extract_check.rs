@@ -66,11 +66,11 @@ fn example_merged_json_rust_atoms_have_translations() {
         "expected Rust atoms in merged output"
     );
 
-    // All Rust atoms should have is-disabled field.
+    // All Rust atoms should have the untracked scope field.
     for (key, atom) in &rust_atoms {
         assert!(
-            atom.get("is-disabled").is_some(),
-            "Rust atom {key} missing 'is-disabled' field"
+            atom.get("untracked").is_some(),
+            "Rust atom {key} missing 'untracked' field"
         );
     }
 
