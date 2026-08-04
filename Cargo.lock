@@ -424,7 +424,8 @@ dependencies = [
 
 [[package]]
 name = "probe"
-version = "0.3.0"
+version = "0.4.0"
+source = "git+https://github.com/Beneficial-AI-Foundation/probe?tag=v0.4.0#15c45c0bfa129616cc77946bc97b48c4fc3eda95"
 dependencies = [
  "chrono",
  "clap",
