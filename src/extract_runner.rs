@@ -28,6 +28,12 @@ use crate::setup;
 
 const PROBE_LEAN_GIT: &str = "https://github.com/Beneficial-AI-Foundation/probe-lean.git";
 
+/// Opt-in env var that permits the floating-`main` source-build fallback.
+/// Unset (the default) makes probe-aeneas release-only: if no tagged pre-built
+/// binary matches the project's Lean version, installation fails clearly
+/// instead of silently building unreleased code. See issue #46 (#6).
+const ALLOW_SOURCE_BUILD_ENV: &str = "PROBE_LEAN_ALLOW_SOURCE_BUILD";
+
 // ---------------------------------------------------------------------------
 // Typed error
 // ---------------------------------------------------------------------------
@@ -59,6 +65,22 @@ pub enum ExtractRunnerError {
     /// Callers should fall back to building from source.
     #[error("No pre-built binary available, falling back to source build")]
     NoPrebuiltAvailable,
+
+    /// A downloaded archive contains an entry with an absolute path or a `..`
+    /// component that would escape the extraction directory.
+    #[error("refusing to extract archive: unsafe entry path {entry:?}")]
+    UnsafeArchiveEntry { entry: String },
+
+    /// No pre-built release matched the target Lean version and the floating
+    /// `main` source-build fallback was not explicitly enabled.
+    #[error(
+        "no pre-built probe-lean release for Lean {version} on this platform, and building \
+         from source is disabled.\n  \
+         The source build clones probe-lean's unpinned `main` branch, which is not \
+         reproducible and may run unreleased code.\n  \
+         To allow it anyway, re-run with {env}=1 in the environment."
+    )]
+    SourceBuildDisabled { version: String, env: &'static str },
 
     /// `lake build` failed during source installation of probe-lean.
     #[error(
@@ -223,7 +245,14 @@ fn find_or_install_probe_rust() -> Result<PathBuf> {
 }
 
 fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf> {
-    let lean_version = lean_project.and_then(|p| detect_lean_version(p).ok());
+    // A missing `lean-toolchain` is tolerable (fall through to the unversioned
+    // "latest" install), but an empty/unreadable/malformed one is a hard error:
+    // silently installing an unversioned probe-lean can produce an incompatible
+    // .olean format whose failure only surfaces much later downstream (#46 #3).
+    let lean_version = match lean_project {
+        Some(p) => detect_lean_version(p)?,
+        None => None,
+    };
 
     if let Some(ref ver) = lean_version {
         let versioned_bin = home_dir()?.join(format!(".local/bin/probe-lean-{ver}"));
@@ -261,10 +290,25 @@ fn find_or_install_probe_lean(lean_project: Option<&Path>) -> Result<PathBuf> {
 }
 
 /// Read the Lean version from a project's `lean-toolchain` file.
-fn detect_lean_version(project: &Path) -> Result<String> {
+///
+/// Returns `Ok(None)` when the file simply does not exist (the caller may then
+/// fall through to an unversioned install). A file that exists but is empty,
+/// unreadable (permissions), or otherwise unparseable is a hard error, not a
+/// silent `None` — see [`find_or_install_probe_lean`] and issue #46 (#3).
+fn detect_lean_version(project: &Path) -> Result<Option<String>> {
     let toolchain_path = project.join("lean-toolchain");
-    let content = std::fs::read_to_string(&toolchain_path)
-        .with_context(|| format!("read lean-toolchain at {}", toolchain_path.display()))?;
+    let content = match std::fs::read_to_string(&toolchain_path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            return Err(anyhow::Error::new(e)
+                .context(format!(
+                    "read lean-toolchain at {}",
+                    toolchain_path.display()
+                ))
+                .into());
+        }
+    };
     let trimmed = content.trim();
     let version = if let Some(after_colon) = trimmed.split(':').nth(1) {
         after_colon.trim().to_string()
@@ -274,7 +318,7 @@ fn detect_lean_version(project: &Path) -> Result<String> {
     if version.is_empty() {
         return Err(ExtractRunnerError::LeanToolchainEmpty);
     }
-    Ok(version)
+    Ok(Some(version))
 }
 
 /// Detect platform as `{os}-{arch}` for pre-built binary downloads.
@@ -315,48 +359,74 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf> {
     }
 
     let body = String::from_utf8_lossy(&output.stdout);
-    let download_url = body
-        .lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.contains("browser_download_url") && line.contains(&artifact) {
-                line.split('"')
-                    .find(|s| s.starts_with("https://") && s.contains(&artifact))
-                    .map(String::from)
-            } else {
-                None
-            }
-        })
-        .next();
-
-    let url = download_url.ok_or(ExtractRunnerError::NoPrebuiltAvailable)?;
+    let url =
+        find_release_asset_url(&body, &artifact).ok_or(ExtractRunnerError::NoPrebuiltAvailable)?;
 
     println!("Downloading pre-built binary...");
 
-    let tmpdir = std::env::temp_dir().join("probe-lean-download");
-    if tmpdir.exists() {
-        std::fs::remove_dir_all(&tmpdir).ok();
-    }
-    std::fs::create_dir_all(&tmpdir)
-        .with_context(|| format!("create temp dir {}", tmpdir.display()))?;
+    // A unique, auto-cleaned temp dir: two concurrent extract runs no longer
+    // share (and clobber) a fixed `/tmp/probe-lean-download` path (#46 #2).
+    let tmpdir = tempfile::TempDir::new().context("create temp dir for probe-lean download")?;
+    let tmp = tmpdir.path();
+    let archive = tmp.join("probe-lean.tar.gz");
 
-    let status = Command::new("bash")
-        .args([
-            "-c",
-            &format!("curl -sL '{}' | tar -xz -C '{}'", url, tmpdir.display()),
-        ])
+    // Download to a file first (not a raw `curl | tar` pipe) so the archive can
+    // be inspected before anything is written to disk (#46 #5). `--fail` turns
+    // HTTP errors into a non-zero exit instead of a saved error page.
+    // NOTE: there is still no checksum/signature verification here — that needs
+    // probe-lean releases to publish checksums; tracked as a follow-up on #46.
+    let status = Command::new("curl")
+        .args(["--fail", "-sL", "-o"])
+        .arg(&archive)
+        .arg(&url)
         .status()
-        .context("spawn curl|tar pipeline to download probe-lean")?;
-
+        .context("download probe-lean archive via curl")?;
     if !status.success() {
-        return Err(anyhow::anyhow!("Download/extraction failed").into());
+        return Err(anyhow::anyhow!(
+            "Download failed (curl exit {})",
+            status.code().unwrap_or(-1)
+        )
+        .into());
+    }
+
+    // Reject archives whose entries would escape the extraction directory via
+    // absolute paths or `..` components before extracting anything (#46 #5).
+    let listing = Command::new("tar")
+        .arg("-tzf")
+        .arg(&archive)
+        .output()
+        .context("list probe-lean archive contents")?;
+    if !listing.status.success() {
+        return Err(anyhow::anyhow!("Failed to list archive contents").into());
+    }
+    for entry in String::from_utf8_lossy(&listing.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+    {
+        if !is_safe_archive_entry(entry) {
+            return Err(ExtractRunnerError::UnsafeArchiveEntry {
+                entry: entry.to_string(),
+            });
+        }
+    }
+
+    let status = Command::new("tar")
+        .arg("-xzf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(tmp)
+        .status()
+        .context("extract probe-lean archive")?;
+    if !status.success() {
+        return Err(anyhow::anyhow!("Extraction failed").into());
     }
 
     let dest_dir = home_dir()?.join(".local/bin");
     std::fs::create_dir_all(&dest_dir).context("create ~/.local/bin")?;
 
     let versioned_bin = dest_dir.join(format!("probe-lean-{lean_version}"));
-    let downloaded_bin = tmpdir.join("bin/probe-lean");
+    let downloaded_bin = tmp.join("bin/probe-lean");
     if !downloaded_bin.exists() {
         return Err(anyhow::anyhow!("Downloaded archive does not contain bin/probe-lean").into());
     }
@@ -377,32 +447,100 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf> {
     }
 
     let versioned_lib = home_dir()?.join(format!(".local/lib/probe-lean-{lean_version}"));
-    let downloaded_lib = tmpdir.join("lib");
+    let downloaded_lib = tmp.join("lib");
     if downloaded_lib.exists() {
         std::fs::create_dir_all(&versioned_lib)
             .with_context(|| format!("create lib dir {}", versioned_lib.display()))?;
         copy_dir_contents(&downloaded_lib, &versioned_lib)?;
     }
 
-    std::fs::remove_dir_all(&tmpdir).ok();
-
+    // `tmpdir` (the TempDir) is dropped here, cleaning up the extraction dir.
     println!("  ✓ Installed pre-built probe-lean-{lean_version}");
     Ok(versioned_bin)
 }
 
-/// Build probe-lean from source for a specific Lean version.
-fn build_from_source(lean_version: &str) -> Result<PathBuf> {
-    println!("Building probe-lean from source for Lean {lean_version}...");
-
-    let build_dir = std::env::temp_dir().join("probe-lean-build");
-    if build_dir.exists() {
-        std::fs::remove_dir_all(&build_dir)
-            .with_context(|| format!("clean build dir {}", build_dir.display()))?;
+/// Find the `browser_download_url` for an asset named exactly `artifact` in a
+/// GitHub releases API JSON response.
+///
+/// Parses the response with `serde_json` and matches the asset `name` field
+/// exactly, rather than line-grepping for `browser_download_url` (which was
+/// fragile to response formatting and could match an unintended asset — #46 #4).
+fn find_release_asset_url(body: &str, artifact: &str) -> Option<String> {
+    let releases: serde_json::Value = serde_json::from_str(body).ok()?;
+    for release in releases.as_array()? {
+        let Some(assets) = release.get("assets").and_then(|a| a.as_array()) else {
+            continue;
+        };
+        for asset in assets {
+            if asset.get("name").and_then(|n| n.as_str()) == Some(artifact) {
+                if let Some(url) = asset.get("browser_download_url").and_then(|u| u.as_str()) {
+                    return Some(url.to_string());
+                }
+            }
+        }
     }
+    None
+}
+
+/// Reject archive entry names that would escape the extraction directory:
+/// absolute paths (`/etc/...`) or any `..` path component.
+fn is_safe_archive_entry(entry: &str) -> bool {
+    let path = Path::new(entry);
+    if path.is_absolute() {
+        return false;
+    }
+    !path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+}
+
+/// Whether the floating-`main` source-build fallback is explicitly enabled via
+/// [`ALLOW_SOURCE_BUILD_ENV`]. Treats unset, empty, `0`, `false`, and `no`
+/// (case-insensitive) as disabled; any other value enables it.
+fn source_build_allowed() -> bool {
+    std::env::var(ALLOW_SOURCE_BUILD_ENV)
+        .map(|v| env_flag_enabled(&v))
+        .unwrap_or(false)
+}
+
+/// Interpret an env-var string as an on/off flag. Empty, `0`, `false`, and
+/// `no` (case-insensitive, trimmed) are off; anything else is on.
+fn env_flag_enabled(value: &str) -> bool {
+    !matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "" | "0" | "false" | "no"
+    )
+}
+
+/// Build probe-lean from source for a specific Lean version.
+///
+/// This clones probe-lean's unpinned `main` branch, so the result is not
+/// reproducible and may include unreleased code. It is therefore gated behind
+/// [`ALLOW_SOURCE_BUILD_ENV`]: unless that env var is set, the function returns
+/// [`ExtractRunnerError::SourceBuildDisabled`] so release-only consumers (e.g.
+/// verilib) fail clearly instead of silently building `main` (#46 #6).
+fn build_from_source(lean_version: &str) -> Result<PathBuf> {
+    if !source_build_allowed() {
+        return Err(ExtractRunnerError::SourceBuildDisabled {
+            version: lean_version.to_string(),
+            env: ALLOW_SOURCE_BUILD_ENV,
+        });
+    }
+
+    println!("Building probe-lean from source for Lean {lean_version}...");
+    eprintln!(
+        "  ⚠ {ALLOW_SOURCE_BUILD_ENV} is set: building probe-lean from the unpinned `main` \
+         branch. This is not reproducible and may run unreleased code."
+    );
+
+    // Unique, auto-cleaned build dir so concurrent runs don't clobber a shared
+    // `/tmp/probe-lean-build` path (#46 #2).
+    let build_tmp = tempfile::TempDir::new().context("create temp dir for probe-lean build")?;
+    let build_dir = build_tmp.path();
 
     let status = Command::new("git")
         .args(["clone", "--depth", "1", PROBE_LEAN_GIT])
-        .arg(&build_dir)
+        .arg(build_dir)
         .status()
         .context("spawn `git clone` for probe-lean")?;
 
@@ -427,7 +565,7 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf> {
 
     let output = Command::new("lake")
         .arg("build")
-        .current_dir(&build_dir)
+        .current_dir(build_dir)
         .output()
         .context("spawn `lake build`")?;
 
@@ -476,14 +614,38 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf> {
 }
 
 /// Update the `~/.local/bin/probe-lean` symlink to point at a versioned binary.
+///
+/// Only ever replaces an existing symlink; a regular file (or directory) at the
+/// path is left untouched with a warning, so a user-installed or
+/// package-manager-owned `probe-lean` is never silently destroyed (#46 #1).
 fn update_symlink(versioned_bin: &Path) -> Result<()> {
     let symlink = versioned_bin
         .parent()
         .context("versioned binary has no parent directory")?
         .join("probe-lean");
 
-    if symlink.exists() || symlink.symlink_metadata().is_ok() {
-        std::fs::remove_file(&symlink).ok();
+    // `symlink_metadata` does not follow the link, so this distinguishes an
+    // existing symlink from a real file we must not clobber.
+    match std::fs::symlink_metadata(&symlink) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            std::fs::remove_file(&symlink)
+                .with_context(|| format!("remove existing symlink at {}", symlink.display()))?;
+        }
+        Ok(_) => {
+            eprintln!(
+                "  ⚠ {} exists and is not a symlink managed by probe-aeneas; \
+                 leaving it untouched. Use the versioned binary directly, or remove that \
+                 file yourself to let probe-aeneas manage the symlink.",
+                symlink.display()
+            );
+            return Ok(());
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => {
+            return Err(anyhow::Error::new(e)
+                .context(format!("stat {}", symlink.display()))
+                .into());
+        }
     }
 
     #[cfg(unix)]
@@ -774,5 +936,182 @@ impl From<ExtractRunnerError> for String {
             source = s.source();
         }
         msg
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- detect_lean_version: distinguish missing vs. malformed (#46 #3) ---
+
+    #[test]
+    fn detect_lean_version_missing_file_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(detect_lean_version(dir.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn detect_lean_version_parses_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("lean-toolchain"),
+            "leanprover/lean4:v4.15.0\n",
+        )
+        .unwrap();
+        assert_eq!(
+            detect_lean_version(dir.path()).unwrap().as_deref(),
+            Some("v4.15.0")
+        );
+    }
+
+    #[test]
+    fn detect_lean_version_empty_file_is_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("lean-toolchain"), "   \n").unwrap();
+        assert!(matches!(
+            detect_lean_version(dir.path()),
+            Err(ExtractRunnerError::LeanToolchainEmpty)
+        ));
+    }
+
+    // --- find_release_asset_url: JSON parsing, exact name match (#46 #4) ---
+
+    #[test]
+    fn find_release_asset_url_exact_match() {
+        let body = r#"[
+            {"assets": [
+                {"name": "probe-lean-v4.15.0-linux-x86_64.tar.gz",
+                 "browser_download_url": "https://example.com/a.tar.gz"},
+                {"name": "probe-lean-v4.15.0-darwin-arm64.tar.gz",
+                 "browser_download_url": "https://example.com/b.tar.gz"}
+            ]}
+        ]"#;
+        assert_eq!(
+            find_release_asset_url(body, "probe-lean-v4.15.0-darwin-arm64.tar.gz").as_deref(),
+            Some("https://example.com/b.tar.gz")
+        );
+    }
+
+    #[test]
+    fn find_release_asset_url_no_substring_false_positive() {
+        // The requested artifact is a substring of an existing asset's name,
+        // but not an exact match — the old line-grep would have matched it.
+        let body = r#"[
+            {"assets": [
+                {"name": "probe-lean-v4.15.0-linux-x86_64.tar.gz.sha256",
+                 "browser_download_url": "https://example.com/checksum"}
+            ]}
+        ]"#;
+        assert!(find_release_asset_url(body, "probe-lean-v4.15.0-linux-x86_64.tar.gz").is_none());
+    }
+
+    #[test]
+    fn find_release_asset_url_tolerates_release_without_assets() {
+        let body = r#"[
+            {"name": "no-assets-release"},
+            {"assets": [
+                {"name": "wanted.tar.gz",
+                 "browser_download_url": "https://example.com/w"}
+            ]}
+        ]"#;
+        assert_eq!(
+            find_release_asset_url(body, "wanted.tar.gz").as_deref(),
+            Some("https://example.com/w")
+        );
+    }
+
+    #[test]
+    fn find_release_asset_url_invalid_json_is_none() {
+        assert!(find_release_asset_url("not json", "x.tar.gz").is_none());
+    }
+
+    // --- is_safe_archive_entry: path-traversal guard (#46 #5) ---
+
+    #[test]
+    fn safe_archive_entries_accepted() {
+        assert!(is_safe_archive_entry("bin/probe-lean"));
+        assert!(is_safe_archive_entry("lib/foo/bar.olean"));
+        assert!(is_safe_archive_entry("./bin/probe-lean"));
+    }
+
+    #[test]
+    fn unsafe_archive_entries_rejected() {
+        assert!(!is_safe_archive_entry("/etc/passwd"));
+        assert!(!is_safe_archive_entry("../escape"));
+        assert!(!is_safe_archive_entry("bin/../../escape"));
+    }
+
+    // --- env_flag_enabled: source-build gate parsing (#46 #6) ---
+
+    #[test]
+    fn env_flag_disabled_values() {
+        for v in ["", "  ", "0", "false", "FALSE", "no", " No "] {
+            assert!(!env_flag_enabled(v), "{v:?} should be disabled");
+        }
+    }
+
+    #[test]
+    fn env_flag_enabled_values() {
+        for v in ["1", "true", "yes", "on"] {
+            assert!(env_flag_enabled(v), "{v:?} should be enabled");
+        }
+    }
+
+    // --- update_symlink: never clobbers a non-symlink (#46 #1) ---
+
+    #[cfg(unix)]
+    #[test]
+    fn update_symlink_leaves_regular_file_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let versioned = dir.path().join("probe-lean-v4.15.0");
+        std::fs::write(&versioned, b"versioned").unwrap();
+        // A pre-existing regular file at the symlink path (e.g. user-installed).
+        let occupied = dir.path().join("probe-lean");
+        std::fs::write(&occupied, b"user-installed").unwrap();
+
+        update_symlink(&versioned).unwrap();
+
+        // Untouched: still a regular file with the original contents.
+        let meta = std::fs::symlink_metadata(&occupied).unwrap();
+        assert!(meta.file_type().is_file());
+        assert_eq!(std::fs::read(&occupied).unwrap(), b"user-installed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn update_symlink_replaces_existing_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let old_target = dir.path().join("probe-lean-old");
+        std::fs::write(&old_target, b"old").unwrap();
+        let versioned = dir.path().join("probe-lean-v4.15.0");
+        std::fs::write(&versioned, b"new").unwrap();
+        let link = dir.path().join("probe-lean");
+        std::os::unix::fs::symlink("probe-lean-old", &link).unwrap();
+
+        update_symlink(&versioned).unwrap();
+
+        let meta = std::fs::symlink_metadata(&link).unwrap();
+        assert!(meta.file_type().is_symlink());
+        assert_eq!(
+            std::fs::read_link(&link).unwrap(),
+            Path::new("probe-lean-v4.15.0")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn update_symlink_creates_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let versioned = dir.path().join("probe-lean-v4.15.0");
+        std::fs::write(&versioned, b"new").unwrap();
+
+        update_symlink(&versioned).unwrap();
+
+        let link = dir.path().join("probe-lean");
+        assert!(std::fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
     }
 }
