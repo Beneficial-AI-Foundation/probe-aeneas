@@ -440,10 +440,11 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf> {
 
     let versioned_bin = dest_dir.join(format!("probe-lean-{lean_version}"));
     let downloaded_bin = tmp.join("bin/probe-lean");
-    // Require a regular file: a symlinked `bin/probe-lean` would make the copy
-    // below follow it out of the extracted tree (#46 #2).
+    // Require a plain regular file: a symlinked `bin/probe-lean` would make the
+    // copy below follow it out of the extracted tree, and a hardlinked one would
+    // copy an out-of-tree file's contents (#46 #2).
     match std::fs::symlink_metadata(&downloaded_bin) {
-        Ok(m) if m.file_type().is_file() => {}
+        Ok(m) if m.file_type().is_file() && !is_hardlinked(&m) => {}
         Ok(_) => {
             return Err(ExtractRunnerError::UnsafeArchiveEntry {
                 entry: "bin/probe-lean".to_string(),
@@ -490,6 +491,24 @@ fn find_release_asset_url(body: &str, artifact: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// On Unix, whether a file has more than one hard link. A crafted archive can
+/// hardlink an entry to a sensitive host file, which `symlink_metadata` still
+/// reports as a plain regular file, so the copy-out would duplicate that file's
+/// contents into the install dir (#46 #2). Always `false` off Unix, where
+/// there's no cheap link-count check.
+fn is_hardlinked(meta: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        meta.nlink() > 1
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        false
+    }
 }
 
 /// Reject archive entry names that would escape the extraction directory:
@@ -826,6 +845,16 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<()> {
                 .with_context(|| format!("create dir {}", dst_path.display()))?;
             copy_dir_contents(&src_path, &dst_path)?;
         } else {
+            // `entry.metadata()` does not follow symlinks; reject hardlinked
+            // files, whose contents may come from outside the tree (#46 #2).
+            let meta = entry
+                .metadata()
+                .with_context(|| format!("stat entry {}", src_path.display()))?;
+            if is_hardlinked(&meta) {
+                return Err(ExtractRunnerError::UnsafeArchiveEntry {
+                    entry: src_path.display().to_string(),
+                });
+            }
             std::fs::copy(&src_path, &dst_path).with_context(|| {
                 format!("copy {} to {}", src_path.display(), dst_path.display())
             })?;
@@ -1344,6 +1373,25 @@ mod tests {
         std::fs::write(outside.join("secret"), b"x").unwrap();
         let src = dir.path().join("lib");
         std::os::unix::fs::symlink(&outside, &src).unwrap();
+        let dst = dir.path().join("out");
+        std::fs::create_dir(&dst).unwrap();
+
+        assert!(matches!(
+            copy_dir_contents(&src, &dst),
+            Err(ExtractRunnerError::UnsafeArchiveEntry { .. })
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_dir_contents_rejects_hardlinked_entry() {
+        // A hardlinked file has nlink > 1 and could point at an out-of-tree
+        // file; reject it (#46 #2).
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("lib");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::write(src.join("a"), b"x").unwrap();
+        std::fs::hard_link(src.join("a"), src.join("b")).unwrap();
         let dst = dir.path().join("out");
         std::fs::create_dir(&dst).unwrap();
 
