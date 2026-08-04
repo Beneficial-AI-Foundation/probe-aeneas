@@ -793,8 +793,17 @@ fn install_dir_atomic(src: &Path, dest: &Path) -> Result<()> {
 ///
 /// Rejects symlink (and other non-regular) entries rather than following them,
 /// so a crafted archive can't make the copy read files outside the extracted
-/// tree (#46 #2).
+/// tree (#46 #2). This includes the `src` root itself: `read_dir` follows a
+/// symlinked root, and the per-entry checks below only guard children, so the
+/// root must be verified to be a real directory first.
 fn copy_dir_contents(src: &Path, dst: &Path) -> Result<()> {
+    let src_meta =
+        std::fs::symlink_metadata(src).with_context(|| format!("stat {}", src.display()))?;
+    if !src_meta.file_type().is_dir() {
+        return Err(ExtractRunnerError::UnsafeArchiveEntry {
+            entry: src.display().to_string(),
+        });
+    }
     let entries = std::fs::read_dir(src).with_context(|| format!("read dir {}", src.display()))?;
     for entry in entries {
         let entry = entry.with_context(|| format!("read entry in {}", src.display()))?;
@@ -1312,6 +1321,26 @@ mod tests {
         std::fs::create_dir(&src).unwrap();
         // A symlink pointing outside the source tree, as a crafted archive might.
         std::os::unix::fs::symlink("/etc/passwd", src.join("evil")).unwrap();
+        let dst = dir.path().join("out");
+        std::fs::create_dir(&dst).unwrap();
+
+        assert!(matches!(
+            copy_dir_contents(&src, &dst),
+            Err(ExtractRunnerError::UnsafeArchiveEntry { .. })
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_dir_contents_rejects_symlinked_root() {
+        // A symlinked `lib` root would otherwise be followed by read_dir,
+        // copying files from outside the extracted tree (#46 #2).
+        let dir = tempfile::tempdir().unwrap();
+        let outside = dir.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("secret"), b"x").unwrap();
+        let src = dir.path().join("lib");
+        std::os::unix::fs::symlink(&outside, &src).unwrap();
         let dst = dir.path().join("out");
         std::fs::create_dir(&dst).unwrap();
 
