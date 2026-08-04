@@ -72,8 +72,9 @@ pub enum ExtractRunnerError {
     #[error("No pre-built binary available, falling back to source build")]
     NoPrebuiltAvailable,
 
-    /// A downloaded archive contains an entry with an absolute path or a `..`
-    /// component that would escape the extraction directory.
+    /// A downloaded archive contains an unsafe entry: an absolute or `..` path
+    /// that would escape the extraction directory, a symlink or other
+    /// non-regular file, or a missing/irregular expected binary.
     #[error("refusing to extract archive: unsafe entry path {entry:?}")]
     UnsafeArchiveEntry { entry: String },
 
@@ -635,10 +636,12 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf> {
 /// Update the `~/.local/bin/probe-lean` symlink to point at a versioned binary.
 ///
 /// Only ever replaces an existing symlink; a regular file (or directory) at the
-/// path is left untouched with a warning, so a user-installed or
-/// package-manager-owned `probe-lean` is never silently destroyed (#46 #1). The
-/// replacement is atomic (temp symlink + rename), so a concurrent reader never
-/// observes a missing link (#46 #3).
+/// path is left untouched with a warning, so under normal (non-concurrent) use
+/// a user-installed or package-manager-owned `probe-lean` is not destroyed
+/// (#46 #1). The check is best-effort: it stats the path and then renames over
+/// it, so a regular file created by another writer in that window could still
+/// be clobbered. The replacement itself is atomic (temp symlink + rename), so a
+/// concurrent reader never observes a missing link (#46 #3).
 #[cfg(unix)]
 fn update_symlink(versioned_bin: &Path) -> Result<()> {
     let symlink = versioned_bin
