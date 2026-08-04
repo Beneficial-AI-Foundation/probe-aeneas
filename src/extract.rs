@@ -2213,6 +2213,7 @@ charon:
                 language: "rust".to_string(),
                 package: pkg.to_string(),
                 package_version: ver.to_string(),
+                extensions: Default::default(),
             },
         }
     }
