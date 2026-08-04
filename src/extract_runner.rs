@@ -20,6 +20,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Context as _;
 
@@ -61,6 +62,11 @@ pub enum ExtractRunnerError {
     #[error("lean-toolchain file is empty")]
     LeanToolchainEmpty,
 
+    /// `lean-toolchain` version string is unusable as a path component
+    /// (contains a path separator or `..`).
+    #[error("lean-toolchain version {version:?} contains invalid path characters")]
+    LeanToolchainInvalid { version: String },
+
     /// No pre-built binary available for the requested platform/version.
     /// Callers should fall back to building from source.
     #[error("No pre-built binary available, falling back to source build")]
@@ -74,13 +80,13 @@ pub enum ExtractRunnerError {
     /// No pre-built release matched the target Lean version and the floating
     /// `main` source-build fallback was not explicitly enabled.
     #[error(
-        "no pre-built probe-lean release for Lean {version} on this platform, and building \
+        "no pre-built probe-lean available for {target} on this platform, and building \
          from source is disabled.\n  \
          The source build clones probe-lean's unpinned `main` branch, which is not \
          reproducible and may run unreleased code.\n  \
          To allow it anyway, re-run with {env}=1 in the environment."
     )]
-    SourceBuildDisabled { version: String, env: &'static str },
+    SourceBuildDisabled { target: String, env: &'static str },
 
     /// `lake build` failed during source installation of probe-lean.
     #[error(
@@ -318,6 +324,12 @@ fn detect_lean_version(project: &Path) -> Result<Option<String>> {
     if version.is_empty() {
         return Err(ExtractRunnerError::LeanToolchainEmpty);
     }
+    // The version is interpolated into install paths (`probe-lean-{ver}`) and the
+    // release artifact name, so reject anything that isn't a safe path component
+    // (#46 #7). `lean-toolchain` is project-controlled input.
+    if version.contains('/') || version.contains('\\') || version.contains("..") {
+        return Err(ExtractRunnerError::LeanToolchainInvalid { version });
+    }
     Ok(Some(version))
 }
 
@@ -427,31 +439,28 @@ fn try_prebuilt_download(lean_version: &str) -> Result<PathBuf> {
 
     let versioned_bin = dest_dir.join(format!("probe-lean-{lean_version}"));
     let downloaded_bin = tmp.join("bin/probe-lean");
-    if !downloaded_bin.exists() {
-        return Err(anyhow::anyhow!("Downloaded archive does not contain bin/probe-lean").into());
+    // Require a regular file: a symlinked `bin/probe-lean` would make the copy
+    // below follow it out of the extracted tree (#46 #2).
+    match std::fs::symlink_metadata(&downloaded_bin) {
+        Ok(m) if m.file_type().is_file() => {}
+        Ok(_) => {
+            return Err(ExtractRunnerError::UnsafeArchiveEntry {
+                entry: "bin/probe-lean".to_string(),
+            });
+        }
+        Err(_) => {
+            return Err(
+                anyhow::anyhow!("Downloaded archive does not contain bin/probe-lean").into(),
+            );
+        }
     }
 
-    std::fs::copy(&downloaded_bin, &versioned_bin).with_context(|| {
-        format!(
-            "copy {} to {}",
-            downloaded_bin.display(),
-            versioned_bin.display()
-        )
-    })?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&versioned_bin, std::fs::Permissions::from_mode(0o755))
-            .with_context(|| format!("set +x on {}", versioned_bin.display()))?;
-    }
+    install_file_atomic(&downloaded_bin, &versioned_bin)?;
 
     let versioned_lib = home_dir()?.join(format!(".local/lib/probe-lean-{lean_version}"));
     let downloaded_lib = tmp.join("lib");
     if downloaded_lib.exists() {
-        std::fs::create_dir_all(&versioned_lib)
-            .with_context(|| format!("create lib dir {}", versioned_lib.display()))?;
-        copy_dir_contents(&downloaded_lib, &versioned_lib)?;
+        install_dir_atomic(&downloaded_lib, &versioned_lib)?;
     }
 
     // `tmpdir` (the TempDir) is dropped here, cleaning up the extraction dir.
@@ -495,21 +504,31 @@ fn is_safe_archive_entry(entry: &str) -> bool {
 }
 
 /// Whether the floating-`main` source-build fallback is explicitly enabled via
-/// [`ALLOW_SOURCE_BUILD_ENV`]. Treats unset, empty, `0`, `false`, and `no`
-/// (case-insensitive) as disabled; any other value enables it.
+/// [`ALLOW_SOURCE_BUILD_ENV`]. Fails closed: only recognized truthy values
+/// enable it; an unrecognized value warns and stays disabled.
 fn source_build_allowed() -> bool {
-    std::env::var(ALLOW_SOURCE_BUILD_ENV)
-        .map(|v| env_flag_enabled(&v))
-        .unwrap_or(false)
+    match std::env::var(ALLOW_SOURCE_BUILD_ENV) {
+        Ok(v) => env_flag_enabled(&v),
+        Err(_) => false,
+    }
 }
 
-/// Interpret an env-var string as an on/off flag. Empty, `0`, `false`, and
-/// `no` (case-insensitive, trimmed) are off; anything else is on.
+/// Interpret an env-var string as an on/off flag, failing closed. Only `1`,
+/// `true`, `yes`, and `on` (case-insensitive, trimmed) enable; empty/`0`/
+/// `false`/`no` disable silently; anything else disables with a warning, so a
+/// safety gate is never accidentally opened by `off`, a typo, etc. (#46 #5).
 fn env_flag_enabled(value: &str) -> bool {
-    !matches!(
-        value.trim().to_ascii_lowercase().as_str(),
-        "" | "0" | "false" | "no"
-    )
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => true,
+        "" | "0" | "false" | "no" => false,
+        other => {
+            eprintln!(
+                "  ⚠ {ALLOW_SOURCE_BUILD_ENV}={other:?} is not a recognized on/off value; \
+                 treating it as disabled. Use 1/true/yes/on to enable."
+            );
+            false
+        }
+    }
 }
 
 /// Build probe-lean from source for a specific Lean version.
@@ -521,8 +540,15 @@ fn env_flag_enabled(value: &str) -> bool {
 /// verilib) fail clearly instead of silently building `main` (#46 #6).
 fn build_from_source(lean_version: &str) -> Result<PathBuf> {
     if !source_build_allowed() {
+        // "latest" means no lean-toolchain was found to select a release, so
+        // don't phrase the error as "no release for Lean latest" (#46 #4).
+        let target = if lean_version == "latest" {
+            "this project (no lean-toolchain found to select a pre-built release)".to_string()
+        } else {
+            format!("Lean {lean_version}")
+        };
         return Err(ExtractRunnerError::SourceBuildDisabled {
-            version: lean_version.to_string(),
+            target,
             env: ALLOW_SOURCE_BUILD_ENV,
         });
     }
@@ -588,28 +614,21 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf> {
     let dest_dir = home_dir()?.join(".local/bin");
     std::fs::create_dir_all(&dest_dir).context("create ~/.local/bin")?;
 
-    let (dest_bin, label) = if lean_version != "latest" {
-        let versioned = dest_dir.join(format!("probe-lean-{lean_version}"));
-        (versioned, format!("probe-lean-{lean_version}"))
+    // Always install to a versioned name and route the bare `probe-lean` path
+    // through update_symlink's non-clobber guard — including the "latest" case,
+    // which previously copied straight onto `~/.local/bin/probe-lean` and could
+    // silently destroy a user-installed binary (#46 #1).
+    let versioned_name = if lean_version != "latest" {
+        format!("probe-lean-{lean_version}")
     } else {
-        (dest_dir.join("probe-lean"), "probe-lean".to_string())
+        "probe-lean-latest".to_string()
     };
+    let dest_bin = dest_dir.join(&versioned_name);
 
-    std::fs::copy(&built_bin, &dest_bin)
-        .with_context(|| format!("copy {} to {}", built_bin.display(), dest_bin.display()))?;
+    install_file_atomic(&built_bin, &dest_bin)?;
+    update_symlink(&dest_bin)?;
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&dest_bin, std::fs::Permissions::from_mode(0o755))
-            .with_context(|| format!("set +x on {}", dest_bin.display()))?;
-    }
-
-    if lean_version != "latest" {
-        update_symlink(&dest_bin)?;
-    }
-
-    println!("  ✓ Installed {label} to {}", dest_bin.display());
+    println!("  ✓ Installed {versioned_name} to {}", dest_bin.display());
     Ok(dest_bin)
 }
 
@@ -617,7 +636,10 @@ fn build_from_source(lean_version: &str) -> Result<PathBuf> {
 ///
 /// Only ever replaces an existing symlink; a regular file (or directory) at the
 /// path is left untouched with a warning, so a user-installed or
-/// package-manager-owned `probe-lean` is never silently destroyed (#46 #1).
+/// package-manager-owned `probe-lean` is never silently destroyed (#46 #1). The
+/// replacement is atomic (temp symlink + rename), so a concurrent reader never
+/// observes a missing link (#46 #3).
+#[cfg(unix)]
 fn update_symlink(versioned_bin: &Path) -> Result<()> {
     let symlink = versioned_bin
         .parent()
@@ -627,10 +649,7 @@ fn update_symlink(versioned_bin: &Path) -> Result<()> {
     // `symlink_metadata` does not follow the link, so this distinguishes an
     // existing symlink from a real file we must not clobber.
     match std::fs::symlink_metadata(&symlink) {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            std::fs::remove_file(&symlink)
-                .with_context(|| format!("remove existing symlink at {}", symlink.display()))?;
-        }
+        Ok(meta) if meta.file_type().is_symlink() => {}
         Ok(_) => {
             eprintln!(
                 "  ⚠ {} exists and is not a symlink managed by probe-aeneas; \
@@ -648,30 +667,149 @@ fn update_symlink(versioned_bin: &Path) -> Result<()> {
         }
     }
 
-    #[cfg(unix)]
-    {
-        let target = versioned_bin
-            .file_name()
-            .context("versioned binary has no filename")?;
-        std::os::unix::fs::symlink(target, &symlink)
-            .with_context(|| format!("create symlink at {}", symlink.display()))?;
+    let target = versioned_bin
+        .file_name()
+        .context("versioned binary has no filename")?;
+    let tmp = symlink.with_file_name(format!(".probe-lean.tmp-{}", unique_suffix()));
+    let _ = std::fs::remove_file(&tmp);
+    std::os::unix::fs::symlink(target, &tmp)
+        .with_context(|| format!("create symlink at {}", tmp.display()))?;
+    // rename atomically replaces the old symlink (if any) in one step.
+    if let Err(e) = std::fs::rename(&tmp, &symlink) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(anyhow::Error::new(e)
+            .context(format!("install symlink at {}", symlink.display()))
+            .into());
     }
-    #[cfg(not(unix))]
-    {
-        std::fs::copy(versioned_bin, &symlink)
-            .with_context(|| format!("copy probe-lean to {}", symlink.display()))?;
+    Ok(())
+}
+
+/// Non-unix fallback: there are no POSIX symlinks, so install a copy of the
+/// versioned binary at the bare `probe-lean` path. There is no managed-symlink
+/// distinction to make here, so this always overwrites its own prior copy
+/// rather than refusing to update it (#46 #8).
+#[cfg(not(unix))]
+fn update_symlink(versioned_bin: &Path) -> Result<()> {
+    let dest = versioned_bin
+        .parent()
+        .context("versioned binary has no parent directory")?
+        .join("probe-lean");
+    install_file_atomic(versioned_bin, &dest)
+}
+
+/// Per-process counter for unique staging names (`Date`/random are unavailable).
+static INSTALL_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// A process-unique suffix for staging temp files/dirs on the destination
+/// filesystem: pid (unique across concurrent processes) plus a monotonic
+/// counter (unique across threads/calls within one process).
+fn unique_suffix() -> String {
+    format!(
+        "{}-{}",
+        std::process::id(),
+        INSTALL_SEQ.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// Atomically install `src` as an executable at `dest`: copy to a temp file in
+/// the same directory, mark it `+x`, then rename over `dest`. The rename is
+/// atomic on one filesystem, so a concurrent reader never sees a half-written
+/// binary and two concurrent installs of the same version can't tear (#46 #3).
+fn install_file_atomic(src: &Path, dest: &Path) -> Result<()> {
+    let dir = dest
+        .parent()
+        .context("install destination has no parent directory")?;
+    let file_name = dest
+        .file_name()
+        .and_then(|n| n.to_str())
+        .context("install destination has no filename")?;
+    let tmp = dir.join(format!(".{file_name}.tmp-{}", unique_suffix()));
+    let _ = std::fs::remove_file(&tmp);
+
+    let staged = (|| -> Result<()> {
+        std::fs::copy(src, &tmp)
+            .with_context(|| format!("copy {} to {}", src.display(), tmp.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))
+                .with_context(|| format!("set +x on {}", tmp.display()))?;
+        }
+        std::fs::rename(&tmp, dest)
+            .with_context(|| format!("install {} -> {}", tmp.display(), dest.display()))?;
+        Ok(())
+    })();
+
+    if staged.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    staged
+}
+
+/// Atomically install directory `src` at `dest`: stage a copy into a temp dir on
+/// the same filesystem, then swap it into place (moving any existing `dest`
+/// aside first). Concurrent readers see either the old or the new tree, never a
+/// half-copied one (#46 #3).
+fn install_dir_atomic(src: &Path, dest: &Path) -> Result<()> {
+    let parent = dest
+        .parent()
+        .context("install destination has no parent directory")?;
+    std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+
+    let staging = parent.join(format!(".probe-lean-lib.tmp-{}", unique_suffix()));
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging)
+        .with_context(|| format!("create staging dir {}", staging.display()))?;
+
+    if let Err(e) = copy_dir_contents(src, &staging) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(e);
+    }
+
+    if dest.exists() {
+        // Move the existing tree aside, swap the new one in, then drop the old.
+        // On failure, restore the old tree so `dest` is never left missing.
+        let backup = parent.join(format!(".probe-lean-lib.old-{}", unique_suffix()));
+        let _ = std::fs::remove_dir_all(&backup);
+        std::fs::rename(dest, &backup).with_context(|| format!("move aside {}", dest.display()))?;
+        if let Err(e) = std::fs::rename(&staging, dest) {
+            let _ = std::fs::rename(&backup, dest);
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(anyhow::Error::new(e)
+                .context(format!("install lib dir -> {}", dest.display()))
+                .into());
+        }
+        let _ = std::fs::remove_dir_all(&backup);
+    } else if let Err(e) = std::fs::rename(&staging, dest) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(anyhow::Error::new(e)
+            .context(format!("install lib dir -> {}", dest.display()))
+            .into());
     }
     Ok(())
 }
 
 /// Recursively copy directory contents from `src` to `dst`.
+///
+/// Rejects symlink (and other non-regular) entries rather than following them,
+/// so a crafted archive can't make the copy read files outside the extracted
+/// tree (#46 #2).
 fn copy_dir_contents(src: &Path, dst: &Path) -> Result<()> {
     let entries = std::fs::read_dir(src).with_context(|| format!("read dir {}", src.display()))?;
     for entry in entries {
         let entry = entry.with_context(|| format!("read entry in {}", src.display()))?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
-        if src_path.is_dir() {
+        // `file_type()` does not follow symlinks (unlike `Path::is_dir`).
+        let ft = entry
+            .file_type()
+            .with_context(|| format!("stat entry {}", src_path.display()))?;
+        if ft.is_symlink() || (!ft.is_dir() && !ft.is_file()) {
+            return Err(ExtractRunnerError::UnsafeArchiveEntry {
+                entry: src_path.display().to_string(),
+            });
+        }
+        if ft.is_dir() {
             std::fs::create_dir_all(&dst_path)
                 .with_context(|| format!("create dir {}", dst_path.display()))?;
             copy_dir_contents(&src_path, &dst_path)?;
@@ -975,6 +1113,23 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn detect_lean_version_rejects_path_chars() {
+        // A version usable as a path component would let project input control
+        // install paths (#46 #7).
+        for bad in ["leanprover/lean4:../../evil", "leanprover/lean4:a/b"] {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("lean-toolchain"), bad).unwrap();
+            assert!(
+                matches!(
+                    detect_lean_version(dir.path()),
+                    Err(ExtractRunnerError::LeanToolchainInvalid { .. })
+                ),
+                "{bad:?} should be rejected"
+            );
+        }
+    }
+
     // --- find_release_asset_url: JSON parsing, exact name match (#46 #4) ---
 
     #[test]
@@ -1042,18 +1197,22 @@ mod tests {
         assert!(!is_safe_archive_entry("bin/../../escape"));
     }
 
-    // --- env_flag_enabled: source-build gate parsing (#46 #6) ---
+    // --- env_flag_enabled: source-build gate parsing, fail-closed (#46 #5/#6) ---
 
     #[test]
     fn env_flag_disabled_values() {
-        for v in ["", "  ", "0", "false", "FALSE", "no", " No "] {
+        // Explicit off values AND unrecognized ones (off/disable/typo) must all
+        // stay disabled so the safety gate never opens by accident.
+        for v in [
+            "", "  ", "0", "false", "FALSE", "no", " No ", "off", "disable", "garbage",
+        ] {
             assert!(!env_flag_enabled(v), "{v:?} should be disabled");
         }
     }
 
     #[test]
     fn env_flag_enabled_values() {
-        for v in ["1", "true", "yes", "on"] {
+        for v in ["1", "true", "yes", "on", " ON "] {
             assert!(env_flag_enabled(v), "{v:?} should be enabled");
         }
     }
@@ -1113,5 +1272,70 @@ mod tests {
             .unwrap()
             .file_type()
             .is_symlink());
+    }
+
+    // --- atomic install helpers (#46 #3) ---
+
+    #[cfg(unix)]
+    #[test]
+    fn install_file_atomic_replaces_and_sets_exec() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("built");
+        std::fs::write(&src, b"payload").unwrap();
+        let dest = dir.path().join("probe-lean-v4.15.0");
+        std::fs::write(&dest, b"stale").unwrap();
+
+        install_file_atomic(&src, &dest).unwrap();
+
+        assert_eq!(std::fs::read(&dest).unwrap(), b"payload");
+        assert_ne!(
+            std::fs::metadata(&dest).unwrap().permissions().mode() & 0o111,
+            0
+        );
+        // No staging temp files left behind.
+        let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp-"))
+            .collect();
+        assert!(leftovers.is_empty(), "staging temp left behind");
+    }
+
+    // --- copy_dir_contents rejects symlink entries (#46 #2) ---
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_dir_contents_rejects_symlink_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("lib");
+        std::fs::create_dir(&src).unwrap();
+        // A symlink pointing outside the source tree, as a crafted archive might.
+        std::os::unix::fs::symlink("/etc/passwd", src.join("evil")).unwrap();
+        let dst = dir.path().join("out");
+        std::fs::create_dir(&dst).unwrap();
+
+        assert!(matches!(
+            copy_dir_contents(&src, &dst),
+            Err(ExtractRunnerError::UnsafeArchiveEntry { .. })
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_dir_atomic_swaps_existing_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("newlib");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::write(src.join("a.olean"), b"new").unwrap();
+        let dest = dir.path().join("lib/probe-lean-v4.15.0");
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(dest.join("stale.olean"), b"old").unwrap();
+
+        install_dir_atomic(&src, &dest).unwrap();
+
+        assert!(dest.join("a.olean").exists());
+        assert!(!dest.join("stale.olean").exists());
+        assert_eq!(std::fs::read(dest.join("a.olean")).unwrap(), b"new");
     }
 }

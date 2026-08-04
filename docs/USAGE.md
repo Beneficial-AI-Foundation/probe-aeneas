@@ -19,6 +19,25 @@ probe-lean is **not** installed by `setup` because it must be
 version-matched to each target project's `lean-toolchain` file. It is
 installed automatically during `extract`.
 
+### probe-lean install policy (release-only by default)
+
+During `extract`, probe-lean is resolved for the project's Lean version by
+downloading a pre-built binary from GitHub Releases. If no tagged release
+matches that version on the current platform, installation **fails by
+default** with an actionable error rather than falling back to a source
+build. Building from source clones probe-lean's unpinned `main` branch,
+which is not reproducible and may run unreleased code — undesirable for
+downstream consumers (e.g. verilib) that require release-only guarantees.
+
+To opt in to the source-build fallback, set `PROBE_LEAN_ALLOW_SOURCE_BUILD`
+to a truthy value (`1`, `true`, `yes`, or `on`) in the environment:
+
+```bash
+PROBE_LEAN_ALLOW_SOURCE_BUILD=1 probe-aeneas extract <project>
+```
+
+Any unrecognized value (including `off`) is treated as disabled.
+
 **Options:**
 
 | Flag | Description |
