@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-08-04
+
+### Fixed
+- **Pinned `probe` to the tagged `v0.4.0` release (schema `3.x` validator).**
+  The `probe` git dependency was previously unpinned, so released builds froze
+  whatever `probe` their lockfile happened to hold (0.2.0/0.3.0, gate
+  `starts_with("2.")`) while local installs floated to `probe` main (`3.x`).
+  The result: released/ECR builds **emitted** `schema-version: "3.0"` (since
+  0.17.0) but **validated** inputs as `2.x`, rejecting 3.0 atoms with
+  `load … incompatible schema-version "3.0" (expected 2.x)`. Pinning `probe`
+  `v0.4.0` makes emit and validate agree; 0.18.0 is the first end-to-end 3.0
+  build. The lockfile now records `git+…?tag=v0.4.0`.
+
 ### Changed
 - **Renamed atom extension key `is-disabled` to `untracked`** (KB P24/P25).
   Semantics and polarity are unchanged: the field marks an atom as out of
