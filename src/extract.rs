@@ -368,19 +368,31 @@ pub fn resolve_active_features(
         .and_then(|c| c.cargo_args.clone())
         .unwrap_or_default();
 
-    let features = if args.iter().any(|a| a == "--all-features") {
-        edges.keys().cloned().collect()
-    } else {
-        let mut seeds: Vec<String> = if args.iter().any(|a| a == "--no-default-features") {
-            Vec::new()
-        } else {
-            edges.get("default").cloned().unwrap_or_default()
-        };
-        seeds.extend(parse_explicit_features(&args));
-        crate::cfg_eval::feature_closure(&edges, &seeds)
-    };
+    let features = resolve_feature_set(&edges, &args);
 
     Some(crate::cfg_eval::CfgConfig { features })
+}
+
+/// Resolve the active feature set from the package's feature graph and the
+/// charon cargo args. Seeds with the feature NAMED "default" (not its
+/// contents): code can legally gate on `#[cfg(feature = "default")]`, and the
+/// closure expands the name through its edges anyway.
+fn resolve_feature_set(
+    edges: &HashMap<String, Vec<String>>,
+    args: &[String],
+) -> std::collections::HashSet<String> {
+    if args.iter().any(|a| a == "--all-features") {
+        return edges.keys().cloned().collect();
+    }
+    let mut seeds: Vec<String> = if args.iter().any(|a| a == "--no-default-features") {
+        Vec::new()
+    } else if edges.contains_key("default") {
+        vec!["default".to_string()]
+    } else {
+        Vec::new()
+    };
+    seeds.extend(parse_explicit_features(args));
+    crate::cfg_eval::feature_closure(edges, &seeds)
 }
 
 /// Parse `aeneas-config.yml` in the given project directory and derive
@@ -771,6 +783,7 @@ fn run_extract_with_translations(
     project_root: Option<&Path>,
     skip_enrich: bool,
 ) -> Result<()> {
+    warn_on_old_probe_rust(rust_path);
     // Phase 1: Merge (generic probe operation)
     // merge_atom_files still returns Result<_, String>; bridge via anyhow.
     println!("\nMerging atoms with translations...");
@@ -875,18 +888,31 @@ fn resolve_verification_status(
 ///    translation carries `@[out_of_scope]`, in which case no status is set
 ///    (an out-of-scope atom carries no `verification-status`).
 /// 2. For every Rust atom, default `untracked` to `false` (tracked backlog),
-///    and set it to `true` only when the atom has **no** `verification-status`
-///    **and** it is genuinely out of scope: its `#[cfg]` predicate is inactive
-///    in the Aeneas build (`cfg_config`), or its translation is `@[out_of_scope]`.
-///    A status-bearing atom is never disabled (P24). Membership in
-///    `functions.json` no longer affects scope — a compiled function Aeneas has
-///    not translated is unverified backlog, not out of scope.
+///    and set it to `true` only when the atom has **no** (string-typed)
+///    `verification-status` **and** it is genuinely out of scope: a foreign
+///    declaration (`is-foreign`), in a file no lib/bin `mod` chain reaches
+///    (`is-unmounted`), cfg-inactive in the Aeneas build (its complete `cfg`
+///    predicate evaluates definitively false; `file-cfg` only refines the
+///    reason), its translation is `@[out_of_scope]`, a non-library target, or
+///    config-curated out of scope. A status-bearing atom is never disabled
+///    (P24); disagreements between a status and out-of-scope source facts are
+///    counted and reported. Membership in `functions.json` no longer affects
+///    scope — a compiled function Aeneas has not translated is unverified
+///    backlog, not out of scope.
 ///
 /// `cfg_config` is `None` when the active feature set could not be resolved; cfg
 /// scope classification is then skipped entirely (conservative — never disables
 /// a backlog atom on a guess). `out_of_scope_patterns` is the project config's
 /// curated glob list (matched against `rust-qualified-name` / `display-name`)
 /// for functions Aeneas structurally does not translate.
+///
+/// The source facts this pass evaluates come from probe-rust (>= 0.10.0) on
+/// each atom: `cfg` (the complete gating predicate, parent-file mod-chain
+/// gates included), `file-cfg` (the chain component alone, for reason
+/// granularity), `is-unmounted` (no `mod` chain from the package's lib/bin
+/// roots reaches the file), and `is-foreign` (extern-block member). Older
+/// probe-rust output simply lacks the fields; classification then degrades to
+/// the per-function `cfg` evaluation alone (never guesses).
 fn enrich_with_aeneas_metadata(
     merged: &mut std::collections::BTreeMap<String, Atom>,
     from_to: &HashMap<String, Vec<String>>,
@@ -949,18 +975,76 @@ fn enrich_with_aeneas_metadata(
         .filter_map(|p| enrich::glob_to_regex(p))
         .collect();
 
+    // Diagnostics: source facts and statuses can disagree (stale facts
+    // against fresher Lean progress, or a malformed producer). P24 decides
+    // the outcome, but the disagreement itself must be visible.
+    let mut stale_fact_conflicts = 0usize;
+    let mut malformed_facts = 0usize;
+
     for (key, atom) in merged.iter_mut() {
         if atom.language != "rust" {
             continue;
         }
-        let has_status = atom.extensions.contains_key("verification-status");
-        let cfg_inactive = cfg_config.is_some_and(|cfg| {
-            atom.extensions
-                .get("cfg")
-                .and_then(|v| v.as_str())
-                .is_some_and(|pred| cfg.is_inactive(pred))
-        });
+        // Only a string-typed status counts: a stray `null` or malformed
+        // value must not shield an atom from scope classification.
+        let has_status = atom
+            .extensions
+            .get("verification-status")
+            .and_then(|v| v.as_str())
+            .is_some();
+        let is_inactive_ext = |field: &str| {
+            cfg_config.is_some_and(|cfg| {
+                atom.extensions
+                    .get(field)
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|pred| cfg.is_inactive(pred))
+            })
+        };
+        // The complete gating predicate (own gate, same-file enclosing gates,
+        // and the parent-file mod-chain gates probe-rust folds in) is false
+        // under the Aeneas build's feature set: not compiled, out of scope
+        // (KB P25). This is the SOLE cfg classification authority.
+        let cfg_inactive = is_inactive_ext("cfg");
+        // The chain component alone is false: the whole FILE is gated off at
+        // the module level. Never classifies on its own (`cfg` already
+        // contains this gate) — it only refines the reason string.
+        let file_cfg_inactive = cfg_inactive && is_inactive_ext("file-cfg");
+        // No `mod` chain from the package's lib/bin roots reaches the file:
+        // rustc never compiles it into any lib or bin build (KB P25).
+        // Configuration-independent, so no cfg evaluation is involved.
+        let unmounted = atom
+            .extensions
+            .get("is-unmounted")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        // A bodyless declaration (extern-block member): the implementation
+        // lives outside Rust, so there is nothing to verify here (KB P25).
+        let foreign = atom
+            .extensions
+            .get("is-foreign")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let out_of_scope = out_of_scope_rust.contains(key);
+        // A present-but-mistyped fact is indistinguishable from absence to
+        // the classifier (conservative), but it means a broken producer or a
+        // corrupted cache — count it.
+        for field in ["is-unmounted", "is-foreign", "trait-required"] {
+            if atom
+                .extensions
+                .get(field)
+                .is_some_and(|v| v.as_bool().is_none())
+            {
+                malformed_facts += 1;
+            }
+        }
+        if atom.extensions.contains_key("file-cfg")
+            && !atom.extensions.get("cfg").is_some_and(|v| v.is_string())
+        {
+            malformed_facts += 1;
+        }
+        if has_status && (foreign || unmounted || cfg_inactive) {
+            stale_fact_conflicts += 1;
+        }
         // Non-library targets (build.rs / tests / examples / benches) are
         // compiled outside the verified library, so Aeneas never translates
         // them — out of scope, not backlog (KB P25).
@@ -978,10 +1062,43 @@ fn enrich_with_aeneas_metadata(
         };
         // Tracked backlog by default; disabled only when out of scope and not
         // status-bearing (P24/P25).
-        let untracked =
-            !has_status && (cfg_inactive || out_of_scope || non_lib_target || config_oos);
+        // Most intrinsic cause first: a C binding is out of scope regardless
+        // of configuration; an unmounted file regardless of features; then
+        // the cfg evaluation (with the file-level refinement of the reason);
+        // then the policy opt-outs.
+        let reason = if has_status {
+            None
+        } else if foreign {
+            Some("foreign-declaration")
+        } else if unmounted {
+            Some("unmounted")
+        } else if file_cfg_inactive {
+            Some("file-cfg-inactive")
+        } else if cfg_inactive {
+            Some("cfg-inactive")
+        } else if out_of_scope {
+            Some("out-of-scope-translation")
+        } else if non_lib_target {
+            Some("non-library-target")
+        } else if config_oos {
+            Some("config-out-of-scope")
+        } else {
+            None
+        };
+        let untracked = reason.is_some();
         atom.extensions
             .insert("untracked".to_string(), serde_json::json!(untracked));
+        match reason {
+            // Why the atom is out of scope — for humans and tooling tracing
+            // a grey atom back to its cause.
+            Some(r) => {
+                atom.extensions
+                    .insert("untracked-reason".to_string(), serde_json::json!(r));
+            }
+            None => {
+                atom.extensions.remove("untracked-reason");
+            }
+        }
         // Relevance is crate membership, independent of scope: external stubs
         // (empty code-path) reference other crates and are not relevant.
         atom.extensions.insert(
@@ -992,6 +1109,60 @@ fn enrich_with_aeneas_metadata(
             atom.extensions
                 .insert("is-public".to_string(), serde_json::json!(false));
         }
+    }
+
+    if stale_fact_conflicts > 0 {
+        println!(
+            "  scope: {} status-bearing atom(s) also carry out-of-scope source facts — kept tracked (P24); \
+             probe-rust facts or the translation match may be stale",
+            stale_fact_conflicts
+        );
+    }
+    if malformed_facts > 0 {
+        println!(
+            "  scope: {} malformed source-fact field(s) ignored (wrong JSON type) — check the probe-rust input",
+            malformed_facts
+        );
+    }
+}
+
+/// Warn when the Rust atoms were produced by a probe-rust older than 0.10.0:
+/// the source-fact fields (`file-cfg`, `is-unmounted`, `is-foreign`,
+/// `trait-required`) are then absent and scope classification silently
+/// degrades to the per-function `cfg` evaluation. Degradation is by design,
+/// but it must never be invisible — an operator upgrading probe-aeneas while
+/// an old probe-rust sits first on PATH would otherwise see none of the new
+/// classifications and no hint why.
+fn warn_on_old_probe_rust(rust_path: &Path) {
+    #[derive(serde::Deserialize)]
+    struct ToolOnly {
+        tool: Option<ToolInfo>,
+    }
+    #[derive(serde::Deserialize)]
+    struct ToolInfo {
+        name: Option<String>,
+        version: Option<String>,
+    }
+    let Some(tool) = std::fs::read_to_string(rust_path)
+        .ok()
+        .and_then(|c| serde_json::from_str::<ToolOnly>(&c).ok())
+        .and_then(|e| e.tool)
+    else {
+        return;
+    };
+    if tool.name.as_deref() != Some("probe-rust") {
+        return;
+    }
+    let Some(version) = tool.version else { return };
+    let mut parts = version.split('.').map(|p| p.parse::<u64>().unwrap_or(0));
+    let (major, minor) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
+    if (major, minor) < (0, 10) {
+        println!(
+            "  Warning: Rust atoms come from probe-rust {version} (< 0.10.0) — no source-fact \
+             fields (file-cfg/is-unmounted/is-foreign); scope classification is limited to the \
+             per-function cfg predicate. Upgrade probe-rust for module-level and foreign-decl \
+             classification."
+        );
     }
 }
 
@@ -1889,6 +2060,198 @@ charon:
             "a cfg-inactive function is out of scope"
         );
         assert!(!atom.extensions.contains_key("verification-status"));
+    }
+
+    #[test]
+    fn enrich_file_cfg_inactive_atom_untracked() {
+        // probe-rust folds the parent-file mod-chain gate into `cfg` and
+        // reports the chain component alone as `file-cfg`; an inactive chain
+        // means the whole file is gated off in the Aeneas build.
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("in_test_module");
+        atom.code_path = "src/sha3/tests.rs".to_string();
+        atom.extensions
+            .insert("cfg".to_string(), serde_json::json!("test"));
+        atom.extensions
+            .insert("file-cfg".to_string(), serde_json::json!("test"));
+        merged.insert("probe:crate/1.0/in_test_module()".to_string(), atom);
+
+        let cfg = crate::cfg_eval::CfgConfig {
+            features: std::collections::HashSet::new(),
+        };
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg), &[]);
+
+        let atom = merged.get("probe:crate/1.0/in_test_module()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true)),
+            "a function in a cfg-inactive file is out of scope"
+        );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("file-cfg-inactive")),
+            "the file-level gate wins the reason over the cfg catch-all"
+        );
+    }
+
+    #[test]
+    fn enrich_unmounted_atom_untracked() {
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("dead_fn");
+        atom.code_path = "src/verify/tests/harness.rs".to_string();
+        atom.extensions
+            .insert("is-unmounted".to_string(), serde_json::json!(true));
+        merged.insert("probe:crate/1.0/dead_fn()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:crate/1.0/dead_fn()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true)),
+            "an unmounted file's function is out of scope even without a resolved feature set"
+        );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("unmounted"))
+        );
+    }
+
+    #[test]
+    fn enrich_unmounted_but_status_bearing_stays_tracked() {
+        // P24: a status-bearing atom is never disabled, even when probe-rust
+        // flags its file (e.g. a stale fact against fresher Lean progress).
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("verified_fn");
+        atom.code_path = "src/sha3/tests.rs".to_string();
+        atom.extensions
+            .insert("is-unmounted".to_string(), serde_json::json!(true));
+        atom.extensions
+            .insert("is-foreign".to_string(), serde_json::json!(true));
+        atom.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("verified"),
+        );
+        merged.insert("probe:crate/1.0/verified_fn()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:crate/1.0/verified_fn()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(false)),
+            "has-status implies in-scope (P24)"
+        );
+    }
+
+    #[test]
+    fn feature_default_name_is_active() {
+        // `#[cfg(feature = "default")]` is active in a default cargo build:
+        // the closure must be seeded with the feature NAME, not its contents.
+        let mut edges = HashMap::new();
+        edges.insert("default".to_string(), vec!["std".to_string()]);
+        edges.insert("std".to_string(), Vec::new());
+        let set = resolve_feature_set(&edges, &[]);
+        assert!(set.contains("default"), "{set:?}");
+        assert!(set.contains("std"), "{set:?}");
+
+        let none = resolve_feature_set(&edges, &["--no-default-features".to_string()]);
+        assert!(none.is_empty(), "{none:?}");
+    }
+
+    #[test]
+    fn file_cfg_alone_never_untracks() {
+        // `file-cfg` is provenance only: without a `cfg` that evaluates
+        // definitively false, it must not classify (a malformed producer
+        // could otherwise grey compiled code).
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("odd_one");
+        atom.extensions
+            .insert("file-cfg".to_string(), serde_json::json!("test"));
+        merged.insert("probe:crate/1.0/odd_one()".to_string(), atom);
+
+        let cfg = crate::cfg_eval::CfgConfig {
+            features: std::collections::HashSet::new(),
+        };
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg), &[]);
+
+        let atom = merged.get("probe:crate/1.0/odd_one()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(false)),
+            "file-cfg without an inactive cfg must not untrack"
+        );
+    }
+
+    #[test]
+    fn mistyped_fact_is_ignored() {
+        // A string "true" is not a boolean fact: conservative absence.
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("weird");
+        atom.extensions
+            .insert("is-unmounted".to_string(), serde_json::json!("true"));
+        atom.extensions
+            .insert("is-foreign".to_string(), serde_json::json!(1));
+        merged.insert("probe:crate/1.0/weird()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:crate/1.0/weird()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(false))
+        );
+    }
+
+    #[test]
+    fn null_status_does_not_shield_from_scope() {
+        // Only a string-typed verification-status counts as a status (P24
+        // protects real progress, not a stray null).
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("SymCryptWipe");
+        atom.extensions
+            .insert("verification-status".to_string(), serde_json::json!(null));
+        atom.extensions
+            .insert("is-foreign".to_string(), serde_json::json!(true));
+        merged.insert("probe:crate/1.0/SymCryptWipe()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:crate/1.0/SymCryptWipe()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true))
+        );
+    }
+
+    #[test]
+    fn enrich_foreign_decl_untracked() {
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("SymCryptInit");
+        atom.extensions
+            .insert("is-foreign".to_string(), serde_json::json!(true));
+        merged.insert("probe:crate/1.0/SymCryptInit()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:crate/1.0/SymCryptInit()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true)),
+            "a bodyless foreign declaration is out of scope"
+        );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("foreign-declaration")),
+            "foreign wins the reason over any cfg signal"
+        );
     }
 
     #[test]

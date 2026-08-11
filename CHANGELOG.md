@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-08-11
+
+### Added
+- **Module-chain gates, unmounted files, and foreign declarations now
+  classify as `untracked`** (closes #54). All source facts come from
+  probe-rust >= 0.10.0 per the fact/policy split agreed in review: probe-rust
+  reports configuration-independent source facts on each atom, probe-aeneas
+  evaluates them against the Aeneas build and applies scope policy.
+  - The `cfg` predicate now arrives with parent-file `mod`-chain gates and
+    file-level `#![cfg]` folded in (as completely as probe-rust's static
+    walk can see — its under-gating caveats are documented in probe-rust's
+    KB P18), so the existing `cfg_eval` evaluation covers the module-level
+    gates that previously rendered as tracked backlog (white) on VeriLib.
+    No new cfg code here. `file-cfg` never classifies on its own; it only
+    refines `cfg-inactive` into `file-cfg-inactive`.
+  - `is-unmounted` (no `mod` chain from the package's lib/bin roots reaches
+    the file — probe-rust emits it only from a provably complete module-tree
+    walk) and `is-foreign` (extern-block member, no Rust body) evaluate to
+    `untracked` directly; both are configuration-independent, so they apply
+    even when the feature set cannot be resolved.
+  - `trait-required` (bodyless trait signature) is passed through untouched:
+    how interface signatures render is a pending colouring-scheme decision.
+  - A status-bearing atom is never disabled (P24).
+- **`untracked-reason`.** Atoms with `untracked: true` now carry the cause,
+  most intrinsic first (`foreign-declaration`, `unmounted`,
+  `file-cfg-inactive`, `cfg-inactive`, `out-of-scope-translation`,
+  `non-library-target`, `config-out-of-scope`). `file-cfg-inactive` is
+  distinguished from the catch-all `cfg-inactive` via probe-rust's `file-cfg`
+  provenance field.
+
+### Changed
+- Requires probe-rust >= 0.10.0 for the new classifications; with older
+  probe-rust output the new fields are simply absent and classification
+  degrades to the per-function `cfg` evaluation (0.18.0 behavior). The
+  degradation is now announced: extract prints a warning when the Rust
+  atoms' envelope reports a probe-rust older than 0.10.0.
+
+### Fixed
+- **`#[cfg(feature = "default")]` no longer mis-evaluates as inactive**: the
+  feature closure was seeded with the contents of the `default` feature
+  instead of the feature name itself.
+- A status-bearing atom that also carries out-of-scope source facts (stale
+  facts vs fresher Lean progress) stays tracked per P24, and the
+  disagreement count is now printed; mistyped source-fact fields are
+  ignored conservatively and counted.
+- Only a string-typed `verification-status` shields an atom from scope
+  classification (a stray `null` no longer counts as a status).
+
 ## [0.18.0] - 2026-08-04
 
 ### Fixed

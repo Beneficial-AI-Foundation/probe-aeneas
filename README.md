@@ -154,7 +154,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
    2. `file+display-name` -- same source file + matching base method name
    3. `file+line-overlap` -- same source file + overlapping line ranges
 5. **Merge** -- combines Rust and Lean atom maps, adding cross-language dependency edges where translations exist.
-6. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `untracked` to Rust atoms.
+6. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `untracked` to Rust atoms. Scope (`untracked`) evaluates the source facts probe-rust (>= 0.10.0) puts on each atom: the `cfg` predicate (parent-file mod-chain gates included; deliberately under-gating where probe-rust's walk cannot see) against the Aeneas build's feature set, plus the `is-unmounted` and `is-foreign` declaration facts; `untracked-reason` records the cause.
 7. **Schema 3.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
 ## How probe-aeneas decides what to analyze
