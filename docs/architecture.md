@@ -128,10 +128,15 @@ the merged atom map:
    (`untracked: false`); membership in `functions.json` or the presence of
    a `translation-name` does **not** decide scope. An atom flips to
    `untracked: true` only when it carries no `verification-status` **and**
-   is genuinely out of the Aeneas verification build — cfg-inactive in the
-   resolved feature set, its Lean translation carries `@[out_of_scope]`, it
-   is a non-library target (`build.rs`/`tests`/`examples`/`benches`), or it
-   matches a curated `out-of-scope` glob in `aeneas.json` (KB P24/P25).
+   is genuinely out of the Aeneas verification build — a foreign declaration
+   (probe-rust's `is-foreign`: an extern-block member with no Rust body), in
+   a file no lib/bin `mod` chain reaches (probe-rust's `is-unmounted`),
+   cfg-inactive in the resolved feature set (the complete `cfg` predicate,
+   with `file-cfg` refining the reason), its Lean translation carries
+   `@[out_of_scope]`, it is a non-library target
+   (`build.rs`/`tests`/`examples`/`benches`), or it matches a curated
+   `out-of-scope` glob in `aeneas.json` (KB P24/P25). The cause is emitted
+   as `untracked-reason`.
 
 Implementation: `src/extract.rs::enrich_with_aeneas_metadata`.
 
