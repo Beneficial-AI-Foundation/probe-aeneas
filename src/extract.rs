@@ -1077,13 +1077,19 @@ fn enrich_with_aeneas_metadata(
         {
             malformed_facts += 1;
         }
-        // `trait_signature` is deliberately absent from this list. Aeneas does
-        // translate some trait *declarations* as interface records, so a
-        // status-bearing bodyless signature is expected and correct, not a
-        // symptom of stale facts. Counting it would report a conflict for
-        // every such atom on every run (5 on SymCRust) and drown the real
-        // signal. The other three facts mean the function is not compiled at
-        // all, which a status genuinely contradicts.
+        // `trait_signature` is absent from this list because it could never
+        // fire: a Rust atom gets a `verification-status` only from a matched
+        // translation, and `trait_signature` requires that no translation was
+        // matched, so the two are mutually exclusive by construction (verified
+        // on SymCRust: status and `translation-name` are present on exactly the
+        // same 268 atoms). Counting the raw `trait-required` fact instead would
+        // be a different check — it reports bodyless signatures bound to some
+        // Lean def, of which SymCRust has none and spqr has 2, both heuristic
+        // mis-matches to an `impl` method's def (#69). That is a real signal,
+        // but it is a mis-match signal rather than a stale-source-fact one, so
+        // it does not belong in this counter. The other three facts mean the
+        // function is not compiled at all, which a status genuinely
+        // contradicts.
         if has_status && (foreign || unmounted || cfg_inactive) {
             stale_fact_conflicts += 1;
         }
@@ -2343,8 +2349,10 @@ charon:
     #[test]
     fn enrich_trait_signature_with_status_stays_tracked() {
         // Aeneas translates some trait DECLARATIONS as interface records, so a
-        // status-bearing bodyless signature is expected, not stale facts. P24
-        // keeps it tracked (5 such atoms on SymCRust).
+        // status-bearing bodyless signature is possible and P24 keeps it
+        // tracked. Rare in practice: SymCRust has 0 of its 22 signatures in
+        // this state and spqr has 2, so this guard is exercised by fixture
+        // rather than by either project.
         let mut merged = std::collections::BTreeMap::new();
         let mut atom = make_rust_atom("BlockCipher::encrypt_block");
         atom.extensions
@@ -2389,6 +2397,41 @@ charon:
         assert_eq!(
             atom.extensions.get("untracked"),
             Some(&serde_json::json!(false))
+        );
+    }
+
+    #[test]
+    fn enrich_cfg_inactive_trait_signature_reports_trait_signature() {
+        // The last untested precedence pair. Neither test project exercises it:
+        // SymCRust's 10 `NttIntrinsicsInterface` signatures do carry a `cfg`,
+        // but it is the tautology `any(feature = "x", not(feature = "x"))` and
+        // so always active. Bodylessness is intrinsic to the declaration and a
+        // cfg predicate is a property of the build, so the intrinsic cause is
+        // reported even when both hold.
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("Iface::simd_op");
+        atom.extensions
+            .insert("trait-required".to_string(), serde_json::json!(true));
+        atom.extensions
+            .insert("cfg".to_string(), serde_json::json!(r#"feature = "simd""#));
+        merged.insert("probe:crate/1.0/Iface#simd_op()".to_string(), atom);
+
+        // Active features do not include `simd` → predicate inactive.
+        let cfg = crate::cfg_eval::CfgConfig {
+            features: ["alloc"].iter().map(|s| s.to_string()).collect(),
+        };
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg), &[]);
+
+        let atom = merged.get("probe:crate/1.0/Iface#simd_op()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("trait-signature")),
+            "bodylessness outranks the configuration-dependent causes"
         );
     }
 

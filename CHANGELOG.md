@@ -36,8 +36,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
     `docs/SCHEMA.md` documents the remaining caveat, that a *missed*
     interface-record match now greys rather than showing as backlog, and how to
     audit the greyed set.
-  - On SymCRust-lean this moves 17 atoms from white to grey (258/48 to 275/31,
-    tracked denominator 327 to 310); curve25519-dalek-lean-verify moves 5.
+  - On SymCRust-lean this moves 22 atoms from white to grey (261/53 to 283/31,
+    tracked denominator 321 to 299); curve25519-dalek-lean-verify moves 5.
+    #62 predicted 17 on the assumption that 5 of the 22 carried a
+    `verification-status`; measured against the project, none of them does, so
+    all 22 move. The post-state white count is 31 either way.
 - **`extract` reports the out-of-scope count per cause** on every run
   (`scope: N Rust atom(s) out of scope (…)`). A reclassification — a new
   producer fact, or a matching regression that greys atoms whose translation
