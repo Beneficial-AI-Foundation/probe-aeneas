@@ -989,11 +989,17 @@ fn enrich_with_aeneas_metadata(
     // manual audit of the output.
     let mut reason_counts: std::collections::BTreeMap<&str, usize> =
         std::collections::BTreeMap::new();
+    // Gates the report on "this run classified Rust atoms" rather than on
+    // "some atom was out of scope", so a genuine zero is stated instead of
+    // being indistinguishable from a run that never got as far as scope
+    // classification.
+    let mut rust_atoms = 0usize;
 
     for (key, atom) in merged.iter_mut() {
         if atom.language != "rust" {
             continue;
         }
+        rust_atoms += 1;
         // Only a string-typed status counts: a stray `null` or malformed
         // value must not shield an atom from scope classification.
         let has_status = atom
@@ -1166,16 +1172,19 @@ fn enrich_with_aeneas_metadata(
         }
     }
 
-    if !reason_counts.is_empty() {
+    if rust_atoms > 0 {
         let total: usize = reason_counts.values().sum();
         let breakdown: Vec<String> = reason_counts
             .iter()
             .map(|(reason, count)| format!("{count} {reason}"))
             .collect();
-        println!(
-            "  scope: {total} Rust atom(s) out of scope ({})",
-            breakdown.join(", ")
-        );
+        // No parenthetical on a zero: "out of scope ()" reads like a bug.
+        let suffix = if breakdown.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", breakdown.join(", "))
+        };
+        println!("  scope: {total}/{rust_atoms} Rust atom(s) out of scope{suffix}");
     }
     if stale_fact_conflicts > 0 {
         println!(

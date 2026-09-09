@@ -41,8 +41,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
     #62 predicted 17 on the assumption that 5 of the 22 carried a
     `verification-status`; measured against the project, none of them does, so
     all 22 move. The post-state white count is 31 either way.
-- **`extract` reports the out-of-scope count per cause** on every run
-  (`scope: N Rust atom(s) out of scope (…)`). A reclassification — a new
+- **`extract` reports the out-of-scope count per cause** on every run that
+  classified any Rust atom (`scope: N/M Rust atom(s) out of scope (…)`),
+  including when `N` is zero — silence would not distinguish "nothing is out of
+  scope" from "scope classification never ran". A reclassification — a new
   producer fact, or a matching regression that greys atoms whose translation
   was missed — is then visible in the run that introduced it rather than only
   under a manual audit of the output.

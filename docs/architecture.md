@@ -126,12 +126,15 @@ the merged atom map:
 
 3. **`untracked` flag**: every Rust atom is tracked backlog by default
    (`untracked: false`); membership in `functions.json` or the presence of
-   a `translation-name` does **not** decide scope. An atom flips to
+   a `translation-name` does **not** decide scope (with one narrow exception:
+   a matched translation suppresses the bodyless-trait-signature cause below,
+   because Aeneas does translate some trait *declarations* as interface
+   records). An atom flips to
    `untracked: true` only when it carries no `verification-status` **and**
    is genuinely out of the Aeneas verification build — a foreign declaration
    (probe-rust's `is-foreign`: an extern-block member with no Rust body), a
-   bodyless trait method signature (probe-rust's `trait-required`: no default
-   body, so the `impl`s carry the obligations), in
+   bodyless trait method signature with no matched translation (probe-rust's
+   `trait-required`: no default body, so the `impl`s carry the obligations), in
    a file no lib/bin `mod` chain reaches (probe-rust's `is-unmounted`),
    cfg-inactive in the resolved feature set (the complete `cfg` predicate,
    with `file-cfg` refining the reason), its Lean translation carries

@@ -236,7 +236,7 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
 | `charon-def-id` | integer | no | The charon `FunDeclId` for this function (from probe-rust's span→`FunDecl` resolution). Equals Aeneas's `translation.json` `def_id`, enabling a precise integer join to the Lean translation. Always emitted **together with** `charon-version` (see below). |
 | `charon-version` | string | no | The charon version that produced `charon-def-id`. Provenance-gates the `def_id` join: the join runs only when this matches Aeneas's `translation.json` `charon_version`. |
-| `untracked` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is cfg-inactive in the Aeneas build (its `cfg` predicate is false), unmounted (`is-unmounted` from probe-rust), a foreign declaration (`is-foreign` from probe-rust), a bodyless trait signature (`trait-required` from probe-rust), or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
+| `untracked` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is cfg-inactive in the Aeneas build (its `cfg` predicate is false), unmounted (`is-unmounted` from probe-rust), a foreign declaration (`is-foreign` from probe-rust), a bodyless trait signature (`trait-required` from probe-rust) **with no matched translation**, or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
 | `is-relevant` | bool | yes | Crate membership, independent of scope: `true` when the atom belongs to the analyzed crate (non-empty `code-path`), `false` for external stubs. |
 | `cfg` | string | no | The item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; with probe-rust >= 0.10.0 this includes the parent-file mod-chain gates, `all(...)`-joined). Omitted when the function is not gated. Used to decide `untracked` (cfg-inactive ⟹ out of scope). |
 | `file-cfg` | string | no | From probe-rust >= 0.10.0: the parent-file mod-chain component of `cfg`, alone (already folded into `cfg`). Used only for reason granularity: when this component alone is inactive, `untracked-reason` says `file-cfg-inactive` instead of the catch-all `cfg-inactive`. |
@@ -360,7 +360,8 @@ Aeneas has not translated is backlog (`untracked: false`), not out of scope.
 skipped when the translation is `@[out_of_scope]`). Then, for each Rust atom,
 `untracked` defaults to `false` and is set to `true` only when the atom has no
 `verification-status` **and** is cfg-inactive, unmounted, a foreign
-declaration, a bodyless trait signature, or `@[out_of_scope]`. The active
+declaration, a bodyless trait signature with no matched translation, or
+`@[out_of_scope]`. The active
 feature set is resolved via `cargo metadata` (default features overlaid by
 `charon.cargo_args`); when it cannot be resolved, cfg classification is skipped
 entirely (conservative — a backlog atom is never disabled on a guess; the
