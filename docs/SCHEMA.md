@@ -236,14 +236,14 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
 | `charon-def-id` | integer | no | The charon `FunDeclId` for this function (from probe-rust's span→`FunDecl` resolution). Equals Aeneas's `translation.json` `def_id`, enabling a precise integer join to the Lean translation. Always emitted **together with** `charon-version` (see below). |
 | `charon-version` | string | no | The charon version that produced `charon-def-id`. Provenance-gates the `def_id` join: the join runs only when this matches Aeneas's `translation.json` `charon_version`. |
-| `untracked` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is cfg-inactive in the Aeneas build (its `cfg` predicate is false), unmounted (`is-unmounted` from probe-rust), a foreign declaration (`is-foreign` from probe-rust), or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
+| `untracked` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is cfg-inactive in the Aeneas build (its `cfg` predicate is false), unmounted (`is-unmounted` from probe-rust), a foreign declaration (`is-foreign` from probe-rust), a bodyless trait signature (`trait-required` from probe-rust), or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
 | `is-relevant` | bool | yes | Crate membership, independent of scope: `true` when the atom belongs to the analyzed crate (non-empty `code-path`), `false` for external stubs. |
 | `cfg` | string | no | The item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; with probe-rust >= 0.10.0 this includes the parent-file mod-chain gates, `all(...)`-joined). Omitted when the function is not gated. Used to decide `untracked` (cfg-inactive ⟹ out of scope). |
 | `file-cfg` | string | no | From probe-rust >= 0.10.0: the parent-file mod-chain component of `cfg`, alone (already folded into `cfg`). Used only for reason granularity: when this component alone is inactive, `untracked-reason` says `file-cfg-inactive` instead of the catch-all `cfg-inactive`. |
 | `is-unmounted` | bool | no | From probe-rust >= 0.10.0: no `mod` chain from the package's lib/bin target entries reaches the function's file. Configuration-independent; evaluated to `untracked` without any feature set. |
 | `is-foreign` | bool | no | From probe-rust >= 0.10.0: declared inside an `extern { … }` block (no Rust body). Evaluated to `untracked`. |
-| `trait-required` | bool | no | From probe-rust >= 0.10.0: a bodyless trait method signature. Passed through untouched — how interface signatures render is a pending colouring-scheme decision, so it does NOT affect `untracked` yet. |
-| `untracked-reason` | string | no | Emitted by probe-aeneas >= 0.19.0 (older outputs carry `untracked` without it): present exactly when `untracked` is `true`, naming the most intrinsic applicable cause. One of `foreign-declaration`, `unmounted`, `file-cfg-inactive`, `cfg-inactive`, `out-of-scope-translation`, `non-library-target`, `config-out-of-scope`. |
+| `trait-required` | bool | no | From probe-rust >= 0.10.0: a bodyless trait method signature (no default body). Evaluated to `untracked` since probe-aeneas 0.20.0: there is no body for Aeneas to translate, so no Lean def, no spec, and no `verification-status` is ever possible. Trait methods *with* a default body are ordinary code and never carry this fact. |
+| `untracked-reason` | string | no | Emitted by probe-aeneas >= 0.19.0 (older outputs carry `untracked` without it): present exactly when `untracked` is `true`, naming the most intrinsic applicable cause. One of `foreign-declaration`, `trait-signature` (>= 0.20.0), `unmounted`, `file-cfg-inactive`, `cfg-inactive`, `out-of-scope-translation`, `non-library-target`, `config-out-of-scope`. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
 | `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Derived from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is propagated directly. Otherwise, if a primary spec exists, the spec's status is used; if no spec exists, the status is `"unverified"`. After enrichment (default, `--skip-enrich` to disable): `"verified"` is upgraded to `"transitively-verified"` when all transitive deps are verified/trusted. |
@@ -302,16 +302,43 @@ two-state scope model of KB P24/P25.
      probe-rust's KB P19), so lib/bin-compiled code is never flagged.
   3. **foreign declaration** -- probe-rust's `is-foreign` fact: a function
      declared inside an `extern "C" { … }` block, whose implementation lives
-     outside Rust. There is nothing on the Rust side to verify. Trait method
-     signatures (also bodyless, but genuine backlog) are NOT foreign; their
-     `trait-required` fact is passed through without affecting scope.
-  4. **`@[out_of_scope]`** -- its generated Lean translation carries the
+     outside Rust. There is nothing on the Rust side to verify, and nothing in
+     the atom graph will ever discharge the obligation.
+  4. **trait signature** -- probe-rust's `trait-required` fact: a trait method
+     declared without a default body. There is no body for Aeneas to translate,
+     so no Lean def *of the method*, so no spec and no status. Unlike (3) the
+     obligations stay inside the project: the `impl`s carry them and are
+     tracked as their own atoms, which is why this gets its own reason rather
+     than being folded into `foreign-declaration`. Trait methods *with* a
+     default body are ordinary code and stay in scope.
+
+     **Caveat.** Aeneas does translate some trait *declarations* as interface
+     records. Where such a record is matched to the signature, the atom carries
+     a `verification-status` and P24 keeps it tracked, so this cause fires
+     exactly on signatures with **no matched translation** (4 of the 6 on spqr,
+     for instance). The consequence to be aware of: a signature whose interface
+     record exists but is *missed* by the matching strategies greys out instead
+     of showing up as untranslated backlog, so a matching gap becomes less
+     visible. To audit the greyed set against the manifest:
+
+     ```bash
+     jq -r '.data | to_entries[]
+            | select(.value["untracked-reason"] == "trait-signature") | .key' merged.json
+     ```
+  5. **`@[out_of_scope]`** -- its generated Lean translation carries the
      `@[out_of_scope]` attribute, an explicit opt-out.
-  5. **non-library target** -- its path marks it as compiled outside the
+  6. **non-library target** -- its path marks it as compiled outside the
      verified library (`benches/`, `build.rs`, `tests/`, `examples/`).
-  6. **config out-of-scope** -- it matches the project's curated
+  7. **config out-of-scope** -- it matches the project's curated
      `out-of-scope` globs in `.verilib/aeneas.json` (functions Aeneas
      structurally does not translate).
+
+  (3) and (4) are the two bodyless-declaration forms Rust has, and they are
+  mutually exclusive: probe-rust derives them from disjoint AST visitors. Both
+  are properties of the declaration itself rather than of the build
+  configuration, which is why they precede (1) and (2) in the reason order. A
+  function with a non-Rust ABI but a real body (`pub extern "C" fn f() { … }`)
+  is neither, and stays in scope.
 
   Note on (1): with probe-rust >= 0.10.0 the `cfg` predicate already includes
   the `#[cfg(...)]` gates on the `mod` declaration chain mounting the file
@@ -329,12 +356,14 @@ Aeneas has not translated is backlog (`untracked: false`), not out of scope.
 skipped when the translation is `@[out_of_scope]`). Then, for each Rust atom,
 `untracked` defaults to `false` and is set to `true` only when the atom has no
 `verification-status` **and** is cfg-inactive, unmounted, a foreign
-declaration, or `@[out_of_scope]`. The active feature set is resolved via
-`cargo metadata` (default features overlaid by `charon.cargo_args`); when it
-cannot be resolved, cfg classification is skipped entirely (conservative — a
-backlog atom is never disabled on a guess; the configuration-independent
-`is-unmounted`/`is-foreign` facts still apply). A status-bearing atom is never
-disabled (P24).
+declaration, a bodyless trait signature, or `@[out_of_scope]`. The active
+feature set is resolved via `cargo metadata` (default features overlaid by
+`charon.cargo_args`); when it cannot be resolved, cfg classification is skipped
+entirely (conservative — a backlog atom is never disabled on a guess; the
+configuration-independent `is-unmounted`/`is-foreign`/`trait-required` facts
+still apply). A status-bearing atom is never disabled (P24) — this is what
+keeps the trait *declarations* Aeneas does translate as interface records
+tracked, even though they carry `trait-required`.
 
 **Consumer guidance:** partition the Rust call graph into in-scope (`false`) and
 out-of-scope (`true`). The verification backlog is exactly the in-scope,

@@ -129,7 +129,9 @@ the merged atom map:
    a `translation-name` does **not** decide scope. An atom flips to
    `untracked: true` only when it carries no `verification-status` **and**
    is genuinely out of the Aeneas verification build — a foreign declaration
-   (probe-rust's `is-foreign`: an extern-block member with no Rust body), in
+   (probe-rust's `is-foreign`: an extern-block member with no Rust body), a
+   bodyless trait method signature (probe-rust's `trait-required`: no default
+   body, so the `impl`s carry the obligations), in
    a file no lib/bin `mod` chain reaches (probe-rust's `is-unmounted`),
    cfg-inactive in the resolved feature set (the complete `cfg` predicate,
    with `file-cfg` refining the reason), its Lean translation carries

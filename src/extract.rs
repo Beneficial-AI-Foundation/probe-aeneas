@@ -890,7 +890,8 @@ fn resolve_verification_status(
 /// 2. For every Rust atom, default `untracked` to `false` (tracked backlog),
 ///    and set it to `true` only when the atom has **no** (string-typed)
 ///    `verification-status` **and** it is genuinely out of scope: a foreign
-///    declaration (`is-foreign`), in a file no lib/bin `mod` chain reaches
+///    declaration (`is-foreign`), a bodyless trait method signature
+///    (`trait-required`), in a file no lib/bin `mod` chain reaches
 ///    (`is-unmounted`), cfg-inactive in the Aeneas build (its complete `cfg`
 ///    predicate evaluates definitively false; `file-cfg` only refines the
 ///    reason), its translation is `@[out_of_scope]`, a non-library target, or
@@ -910,9 +911,10 @@ fn resolve_verification_status(
 /// each atom: `cfg` (the complete gating predicate, parent-file mod-chain
 /// gates included), `file-cfg` (the chain component alone, for reason
 /// granularity), `is-unmounted` (no `mod` chain from the package's lib/bin
-/// roots reaches the file), and `is-foreign` (extern-block member). Older
-/// probe-rust output simply lacks the fields; classification then degrades to
-/// the per-function `cfg` evaluation alone (never guesses).
+/// roots reaches the file), `is-foreign` (extern-block member), and
+/// `trait-required` (bodyless trait method signature). Older probe-rust output
+/// simply lacks the fields; classification then degrades to the per-function
+/// `cfg` evaluation alone (never guesses).
 fn enrich_with_aeneas_metadata(
     merged: &mut std::collections::BTreeMap<String, Atom>,
     from_to: &HashMap<String, Vec<String>>,
@@ -1024,6 +1026,26 @@ fn enrich_with_aeneas_metadata(
             .get("is-foreign")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        // The other bodyless declaration: a required (no-default) trait method
+        // signature. Aeneas has no body to translate, so no Lean def OF THE
+        // METHOD, so no spec and no status — out of scope by construction, not
+        // pending work (KB P25). Unlike a foreign declaration, the obligations
+        // stay inside the project: the `impl`s carry them and are tracked as
+        // their own atoms. Trait methods WITH a default body are ordinary code
+        // and never carry this fact.
+        //
+        // Aeneas DOES translate some trait *declarations* as interface records.
+        // Those atoms carry a status, so `has_status` short-circuits the reason
+        // chain below before this cause is reached (P24) and they stay tracked.
+        // The branch therefore fires exactly on signatures with no matched
+        // translation, which also means a signature whose interface record was
+        // missed by the matching strategies greys rather than showing as
+        // backlog. See the caveat in docs/SCHEMA.md for how to audit that.
+        let trait_signature = atom
+            .extensions
+            .get("trait-required")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let out_of_scope = out_of_scope_rust.contains(key);
         // A present-but-mistyped fact is indistinguishable from absence to
         // the classifier (conservative), but it means a broken producer or a
@@ -1042,6 +1064,13 @@ fn enrich_with_aeneas_metadata(
         {
             malformed_facts += 1;
         }
+        // `trait_signature` is deliberately absent from this list. Aeneas does
+        // translate some trait *declarations* as interface records, so a
+        // status-bearing bodyless signature is expected and correct, not a
+        // symptom of stale facts. Counting it would report a conflict for
+        // every such atom on every run (5 on SymCRust) and drown the real
+        // signal. The other three facts mean the function is not compiled at
+        // all, which a status genuinely contradicts.
         if has_status && (foreign || unmounted || cfg_inactive) {
             stale_fact_conflicts += 1;
         }
@@ -1062,14 +1091,20 @@ fn enrich_with_aeneas_metadata(
         };
         // Tracked backlog by default; disabled only when out of scope and not
         // status-bearing (P24/P25).
-        // Most intrinsic cause first: a C binding is out of scope regardless
-        // of configuration; an unmounted file regardless of features; then
-        // the cfg evaluation (with the file-level refinement of the reason);
-        // then the policy opt-outs.
+        // Most intrinsic cause first: the two bodyless-declaration facts are
+        // properties of the declaration itself, true regardless of build
+        // configuration, so they precede the configuration-dependent causes
+        // (unmounted, then the cfg evaluation with its file-level reason
+        // refinement) and finally the policy opt-outs. `foreign` and
+        // `trait_signature` are mutually exclusive by construction in
+        // probe-rust (disjoint AST visitors), so their relative order is
+        // unobservable.
         let reason = if has_status {
             None
         } else if foreign {
             Some("foreign-declaration")
+        } else if trait_signature {
+            Some("trait-signature")
         } else if unmounted {
             Some("unmounted")
         } else if file_cfg_inactive {
@@ -1159,9 +1194,9 @@ fn warn_on_old_probe_rust(rust_path: &Path) {
     if (major, minor) < (0, 10) {
         println!(
             "  Warning: Rust atoms come from probe-rust {version} (< 0.10.0) — no source-fact \
-             fields (file-cfg/is-unmounted/is-foreign); scope classification is limited to the \
-             per-function cfg predicate. Upgrade probe-rust for module-level and foreign-decl \
-             classification."
+             fields (file-cfg/is-unmounted/is-foreign/trait-required); scope classification is \
+             limited to the per-function cfg predicate. Upgrade probe-rust for module-level, \
+             foreign-decl and trait-signature classification."
         );
     }
 }
@@ -2196,6 +2231,8 @@ charon:
             .insert("is-unmounted".to_string(), serde_json::json!("true"));
         atom.extensions
             .insert("is-foreign".to_string(), serde_json::json!(1));
+        atom.extensions
+            .insert("trait-required".to_string(), serde_json::json!("yes"));
         merged.insert("probe:crate/1.0/weird()".to_string(), atom);
 
         let from_to = HashMap::new();
@@ -2251,6 +2288,104 @@ charon:
             atom.extensions.get("untracked-reason"),
             Some(&serde_json::json!("foreign-declaration")),
             "foreign wins the reason over any cfg signal"
+        );
+    }
+
+    #[test]
+    fn enrich_trait_signature_untracked() {
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("OneShotHash::hash");
+        atom.extensions
+            .insert("trait-required".to_string(), serde_json::json!(true));
+        merged.insert("probe:crate/1.0/OneShotHash#hash()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:crate/1.0/OneShotHash#hash()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true)),
+            "a bodyless trait signature has no body to translate, so no Lean def, \
+             no spec and no status is ever possible (KB P25)"
+        );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("trait-signature"))
+        );
+    }
+
+    #[test]
+    fn enrich_trait_signature_with_status_stays_tracked() {
+        // Aeneas translates some trait DECLARATIONS as interface records, so a
+        // status-bearing bodyless signature is expected, not stale facts. P24
+        // keeps it tracked (5 such atoms on SymCRust).
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("BlockCipher::encrypt_block");
+        atom.extensions
+            .insert("trait-required".to_string(), serde_json::json!(true));
+        atom.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("verified"),
+        );
+        merged.insert(
+            "probe:crate/1.0/BlockCipher#encrypt_block()".to_string(),
+            atom,
+        );
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged
+            .get("probe:crate/1.0/BlockCipher#encrypt_block()")
+            .unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(false)),
+            "has-status implies in-scope (P24)"
+        );
+        assert!(!atom.extensions.contains_key("untracked-reason"));
+    }
+
+    #[test]
+    fn enrich_defaulted_trait_method_stays_backlog() {
+        // probe-rust omits `trait-required` for a trait method WITH a default
+        // body: real code, real backlog.
+        let mut merged = std::collections::BTreeMap::new();
+        let atom = make_rust_atom("OneShotHash::hash_twice");
+        merged.insert("probe:crate/1.0/OneShotHash#hash_twice()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged
+            .get("probe:crate/1.0/OneShotHash#hash_twice()")
+            .unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(false))
+        );
+    }
+
+    #[test]
+    fn enrich_unmounted_trait_signature_reports_trait_signature() {
+        // Bodylessness is intrinsic to the declaration; unmounted depends on
+        // the build. The chain reports the most intrinsic cause first.
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("Iface::op");
+        atom.extensions
+            .insert("trait-required".to_string(), serde_json::json!(true));
+        atom.extensions
+            .insert("is-unmounted".to_string(), serde_json::json!(true));
+        merged.insert("probe:crate/1.0/Iface#op()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:crate/1.0/Iface#op()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("trait-signature"))
         );
     }
 

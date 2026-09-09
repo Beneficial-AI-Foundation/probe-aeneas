@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-09
+
+### Added
+- **Bodyless trait method signatures classify as `untracked`** (closes #62).
+  probe-rust >= 0.10.0 already marked them with `trait-required`; 0.19.0 passed
+  the fact through without acting on it, pending a colouring decision. That
+  decision is now made: a trait method declared without a default body has no
+  body for Aeneas to translate, so no Lean def of the method, no spec and no
+  `verification-status`. It is out of scope by construction, not pending work,
+  and rendering it white promised progress that could not happen. New `untracked-reason` value `trait-signature`, ordered directly
+  after `foreign-declaration`: both are bodyless-declaration facts intrinsic to
+  the declaration, so they precede the configuration-dependent causes.
+  Trait methods *with* a default body are ordinary code and are unaffected, as
+  are functions with a non-Rust ABI and a real body.
+  - The reason is kept distinct from `foreign-declaration` rather than folded
+    into it: a foreign declaration's implementation lives outside Rust and
+    nothing in the atom graph will ever discharge it, whereas a trait
+    signature's obligations stay in the project on its `impl`s. That
+    distinction is the prerequisite for later rendering a signature as an
+    aggregate of its implementations.
+  - Aeneas translates some trait *declarations* as interface records, so a
+    status-bearing bodyless signature is expected. P24 keeps those tracked, and
+    the fact is deliberately excluded from the stale-fact disagreement counter
+    so it does not report a conflict per run. The cause therefore fires exactly
+    on signatures with no matched translation; `docs/SCHEMA.md` documents the
+    caveat that a *missed* interface-record match now greys rather than showing
+    as backlog, and how to audit the greyed set.
+  - On SymCRust-lean this moves 17 atoms from white to grey (258/48 to 275/31,
+    tracked denominator 327 to 310); curve25519-dalek-lean-verify moves 5.
+
+### Fixed
+- Documentation stated the opposite of the above, describing trait signatures
+  as "genuine backlog" deliberately excluded from scope classification
+  (`docs/SCHEMA.md`).
+
 ## [0.19.0] - 2026-08-11
 
 ### Added
