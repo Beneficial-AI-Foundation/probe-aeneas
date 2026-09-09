@@ -1059,12 +1059,23 @@ fn enrich_with_aeneas_metadata(
         // translation, which also means a signature whose interface record was
         // missed by the matching strategies greys rather than showing as
         // backlog. See the caveat in docs/SCHEMA.md for how to audit that.
+        //
+        // Only a string-typed `translation-name` counts as a match, mirroring
+        // `has_status` above: this pass writes the field from a Lean atom key,
+        // but the input can carry its own (an already-merged file fed back in,
+        // or a producer emitting the name), and a `null` or otherwise mistyped
+        // value names no Lean def, so it must not shield the atom from
+        // classification.
         let trait_signature = atom
             .extensions
             .get("trait-required")
             .and_then(|v| v.as_bool())
             .unwrap_or(false)
-            && !atom.extensions.contains_key("translation-name");
+            && atom
+                .extensions
+                .get("translation-name")
+                .and_then(|v| v.as_str())
+                .is_none();
         let out_of_scope = out_of_scope_rust.contains(key);
         // A present-but-mistyped fact is indistinguishable from absence to
         // the classifier (conservative), but it means a broken producer or a
@@ -2387,6 +2398,35 @@ charon:
             "has-status implies in-scope (P24)"
         );
         assert!(!atom.extensions.contains_key("untracked-reason"));
+    }
+
+    #[test]
+    fn mistyped_translation_name_does_not_shield_trait_signature() {
+        // The gate asks "was a Lean def matched?", and a null names none. A
+        // pre-existing mistyped `translation-name` on the input (an already
+        // merged file fed back in, say) must not read as a match and suppress
+        // the classification, the same way a null status does not (see
+        // `null_status_does_not_shield_from_scope`).
+        let mut merged = std::collections::BTreeMap::new();
+        let mut atom = make_rust_atom("Iface::op");
+        atom.extensions
+            .insert("trait-required".to_string(), serde_json::json!(true));
+        atom.extensions
+            .insert("translation-name".to_string(), serde_json::json!(null));
+        merged.insert("probe:crate/1.0/Iface#op()".to_string(), atom);
+
+        let from_to = HashMap::new();
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:crate/1.0/Iface#op()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("trait-signature"))
+        );
     }
 
     #[test]
