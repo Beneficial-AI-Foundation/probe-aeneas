@@ -890,8 +890,8 @@ fn resolve_verification_status(
 /// 2. For every Rust atom, default `untracked` to `false` (tracked backlog),
 ///    and set it to `true` only when the atom has **no** (string-typed)
 ///    `verification-status` **and** it is genuinely out of scope: a foreign
-///    declaration (`is-foreign`), a bodyless trait method signature
-///    (`trait-required`), in a file no lib/bin `mod` chain reaches
+///    declaration (`is-foreign`), a bodyless trait method signature with no
+///    matched translation (`trait-required`), in a file no lib/bin `mod` chain reaches
 ///    (`is-unmounted`), cfg-inactive in the Aeneas build (its complete `cfg`
 ///    predicate evaluates definitively false; `file-cfg` only refines the
 ///    reason), its translation is `@[out_of_scope]`, a non-library target, or
@@ -982,6 +982,13 @@ fn enrich_with_aeneas_metadata(
     // the outcome, but the disagreement itself must be visible.
     let mut stale_fact_conflicts = 0usize;
     let mut malformed_facts = 0usize;
+    // Out-of-scope atoms per cause. Reported unconditionally, as information
+    // rather than as a warning: a reclassification (a new producer fact, or a
+    // matching regression that greys atoms whose translation was missed) is
+    // then visible in the run that introduced it instead of only under a
+    // manual audit of the output.
+    let mut reason_counts: std::collections::BTreeMap<&str, usize> =
+        std::collections::BTreeMap::new();
 
     for (key, atom) in merged.iter_mut() {
         if atom.language != "rust" {
@@ -1034,9 +1041,14 @@ fn enrich_with_aeneas_metadata(
         // their own atoms. Trait methods WITH a default body are ordinary code
         // and never carry this fact.
         //
-        // Aeneas DOES translate some trait *declarations* as interface records.
-        // Those atoms carry a status, so `has_status` short-circuits the reason
-        // chain below before this cause is reached (P24) and they stay tracked.
+        // Aeneas DOES translate some trait *declarations* as interface records,
+        // so the fact alone is not sufficient: gate on the absence of a matched
+        // translation, which is what makes the cause true rather than merely
+        // structural. A matched record normally carries a status and `has_status`
+        // keeps the atom tracked (P24); a record annotated `@[out_of_scope]`
+        // carries none, and gating here lets it fall through to that explicit
+        // cause instead of being re-attributed to bodylessness.
+        //
         // The branch therefore fires exactly on signatures with no matched
         // translation, which also means a signature whose interface record was
         // missed by the matching strategies greys rather than showing as
@@ -1045,7 +1057,8 @@ fn enrich_with_aeneas_metadata(
             .extensions
             .get("trait-required")
             .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+            .unwrap_or(false)
+            && !atom.extensions.contains_key("translation-name");
         let out_of_scope = out_of_scope_rust.contains(key);
         // A present-but-mistyped fact is indistinguishable from absence to
         // the classifier (conservative), but it means a broken producer or a
@@ -1129,6 +1142,7 @@ fn enrich_with_aeneas_metadata(
             Some(r) => {
                 atom.extensions
                     .insert("untracked-reason".to_string(), serde_json::json!(r));
+                *reason_counts.entry(r).or_default() += 1;
             }
             None => {
                 atom.extensions.remove("untracked-reason");
@@ -1146,6 +1160,17 @@ fn enrich_with_aeneas_metadata(
         }
     }
 
+    if !reason_counts.is_empty() {
+        let total: usize = reason_counts.values().sum();
+        let breakdown: Vec<String> = reason_counts
+            .iter()
+            .map(|(reason, count)| format!("{count} {reason}"))
+            .collect();
+        println!(
+            "  scope: {total} Rust atom(s) out of scope ({})",
+            breakdown.join(", ")
+        );
+    }
     if stale_fact_conflicts > 0 {
         println!(
             "  scope: {} status-bearing atom(s) also carry out-of-scope source facts — kept tracked (P24); \
@@ -2386,6 +2411,48 @@ charon:
         assert_eq!(
             atom.extensions.get("untracked-reason"),
             Some(&serde_json::json!("trait-signature"))
+        );
+    }
+
+    #[test]
+    fn enrich_trait_signature_with_out_of_scope_translation_reports_out_of_scope() {
+        // An interface record annotated `@[out_of_scope]` carries no status, so
+        // P24 does not shield the atom from classification. The explicit opt-out
+        // must still be the reported cause: bodylessness classifies only when no
+        // translation was matched, otherwise a maintainer's decision would be
+        // re-attributed to a structural fact.
+        let mut merged = std::collections::BTreeMap::new();
+
+        let mut rust_atom = make_rust_atom("Iface::op");
+        rust_atom
+            .extensions
+            .insert("trait-required".to_string(), serde_json::json!(true));
+        merged.insert("probe:my-crate/1.0/Iface#op()".to_string(), rust_atom);
+
+        let mut lean_atom = make_lean_atom("Iface.op");
+        lean_atom.extensions.insert(
+            "attributes".to_string(),
+            serde_json::json!(["out_of_scope"]),
+        );
+        merged.insert("probe:my_crate.Iface.op".to_string(), lean_atom);
+
+        let mut from_to: HashMap<String, Vec<String>> = HashMap::new();
+        from_to
+            .entry("probe:my-crate/1.0/Iface#op()".to_string())
+            .or_default()
+            .push("probe:my_crate.Iface.op".to_string());
+
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+
+        let atom = merged.get("probe:my-crate/1.0/Iface#op()").unwrap();
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("out-of-scope-translation")),
+            "an explicit opt-out outranks bodylessness once a translation is matched"
         );
     }
 

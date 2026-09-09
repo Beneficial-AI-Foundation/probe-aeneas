@@ -26,15 +26,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
     signature's obligations stay in the project on its `impl`s. That
     distinction is the prerequisite for later rendering a signature as an
     aggregate of its implementations.
-  - Aeneas translates some trait *declarations* as interface records, so a
-    status-bearing bodyless signature is expected. P24 keeps those tracked, and
-    the fact is deliberately excluded from the stale-fact disagreement counter
-    so it does not report a conflict per run. The cause therefore fires exactly
-    on signatures with no matched translation; `docs/SCHEMA.md` documents the
-    caveat that a *missed* interface-record match now greys rather than showing
-    as backlog, and how to audit the greyed set.
+  - Aeneas translates some trait *declarations* as interface records, so the
+    cause is gated on the absence of a matched translation. A matched record
+    normally carries a status and P24 keeps the atom tracked; one annotated
+    `@[out_of_scope]` carries none and is reported under that explicit cause
+    rather than under bodylessness. The fact is also deliberately excluded from
+    the stale-fact disagreement counter, since a status-bearing bodyless
+    signature is expected and counting it would report a conflict per run.
+    `docs/SCHEMA.md` documents the remaining caveat, that a *missed*
+    interface-record match now greys rather than showing as backlog, and how to
+    audit the greyed set.
   - On SymCRust-lean this moves 17 atoms from white to grey (258/48 to 275/31,
     tracked denominator 327 to 310); curve25519-dalek-lean-verify moves 5.
+- **`extract` reports the out-of-scope count per cause** on every run
+  (`scope: N Rust atom(s) out of scope (…)`). A reclassification — a new
+  producer fact, or a matching regression that greys atoms whose translation
+  was missed — is then visible in the run that introduced it rather than only
+  under a manual audit of the output.
 
 ### Fixed
 - Documentation stated the opposite of the above, describing trait signatures

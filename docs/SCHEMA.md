@@ -242,7 +242,7 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `file-cfg` | string | no | From probe-rust >= 0.10.0: the parent-file mod-chain component of `cfg`, alone (already folded into `cfg`). Used only for reason granularity: when this component alone is inactive, `untracked-reason` says `file-cfg-inactive` instead of the catch-all `cfg-inactive`. |
 | `is-unmounted` | bool | no | From probe-rust >= 0.10.0: no `mod` chain from the package's lib/bin target entries reaches the function's file. Configuration-independent; evaluated to `untracked` without any feature set. |
 | `is-foreign` | bool | no | From probe-rust >= 0.10.0: declared inside an `extern { … }` block (no Rust body). Evaluated to `untracked`. |
-| `trait-required` | bool | no | From probe-rust >= 0.10.0: a bodyless trait method signature (no default body). Evaluated to `untracked` since probe-aeneas 0.20.0: there is no body for Aeneas to translate, so no Lean def, no spec, and no `verification-status` is ever possible. Trait methods *with* a default body are ordinary code and never carry this fact. |
+| `trait-required` | bool | no | From probe-rust >= 0.10.0: a bodyless trait method signature (no default body). Evaluated to `untracked` since probe-aeneas 0.20.0 **when no translation is matched**: there is then no body for Aeneas to translate, so no Lean def, no spec, and no `verification-status` is ever possible. Aeneas does translate some trait *declarations* as interface records; where one is matched, the atom is tracked (or reported under `out-of-scope-translation` if the record opts out). Trait methods *with* a default body are ordinary code and never carry this fact. |
 | `untracked-reason` | string | no | Emitted by probe-aeneas >= 0.19.0 (older outputs carry `untracked` without it): present exactly when `untracked` is `true`, naming the most intrinsic applicable cause. One of `foreign-declaration`, `trait-signature` (>= 0.20.0), `unmounted`, `file-cfg-inactive`, `cfg-inactive`, `out-of-scope-translation`, `non-library-target`, `config-out-of-scope`. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
@@ -313,13 +313,17 @@ two-state scope model of KB P24/P25.
      default body are ordinary code and stay in scope.
 
      **Caveat.** Aeneas does translate some trait *declarations* as interface
-     records. Where such a record is matched to the signature, the atom carries
-     a `verification-status` and P24 keeps it tracked, so this cause fires
-     exactly on signatures with **no matched translation** (4 of the 6 on spqr,
-     for instance). The consequence to be aware of: a signature whose interface
-     record exists but is *missed* by the matching strategies greys out instead
-     of showing up as untranslated backlog, so a matching gap becomes less
-     visible. To audit the greyed set against the manifest:
+     records, so the fact alone does not decide the cause: it fires only on
+     signatures with **no matched translation** (4 of the 6 on spqr, for
+     instance). Where a record is matched, the atom normally carries a
+     `verification-status` and P24 keeps it tracked; where the record is
+     annotated `@[out_of_scope]` it carries none, and cause (5) below is
+     reported instead of this one. The consequence to be aware of: a signature
+     whose interface record exists but is *missed* by the matching strategies
+     greys out instead of showing up as untranslated backlog, so a matching gap
+     becomes less visible. `extract` prints an out-of-scope count per cause on
+     every run, so a jump in the `trait-signature` count is the first signal.
+     To audit the greyed set against the manifest:
 
      ```bash
      jq -r '.data | to_entries[]
