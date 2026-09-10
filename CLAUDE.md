@@ -67,7 +67,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 2. `file+display-name` -- same source file path + matching base method name (unambiguous only)
 3. `file+line-overlap` -- same source file + overlapping line ranges (best overlap wins)
 
-**Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `untracked` following the KB P24/P25 two-state scope model: `false` (tracked backlog) by default for every compiled function; `true` (out of scope, no `verification-status`) only when the function has no status **and** is cfg-inactive in the Aeneas build (its probe-rust `cfg` predicate is false — probe-rust >= 0.10.0 folds parent-file mod-chain gates into it, with `file-cfg` carrying the chain component for reason granularity), unmounted (probe-rust's `is-unmounted`: no `mod` chain from the package's lib/bin roots reaches its file), a foreign declaration (probe-rust's `is-foreign`: declared inside an `extern` block), or its Lean translation carries `@[out_of_scope]`. probe-aeneas evaluates and applies policy only; all source-fact extraction lives in probe-rust. When `untracked` is set, `untracked-reason` records the cause. Membership in `functions.json` does not affect scope — a compiled-but-untranslated function is backlog, not disabled. The active feature set is resolved via `cargo metadata` (default features overlaid by `charon.cargo_args`) in `cfg_eval.rs`; when unresolvable, cfg classification is skipped (conservative).
+**Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. All Rust atoms also carry `untracked` following the KB P24/P25 two-state scope model: `false` (tracked backlog) by default for every compiled function; `true` (out of scope, no `verification-status`) only when the function has no status **and** is cfg-inactive in the Aeneas build (its probe-rust `cfg` predicate is false — probe-rust >= 0.10.0 folds parent-file mod-chain gates into it, with `file-cfg` carrying the chain component for reason granularity), unmounted (probe-rust's `is-unmounted`: no `mod` chain from the package's lib/bin roots reaches its file), a foreign declaration (probe-rust's `is-foreign`: declared inside an `extern` block), a bodyless trait method signature with no matched translation (probe-rust's `trait-required`: no default body, so nothing for Aeneas to translate and no status ever possible — the `impl`s carry the obligations), or its Lean translation carries `@[out_of_scope]`. probe-aeneas evaluates and applies policy only; all source-fact extraction lives in probe-rust. When `untracked` is set, `untracked-reason` records the cause. Membership in `functions.json` does not affect scope — a compiled-but-untranslated function is backlog, not disabled. The active feature set is resolved via `cargo metadata` (default features overlaid by `charon.cargo_args`) in `cfg_eval.rs`; when unresolvable, cfg classification is skipped (conservative).
 
 **Project Auto-Detection**: When a positional `PROJECT` path is given, `aeneas-config.yml` is parsed to derive `rust_project` (from `crate.dir`) and `lean_project` (the project root). If `crate.dir` lacks its own `Cargo.toml` but the project root is a Cargo `[workspace]`, the workspace root is used as `rust_project` (so probe-rust indexes all member crates), and the target member is validated via `cargo metadata --no-deps` using `crate.name`, `charon.package`, or `-p` from `charon.cargo_args`. The resolved package name is backfilled into `charon_config.package` to ensure `ensure_charon_llbc()` targets the correct crate. If `functions.json` exists at the project root, it is reused.
 
@@ -131,6 +131,15 @@ Always run at minimum:
 ```bash
 cargo fmt --all && cargo clippy --all-targets -- -D warnings && cargo test
 ```
+
+**Cross-repo consumers of the scope fields.** If you change `untracked` or
+`untracked-reason` (which causes exist, what they are named, when they fire),
+the canonical rendering reference must change with it, in its own PR:
+`VeriLib-Docs/docs/components/processor/atom-statuses-and-colours.md`. It lives
+in another repo, so it will never appear in your diff. This has silently gone
+stale before (VeriLib-Docs #2, #6, #10, #12, #24). The KB side of the same
+contract is being relocated into `docs/SCHEMA.md` precisely so it stops being a
+cross-repo dependency (probe#56).
 
 ## Commit Message Style
 

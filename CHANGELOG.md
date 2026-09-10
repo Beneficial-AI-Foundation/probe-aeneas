@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-09
+
+### Added
+- **Bodyless trait method signatures classify as `untracked`** (closes #62).
+  probe-rust >= 0.10.0 already marked them with `trait-required`; 0.19.0 passed
+  the fact through without acting on it, pending a colouring decision. That
+  decision is now made: a trait method declared without a default body has no
+  body for Aeneas to translate, so no Lean def of the method, no spec and no
+  `verification-status`. It is out of scope by construction, not pending work,
+  and rendering it white promised progress that could not happen. New `untracked-reason` value `trait-signature`, ordered directly
+  after `foreign-declaration`: both are bodyless-declaration facts intrinsic to
+  the declaration, so they precede the configuration-dependent causes.
+  Trait methods *with* a default body are ordinary code and are unaffected, as
+  are functions with a non-Rust ABI and a real body.
+  - The reason is kept distinct from `foreign-declaration` rather than folded
+    into it: a foreign declaration's implementation lives outside Rust and
+    nothing in the atom graph will ever discharge it, whereas a trait
+    signature's obligations stay in the project on its `impl`s. That
+    distinction is the prerequisite for later rendering a signature as an
+    aggregate of its implementations.
+  - Aeneas translates some trait *declarations* as interface records, so the
+    cause is gated on the absence of a matched translation. A matched record
+    normally carries a status and P24 keeps the atom tracked; one annotated
+    `@[out_of_scope]` carries none and is reported under that explicit cause
+    rather than under bodylessness. The fact is also deliberately excluded from
+    the stale-fact disagreement counter, since a status-bearing bodyless
+    signature is expected and counting it would report a conflict per run.
+    `docs/SCHEMA.md` documents the remaining caveat, that a *missed*
+    interface-record match now greys rather than showing as backlog, and how to
+    audit the greyed set.
+  - On SymCRust-lean this moves 22 atoms from white to grey (261/53 to 283/31,
+    tracked denominator 321 to 299); curve25519-dalek-lean-verify moves 5.
+    #62 predicted 17 on the assumption that 5 of the 22 carried a
+    `verification-status`; measured against the project, none of them does, so
+    all 22 move. The post-state white count is 31 either way.
+- **`extract` reports the out-of-scope count per cause** on every run that
+  classified any Rust atom (`scope: N/M Rust atom(s) out of scope (…)`),
+  including when `N` is zero — silence would not distinguish "nothing is out of
+  scope" from "scope classification never ran". A reclassification — a new
+  producer fact, or a matching regression that greys atoms whose translation
+  was missed — is then visible in the run that introduced it rather than only
+  under a manual audit of the output.
+
+### Fixed
+- Documentation stated the opposite of the above, describing trait signatures
+  as "genuine backlog" deliberately excluded from scope classification
+  (`docs/SCHEMA.md`).
+
 ## [0.19.0] - 2026-08-11
 
 ### Added
