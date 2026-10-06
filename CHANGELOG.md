@@ -32,7 +32,7 @@ is pre-0.21.0 output (injected cross-language edges, no records).
 - probe-lean auto-install no longer reuses a cached binary older than
   0.16.0 (read from `probe-lean --version`). It installs a newer one, or
   fails before extraction. If it rejected a binary, the error names that
-  binary and the reason. The pre-built download uses only releases tagged
+  binary and the reason, unless the source build fails. The pre-built download uses only releases tagged
   0.16.0 or later, and checks the binary before it installs it, so a binary
   below 0.16.0 is never installed from a download. The version check retries
   a few times when the binary is briefly busy (`ETXTBSY`) before it rejects

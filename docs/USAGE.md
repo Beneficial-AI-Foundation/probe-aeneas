@@ -462,9 +462,10 @@ before it installs anything, so a binary below 0.16.0 is never installed from a
 download. A source build (step 5) is installed before the version check. If a
 cached or built binary was rejected and no step produces an accepted one,
 `extract` stops with an error that names the rejected binary and the reason
-(its version, or why the version could not be read). If no binary was found at
-all, `extract` shows the source-build error instead, for example that source
-builds are off or the `lake build` output. `listfuns` accepts
+(its version, or why the version could not be read). A source build that fails
+reports its own error instead, for example the `lake build` output. If no
+binary was found at all, `extract` shows the source-build error, for example
+that source builds are off. `listfuns` accepts
 any version, because its output does not go through the hub merge.
 
 After installation, a `~/.local/bin/probe-lean` symlink is created pointing
