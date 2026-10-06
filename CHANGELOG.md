@@ -23,7 +23,15 @@ is pre-0.21.0 output (injected cross-language edges, no records).
   records (or `translation-name`) instead.
 - **Breaking**: the Lean input must come from probe-lean >= 0.16.0. The hub's
   version gate rejects older output because it lacks the `kernel-taint`
-  marker. Projections are also rejected.
+  marker. Projections are also rejected. `extract` applies the same check
+  to both inputs before translation and before writing `functions.json`, so
+  an old input fails before any other work.
+- **Breaking**: a consumer that re-merges or re-enriches `extract` output
+  must use the probe hub 0.5.0 or later. Hub 0.4.0 ignores `status-origin`
+  and would promote a copied `verified` to `transitively-verified`.
+- probe-lean auto-install no longer reuses a cached binary older than
+  0.16.0 (read from `probe-lean --version`). It installs a newer one, or
+  fails before extraction with an error that names the old binary.
 - Every `verification-status` copied from Lean onto a Rust atom carries
   `status-origin: "translation"`, and a copied `transitively-verified` is
   copied as `verified`. Enrichment treats the atom as a blocker seed, so
@@ -40,7 +48,8 @@ is pre-0.21.0 output (injected cross-language edges, no records).
   instead of being dropped before merge.
 - The `extract` envelope stays `schema-version: "3.0"` (the hub's 3.1 is a
   hub-side minor; consumers key the new behavior on `tool.version`). The
-  CLI summary reports `Correspondence records` instead of `Cross-lang edges`.
+  CLI summary reports `Correspondence records added` instead of
+  `Cross-lang edges`.
 - README, USAGE, SCHEMA and architecture docs describe correspondence
   records instead of cross-language dependency edges.
 

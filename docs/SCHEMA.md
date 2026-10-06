@@ -702,8 +702,8 @@ stamping `3.0`; a major (`2.0` -> `3.0`) changes required fields or their
 semantics and lands in lockstep across all producers.
 
 Consumers should check `schema-version` and reject files with an unsupported
-major version. A minor bump is backward-compatible: a `3.0` consumer can read a
-`3.1` file (the new fields are optional).
+major version. A minor bump is backward-compatible for reading: a `3.0`
+consumer can parse a `3.1` file (the new fields are optional).
 
 Both envelopes stamp `3.0`. Since 0.21.0 the `probe-aeneas/extract` data
 carries the hub 3.1 `maps-to`/`mapped-from` correspondence records and the
@@ -711,6 +711,13 @@ carries the hub 3.1 `maps-to`/`mapped-from` correspondence records and the
 producers keep stamping `3.0`. The change that matters to consumers, no
 cross-language edges in `dependencies`, is identified by `tool.version`
 (>= 0.21.0, the hub's ADR-006 version gate), not by the schema number.
+
+Parsing is not enough for a consumer that re-merges or re-enriches this
+output. It must use the probe hub 0.5.0 or later. Hub 0.4.0 ignores
+`status-origin`, so its enrichment treats a copied `verified` as local
+evidence. For example, a Rust atom with `verification-status: "verified"`,
+`status-origin: "translation"` and no dependencies stays `verified` under hub
+0.5.0, but hub 0.4.0 promotes it to `transitively-verified`.
 
 ---
 

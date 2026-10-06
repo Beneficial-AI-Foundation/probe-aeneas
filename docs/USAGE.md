@@ -66,10 +66,10 @@ Full pipeline: extract atoms (if needed), generate translation mappings, and
 merge Rust + Lean call graphs into a unified atom file in which translations
 are `maps-to`/`mapped-from` correspondence records. The Lean input must come
 from probe-lean >= 0.16.0 (the hub's ADR-006 version gate rejects older
-output). Auto-install does not enforce this: if the cached
-`~/.local/bin/probe-lean-<lean-version>` is older, the merge step fails with
-the gate's message, and you must install probe-lean 0.16.0 or later for that
-Lean toolchain.
+output). `extract` checks both inputs against that gate before translation, so
+an old pre-generated `--lean` file fails before any other work. Auto-install
+does not reuse a probe-lean binary older than 0.16.0. It tries to install a
+newer one, and if none is available it fails before extraction.
 
 ```
 probe-aeneas extract [OPTIONS] [PROJECT]
@@ -428,6 +428,13 @@ Multiple Lean versions can coexist via per-version binaries.
 3. `~/.local/bin/probe-lean` (unversioned symlink / fallback when no `lean-toolchain` is found)
 4. Download pre-built binary from GitHub Releases (`probe-lean-<version>-<platform>.tar.gz`)
 5. Clone from source, pin `lean-toolchain` to the target version, build with `lake build`, install to `~/.local/bin/probe-lean-<version>`
+
+For `extract`, steps 1-5 accept a binary only if `probe-lean --version`
+reports 0.16.0 or later (the hub's ADR-006 version gate). An older binary, or
+one whose version cannot be read, is skipped. If no step produces an accepted
+binary, `extract` stops with an error that names the old binary. A failed
+source build reports its own `lake build` error instead. `listfuns` accepts
+any version, because its output does not go through the hub merge.
 
 After installation, a `~/.local/bin/probe-lean` symlink is created pointing
 to the versioned binary.
