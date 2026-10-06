@@ -569,6 +569,15 @@ pub fn run_extract(
         .into());
     }
 
+    // --- Fail fast on inputs the merge would reject (ADR-006 version gate) ---
+    // Pre-generated inputs are checked before any extractor runs; extracted
+    // ones right after extraction, before translation or any artifact write.
+    for (json, language) in [(rust_json, "Rust"), (lean_json, "Lean")] {
+        if let Some(path) = json {
+            check_input_authority(path, language)?;
+        }
+    }
+
     // --- Resolve inputs (extract if needed) ---
     // When both --lean and --lean-project are given, skip Lean extraction
     // (use the pre-computed JSON) but keep the project dir for listfuns.
@@ -580,6 +589,12 @@ pub fn run_extract(
         with_public_api,
         translation_json,
     )?;
+    if rust_json.is_none() {
+        check_input_authority(&rust_path, "Rust")?;
+    }
+    if lean_json.is_none() {
+        check_input_authority(&lean_path, "Lean")?;
+    }
 
     // --- Resolve function records (single source dispatch) ---
     let resolved =
@@ -627,6 +642,23 @@ pub fn run_extract(
         lean_project,
         skip_enrich,
     )
+}
+
+/// Reject an input that the hub's merge rejects, with the hub's own rule
+/// (`probe::authority::validate_authority` at the recomputation boundary), so
+/// a doomed run stops before translation and before `functions.json` is
+/// written. The merge still validates again; this check only moves the error
+/// earlier.
+fn check_input_authority(path: &Path, language: &str) -> Result<()> {
+    let meta = probe::types::load_envelope(path).map_err(anyhow::Error::msg)?;
+    probe::authority::validate_authority(
+        &meta,
+        &path.display().to_string(),
+        probe::authority::AuthorityScope::Recompute,
+    )
+    .map_err(anyhow::Error::msg)
+    .with_context(|| format!("{language} input"))?;
+    Ok(())
 }
 
 /// Resolve Rust and Lean inputs, running extractors in parallel when both are
@@ -1336,7 +1368,7 @@ fn write_aeneas_envelope(
     println!("  Total entries:    {}", stats.total_entries);
     println!("  Stubs remaining:  {}", stats.stubs_remaining);
     println!("  New entries added: {}", stats.entries_added);
-    println!("  Correspondence records: {}", stats.records_attached);
+    println!("  Correspondence records added: {}", stats.records_attached);
 
     Ok(())
 }
@@ -3285,5 +3317,121 @@ charon:
             "unexpected error: {err:#}"
         );
         assert!(!dir.path().join("out.json").exists());
+    }
+
+    #[test]
+    fn kernel_taint_marker_survives_and_its_copy_is_not_promoted() {
+        // probe-lean >= 0.16.0 marks a `verified` whose taint the emitted graph
+        // cannot show: here a spec with no dependencies at all.
+        let mut spec = make_spec_atom("my_crate.my_fn", "verified");
+        spec.extensions.insert(
+            "status-origin".to_string(),
+            serde_json::json!("kernel-taint"),
+        );
+        let lean = std::collections::BTreeMap::from([
+            (LEAN_FN.to_string(), make_lean_atom("my_fn")),
+            (LEAN_SPEC.to_string(), spec),
+        ]);
+        let rust = std::collections::BTreeMap::from([
+            (RUST_FN.to_string(), make_rust_atom("my_fn")),
+            (
+                RUST_CALLER.to_string(),
+                with_deps(
+                    with_status(make_rust_atom("caller"), "verified"),
+                    &[RUST_FN],
+                ),
+            ),
+        ]);
+        let data = run_pipeline(rust, lean, &[exact_mapping()], false);
+
+        assert_eq!(data[LEAN_SPEC]["status-origin"], "kernel-taint");
+        assert_eq!(status(&data, LEAN_SPEC), "verified");
+        assert_eq!(data[RUST_FN]["status-origin"], "translation");
+        assert_eq!(status(&data, RUST_FN), "verified");
+        assert_eq!(
+            status(&data, RUST_CALLER),
+            "verified",
+            "a caller of a copied kernel-tainted status must not be promoted"
+        );
+    }
+
+    #[test]
+    fn probe_lean_contract_version_matches_hub_gate() {
+        // The runner's binary floor restates the hub's private gate table;
+        // pin it against the hub's own validator so the two cannot drift.
+        let (major, minor, patch) = crate::extract_runner::PROBE_LEAN_CONTRACT_VERSION;
+        let below = if patch > 0 {
+            format!("{major}.{minor}.{}", patch - 1)
+        } else {
+            format!("{major}.{}.999", minor - 1)
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let empty = std::collections::BTreeMap::new;
+        let at = write_envelope(
+            dir.path(),
+            "at.json",
+            "probe-lean",
+            &format!("{major}.{minor}.{patch}"),
+            "lean",
+            empty(),
+        );
+        let under = write_envelope(
+            dir.path(),
+            "under.json",
+            "probe-lean",
+            &below,
+            "lean",
+            empty(),
+        );
+
+        assert!(check_input_authority(&at, "Lean").is_ok());
+        assert!(check_input_authority(&under, "Lean").is_err());
+    }
+
+    #[test]
+    fn run_extract_rejects_pre_contract_input_before_other_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let rust_path = write_envelope(
+            dir.path(),
+            "rust.json",
+            "probe-rust",
+            "0.12.0",
+            "rust",
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]),
+        );
+        let lean_path = write_envelope(
+            dir.path(),
+            "lean.json",
+            "probe-lean",
+            "0.15.0",
+            "lean",
+            contaminated_lean(),
+        );
+        // `functions.json` does not exist: a check placed after record
+        // resolution would fail on it with a different error.
+        let out = dir.path().join("out.json");
+        let err = run_extract(
+            Some(&rust_path),
+            None,
+            Some(&lean_path),
+            None,
+            Some(&dir.path().join("missing-functions.json")),
+            None,
+            Some(&out),
+            None,
+            false,
+            None,
+            false,
+            false,
+            None,
+        )
+        .expect_err("pre-contract Lean input is rejected");
+        let msg = format!("{err:#}");
+        assert!(msg.contains("Lean input"), "unexpected error: {msg}");
+        assert!(
+            msg.contains("contract-release threshold 0.16.0"),
+            "unexpected error: {msg}"
+        );
+        assert!(!out.exists());
     }
 }
