@@ -102,8 +102,7 @@ pub enum ExtractRunnerError {
         "probe-lean at {} is not usable for extract: {reason}. The hub accepts output \
          only from probe-lean {required} or later (ADR-006 version gate), and no newer \
          probe-lean could be installed for {target}.\n  \
-         Install probe-lean {required} or later for this Lean toolchain, or re-run with \
-         {env}=1 to build probe-lean's unpinned `main` branch.",
+         Install probe-lean {required} or later for this Lean toolchain{hint}.",
         path.display()
     )]
     ProbeLeanBelowContract {
@@ -113,7 +112,8 @@ pub enum ExtractRunnerError {
         reason: String,
         required: String,
         target: String,
-        env: &'static str,
+        /// The source-build hint, empty when the source build already ran.
+        hint: String,
     },
 
     /// `lake build` failed during source installation of probe-lean.
@@ -362,9 +362,9 @@ fn find_or_install_probe_lean(
             return Ok(bin);
         }
     }
-    // Report the old binary when that is the whole story: the source build
-    // was off or produced another old binary. A real build failure (e.g.
-    // `lake build` stderr) is returned as is.
+    // Report the rejected binary when that is the whole story: the source
+    // build was off or produced another rejected binary. A real build failure
+    // (e.g. `lake build` stderr) is returned as is.
     let build_skipped_or_stale = matches!(
         built,
         Ok(_) | Err(ExtractRunnerError::SourceBuildDisabled { .. })
@@ -376,7 +376,15 @@ fn find_or_install_probe_lean(
                 reason,
                 required: format!("{major}.{minor}.{patch}"),
                 target: format!("Lean {version}"),
-                env: ALLOW_SOURCE_BUILD_ENV,
+                // The source build ran when `built` is `Ok`, so do not suggest it.
+                hint: if built.is_ok() {
+                    String::new()
+                } else {
+                    format!(
+                        ", or re-run with {ALLOW_SOURCE_BUILD_ENV}=1 to build probe-lean's \
+                         unpinned `main` branch"
+                    )
+                },
             })
         }
         _ => built,
@@ -630,7 +638,23 @@ fn try_prebuilt_download(
         return Err(anyhow::anyhow!("Extraction failed").into());
     }
 
-    let dest_dir = home_dir()?.join(".local/bin");
+    let versioned_bin = install_extracted(tmp, &home_dir()?, lean_version, min_version)?;
+    // `tmpdir` (the TempDir) is dropped here, cleaning up the extraction dir.
+    println!("  ✓ Installed pre-built probe-lean-{lean_version}");
+    Ok(versioned_bin)
+}
+
+/// Install an extracted pre-built archive (`tmp/bin/probe-lean`, optional
+/// `tmp/lib`) under `home`: `.local/bin/probe-lean-<lean_version>` and
+/// `.local/lib/probe-lean-<lean_version>`. With `min_version`, the binary
+/// must report such a version first. Otherwise nothing is installed.
+fn install_extracted(
+    tmp: &Path,
+    home: &Path,
+    lean_version: &str,
+    min_version: Option<(u64, u64, u64)>,
+) -> Result<PathBuf> {
+    let dest_dir = home.join(".local/bin");
     std::fs::create_dir_all(&dest_dir).context("create ~/.local/bin")?;
 
     let versioned_bin = dest_dir.join(format!("probe-lean-{lean_version}"));
@@ -660,14 +684,12 @@ fn try_prebuilt_download(
 
     install_file_atomic(&downloaded_bin, &versioned_bin)?;
 
-    let versioned_lib = home_dir()?.join(format!(".local/lib/probe-lean-{lean_version}"));
+    let versioned_lib = home.join(format!(".local/lib/probe-lean-{lean_version}"));
     let downloaded_lib = tmp.join("lib");
     if downloaded_lib.exists() {
         install_dir_atomic(&downloaded_lib, &versioned_lib)?;
     }
 
-    // `tmpdir` (the TempDir) is dropped here, cleaning up the extraction dir.
-    println!("  ✓ Installed pre-built probe-lean-{lean_version}");
     Ok(versioned_bin)
 }
 
@@ -1612,6 +1634,50 @@ mod tests {
             );
             assert!(reason.contains(cause), "{reason}");
         }
+    }
+
+    /// An extracted archive in a temp dir whose `bin/probe-lean` prints
+    /// `version`.
+    #[cfg(unix)]
+    fn extracted_archive(version: &str) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("bin")).unwrap();
+        std::fs::create_dir_all(tmp.path().join("lib")).unwrap();
+        std::fs::write(tmp.path().join("lib/a.olean"), b"lib").unwrap();
+        fake_probe_lean(
+            &tmp.path().join("bin"),
+            "probe-lean",
+            &format!("echo {version}"),
+        );
+        tmp
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_extracted_refuses_pre_contract_binary() {
+        let tmp = extracted_archive("0.15.0");
+        let home = tempfile::tempdir().unwrap();
+        let err = install_extracted(tmp.path(), home.path(), "v4.31.0", CONTRACT).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("version 0.15.0 is older than 0.16.0"),
+            "{err:#}"
+        );
+        assert!(!home.path().join(".local/bin/probe-lean-v4.31.0").exists());
+        assert!(!home.path().join(".local/lib/probe-lean-v4.31.0").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_extracted_installs_contract_binary() {
+        let tmp = extracted_archive("0.16.0");
+        let home = tempfile::tempdir().unwrap();
+        let bin = install_extracted(tmp.path(), home.path(), "v4.31.0", CONTRACT).unwrap();
+        assert_eq!(bin, home.path().join(".local/bin/probe-lean-v4.31.0"));
+        assert!(bin.exists());
+        assert!(home
+            .path()
+            .join(".local/lib/probe-lean-v4.31.0/a.olean")
+            .exists());
     }
 
     #[cfg(unix)]

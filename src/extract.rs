@@ -569,7 +569,7 @@ pub fn run_extract(
         .into());
     }
 
-    // --- Fail fast on the hub's authority rule (ADR-006 version gate) ---
+    // --- Fail fast on the hub's authority rule and the provenance guard ---
     // Pre-generated inputs are checked before any extractor runs; extracted
     // ones right after extraction, before translation or any artifact write.
     for (json, language) in [(rust_json, "Rust"), (lean_json, "Lean")] {
