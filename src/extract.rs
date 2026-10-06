@@ -569,7 +569,7 @@ pub fn run_extract(
         .into());
     }
 
-    // --- Fail fast on inputs the merge would reject (ADR-006 version gate) ---
+    // --- Fail fast on the hub's authority rule (ADR-006 version gate) ---
     // Pre-generated inputs are checked before any extractor runs; extracted
     // ones right after extraction, before translation or any artifact write.
     for (json, language) in [(rust_json, "Rust"), (lean_json, "Lean")] {
@@ -644,18 +644,20 @@ pub fn run_extract(
     )
 }
 
-/// Reject an input that the hub's merge rejects, with the hub's own rule
-/// (`probe::authority::validate_authority` at the recomputation boundary), so
-/// a doomed run stops before translation and before `functions.json` is
-/// written. The merge still validates again; this check only moves the error
-/// earlier.
+/// Reject an input that fails the hub's authority rule
+/// (`probe::authority::validate_authority` at the recomputation boundary:
+/// projections and the ADR-006 version gate), so such a run stops before
+/// translation and before `functions.json` is written. Only that rule moves
+/// earlier. The merge still applies it again, plus its payload checks
+/// (atoms, correspondence records, `status-origin` values).
 ///
-/// Also reject an input that does not come from the expected extractor: every
+/// Also reject an input whose provenance names another producer: every
 /// flattened `provenance` entry (hub P9) of the Rust input must have schema
-/// `probe-rust/extract`, and of the Lean input `probe-lean/extract`. The
-/// metadata pass relies on this: probe-rust emits no `verification-status`
-/// and no `translation-name`, so every such field on a Rust atom comes from
-/// this run's matches. A probe-aeneas output fed back as `--rust` carries a
+/// `probe-rust/extract`, and of the Lean input `probe-lean/extract`. Atom
+/// fields are not checked. The metadata pass relies on valid input: real
+/// probe-rust output emits no `verification-status` and no
+/// `translation-name`, so every such field on a Rust atom comes from this
+/// run's matches. A probe-aeneas output fed back as `--rust` carries a
 /// `probe-lean/extract` entry and is rejected here.
 fn check_input_authority(path: &Path, language: &str) -> Result<()> {
     let meta = probe::types::load_envelope(path).map_err(anyhow::Error::msg)?;
@@ -1219,9 +1221,11 @@ fn enrich_with_aeneas_metadata(
         // backlog. See the caveat in docs/SCHEMA.md for how to audit that.
         //
         // Only a string-typed `translation-name` counts as a match, mirroring
-        // `has_status` above. The input guard (`check_input_authority`) rejects
-        // input that carries its own, so the field comes from this run's
-        // matches; a `null` names no Lean def either way.
+        // `has_status` above. The input guard (`check_input_authority`) accepts
+        // only files whose provenance is probe-rust (single or merged), and
+        // real probe-rust output never carries this field, so for valid input
+        // it comes from this run's matches. A `null` names no Lean def either
+        // way.
         let has_translation = atom
             .extensions
             .get("translation-name")
