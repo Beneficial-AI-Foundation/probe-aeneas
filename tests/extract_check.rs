@@ -94,11 +94,23 @@ fn library_extract_with_pregenerated_json() {
     let output_path = dir.path().join("merged.json");
 
     let rust_json = Path::new("examples/rust_curve25519-dalek_4.1.3.json");
-    let lean_json = Path::new("examples/lean_Curve25519Dalek_0.1.0.json");
+    let lean_example = Path::new("examples/lean_Curve25519Dalek_0.1.0.json");
     let functions_json = Path::new("examples/functions.json");
 
     assert!(rust_json.exists(), "rust example JSON not found");
-    assert!(lean_json.exists(), "lean example JSON not found");
+    assert!(lean_example.exists(), "lean example JSON not found");
+
+    // Stand-in until the examples are re-extracted with probe-lean 0.16.0
+    // (#71): the checked-in Lean example comes from probe-lean 0.4.5, which
+    // the hub's ADR-006 version gate rejects, so run on a copy restamped as
+    // a contract release. The example carries no `kernel-taint` markers, so
+    // this exercises the pipeline shape, not the Lean evidence contract.
+    let mut lean_envelope: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(lean_example).unwrap()).unwrap();
+    lean_envelope["tool"]["version"] = serde_json::json!("0.16.0");
+    let lean_path = dir.path().join("lean.json");
+    std::fs::write(&lean_path, lean_envelope.to_string()).unwrap();
+    let lean_json = lean_path.as_path();
     assert!(functions_json.exists(), "functions.json not found");
 
     probe_aeneas::extract::run_extract(
@@ -122,6 +134,7 @@ fn library_extract_with_pregenerated_json() {
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
 
     assert_eq!(json["schema"], "probe-aeneas/extract");
+    assert_eq!(json["schema-version"], "3.1");
     assert!(json["data"].is_object());
 
     let data = json["data"].as_object().unwrap();
@@ -145,4 +158,24 @@ fn library_extract_with_pregenerated_json() {
         rust_with_translation > 0,
         "expected some Rust atoms with translation-name"
     );
+
+    // ADR-006: mappings become correspondence records, and every status
+    // copied onto a Rust atom is marked as imported evidence.
+    let rust_with_record = data
+        .values()
+        .filter(|v| v["language"] == "rust" && v["maps-to"].is_array())
+        .count();
+    assert_eq!(rust_with_record, rust_with_translation);
+    assert!(data
+        .values()
+        .any(|v| v["language"] == "lean" && v["mapped-from"].is_array()));
+    for (key, atom) in data.iter().filter(|(_, v)| v["language"] == "rust") {
+        if atom.get("verification-status").is_some() {
+            assert_eq!(atom["status-origin"], "translation", "{key}");
+            assert_ne!(
+                atom["verification-status"], "transitively-verified",
+                "{key}"
+            );
+        }
+    }
 }

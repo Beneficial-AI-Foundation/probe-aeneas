@@ -6,8 +6,8 @@
 //! lean — only `ThreadPanicked` carries structured info; everything else
 //! is either propagation from a submodule (`ExtractRunner`, `Listfuns`)
 //! or `Other(anyhow::Error)` for context-chained ad-hoc errors and the
-//! `String` bridge from `merge_atom_files` (upstream `probe` crate, not yet
-//! migrated) via `.map_err(anyhow::Error::msg)`.
+//! `String` bridge from `merge_atom_files_raw` (upstream `probe` crate, not
+//! yet migrated) via `.map_err(anyhow::Error::msg)`.
 //!
 //! CLI input-validation messages and YAML/JSON parse errors flow through
 //! `.context("...")?` or `anyhow::anyhow!("...").into()` — the typed enum
@@ -17,8 +17,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
-use probe::commands::merge::merge_atom_files;
-use probe::types::{Atom, InputProvenance, MergedAtomEnvelope, Tool};
+use probe::commands::merge::merge_atom_files_raw;
+use probe::types::{
+    endpoint_lookup_maps, Atom, InputProvenance, Mapping, MergedAtomEnvelope, Tool,
+};
 use serde::Deserialize;
 
 use crate::aeneas_config::AeneasConfig;
@@ -30,8 +32,6 @@ use crate::listfuns::ListfunsError;
 use crate::translate::{build_translations_json, generate_translations, load_atoms};
 use crate::translation_manifest;
 use crate::types::FunctionRecord;
-
-type MappingMaps = (HashMap<String, Vec<String>>, HashMap<String, Vec<String>>);
 
 // ---------------------------------------------------------------------------
 // Typed error
@@ -59,7 +59,7 @@ pub enum ExtractError {
     /// Catch-all wrapping `anyhow::Error`. Used for:
     /// - io::Error / serde_json::Error / serde_yaml::Error via `.context()?`
     /// - ad-hoc CLI input validation messages via `anyhow::anyhow!(...).into()`
-    /// - `Result<_, String>` from `merge_atom_files` (upstream `probe` crate)
+    /// - `Result<_, String>` from `merge_atom_files_raw` (upstream `probe` crate)
     ///   via `.map_err(anyhow::Error::msg)?`
     #[error(transparent)]
     Other(#[from] anyhow::Error),
@@ -606,7 +606,7 @@ pub fn run_extract(
     let config = AeneasConfig::load(aeneas_config, lean_project).context("load aeneas config")?;
 
     // --- Generate translations ---
-    let translations_result = run_translate(
+    let mappings = run_translate(
         &rust_path,
         &lean_path,
         &resolved.records,
@@ -618,7 +618,7 @@ pub fn run_extract(
     run_extract_with_translations(
         &rust_path,
         &lean_path,
-        &translations_result,
+        &mappings,
         cfg_config,
         &aux_defs,
         output_path,
@@ -712,7 +712,13 @@ fn resolve_inputs(
     }
 }
 
-/// Run the translate step, returning bidirectional cross-language maps.
+/// Run the translate step, returning the generated mapping records in
+/// canonical form (see [`canonicalize_mappings`]).
+///
+/// The records stay authoritative through the rest of the pipeline: merge
+/// writes their `confidence`/`method` into the `maps-to`/`mapped-from`
+/// correspondence records (ADR-006), and any endpoint lookup map is derived
+/// from them, never the other way round.
 ///
 /// `functions` are the resolved records (source-blind: manifest-built or
 /// legacy-scraped, already carrying any `translation.json` overlay).
@@ -723,7 +729,7 @@ fn run_translate(
     lean_path: &Path,
     functions: &[FunctionRecord],
     manifest_charon_version: Option<&str>,
-) -> Result<MappingMaps> {
+) -> Result<Vec<Mapping>> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
         .with_context(|| format!("load Rust atoms from {}", rust_path.display()))?;
@@ -743,28 +749,46 @@ fn run_translate(
         println!("    {conf}: {count}");
     }
 
-    let mut from_to: HashMap<String, Vec<String>> = HashMap::new();
-    let mut to_from: HashMap<String, Vec<String>> = HashMap::new();
-    for m in &mappings {
-        from_to
-            .entry(m.from.clone())
-            .or_default()
-            .push(m.to.clone());
-        to_from
-            .entry(m.to.clone())
-            .or_default()
-            .push(m.from.clone());
-    }
+    Ok(canonicalize_mappings(mappings))
+}
 
-    Ok((from_to, to_from))
+/// Put mapping records in the canonical form the hub's `load_mappings` gives
+/// file inputs: endpoints normalized by the P8 rule (strip every trailing
+/// `.`), and an empty `method` dropped (`""` and omission are one identity,
+/// P27).
+///
+/// Merge normalizes atom keys per input, so the endpoint lookups this
+/// pipeline does after merge (`translation-*` metadata, status copy) must use
+/// the same rule on the mapping side, or a dotted endpoint misses its atom.
+/// The hub keeps its `normalize_code_name` crate-private, so the one-line
+/// rule is restated here.
+fn canonicalize_mappings(mappings: Vec<Mapping>) -> Vec<Mapping> {
+    mappings
+        .into_iter()
+        .map(|m| Mapping {
+            from: m.from.trim_end_matches('.').to_string(),
+            to: m.to.trim_end_matches('.').to_string(),
+            confidence: m.confidence,
+            method: m.method.filter(|method| !method.is_empty()),
+        })
+        .collect()
 }
 
 /// Merge atoms with pre-computed translations and produce the final output.
 ///
-/// The pipeline has three clearly separated phases:
-/// 1. **Merge** — generic `probe merge` operation via `merge_atom_files`.
-/// 2. **Enrich** — Aeneas-specific metadata (`translation-*`, `untracked`).
-/// 3. **Write** — envelope construction and output.
+/// The pipeline has four clearly separated phases:
+/// 1. **Merge** — generic `probe merge` operation via the hub's raw staging
+///    primitive `merge_atom_files_raw`: authority validation, normalization,
+///    conflict resolution and `maps-to`/`mapped-from` correspondence records,
+///    but no enrichment (ADR-006).
+/// 2. **Aeneas metadata** — `translation-*`, copied `verification-status`
+///    marked `status-origin: "translation"`, `untracked`.
+/// 3. **Enrich** — the single enrichment recomputation (P23), skipped by
+///    `--skip-enrich`.
+/// 4. **Write** — envelope construction and output.
+///
+/// Staging on the raw primitive is required: phase 2 writes statuses, so an
+/// enrichment pass inside merge would run over a graph phase 2 then changes.
 ///
 /// When `output_path` is `None`, writes to
 /// `<project_root>/.verilib/probes/aeneas_{package}_{version}.json`
@@ -774,7 +798,7 @@ fn run_translate(
 fn run_extract_with_translations(
     rust_path: &Path,
     lean_path: &Path,
-    translations: &MappingMaps,
+    mappings: &[Mapping],
     cfg_config: Option<&crate::cfg_eval::CfgConfig>,
     aux_defs: &HashSet<String>,
     output_path: Option<&Path>,
@@ -784,13 +808,16 @@ fn run_extract_with_translations(
     skip_enrich: bool,
 ) -> Result<()> {
     warn_on_old_probe_rust(rust_path);
-    // Phase 1: Merge (generic probe operation)
-    // merge_atom_files still returns Result<_, String>; bridge via anyhow.
+    // Phase 1: Merge (generic probe operation, raw staging: no enrichment)
+    // merge_atom_files_raw still returns Result<_, String>; bridge via anyhow.
     println!("\nMerging atoms with translations...");
     let (mut merged, provenance, stats) =
-        merge_atom_files(&[rust_path, lean_path], Some(translations))
+        merge_atom_files_raw(&[rust_path, lean_path], Some(mappings))
             .map_err(anyhow::Error::msg)
             .context("merge atom files")?;
+    // Derived index over the canonical records (same normalization as the
+    // merged keys); confidence is never reconstructed from it.
+    let (from_to, _) = endpoint_lookup_maps(mappings);
 
     let output_path_buf;
     let output_path = match output_path {
@@ -815,22 +842,18 @@ fn run_extract_with_translations(
     }
 
     // Phase 2: Enrich (Aeneas-specific)
-    enrich_with_aeneas_metadata(
-        &mut merged,
-        &translations.0,
-        cfg_config,
-        &config.out_of_scope,
-    );
+    enrich_with_aeneas_metadata(&mut merged, &from_to, cfg_config, &config.out_of_scope);
     enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config, aux_defs);
 
-    // Phase 2.5: Enrich verification status (transitive propagation, P23)
+    // Phase 3: Enrich verification status — the pipeline's only enrichment
+    // pass (P23). Translation-marked statuses are blocker seeds here.
     if !skip_enrich {
         let (transitive, local, _) =
             probe::commands::propagate::enrich_verification_status(&mut merged);
         println!("  enrich: ✓ {transitive} transitively-verified, {local} locally verified");
     }
 
-    // Phase 3: Write envelope
+    // Phase 4: Write envelope
     write_aeneas_envelope(merged, provenance, output_path, &stats)
 }
 
@@ -850,11 +873,17 @@ fn prefix_rust_code_paths(merged: &mut std::collections::BTreeMap<String, Atom>,
     }
 }
 
-/// Resolve the `verification-status` to propagate onto a Rust atom.
+/// Resolve the `verification-status` to copy onto a Rust atom.
 ///
 /// - `"trusted"` / `"failed"` on the Lean def are preserved as-is.
 /// - Otherwise, the primary spec theorem is looked up: if found, its
 ///   `verification-status` is used; if absent, `"unverified"` is returned.
+/// - A copied `"transitively-verified"` is normalized to `"verified"`
+///   (ADR-006 Decision 2): the label was computed over the Lean graph, and
+///   the copy is imported evidence, which is never a transitive result on
+///   the Rust side.
+///
+/// The caller marks the copied status `status-origin: "translation"`.
 fn resolve_verification_status(
     lean_name: &str,
     lean_atom: &Atom,
@@ -871,6 +900,9 @@ fn resolve_verification_status(
             let stripped = enrich::strip_prefix(lean_name);
             let (_, spec_atom) = enrich::find_primary_spec(stripped, atoms);
             match spec_atom.and_then(|s| s.extensions.get("verification-status")) {
+                Some(vs) if vs.as_str() == Some("transitively-verified") => {
+                    serde_json::json!("verified")
+                }
                 Some(vs) => vs.clone(),
                 None => serde_json::json!("unverified"),
             }
@@ -884,9 +916,10 @@ fn resolve_verification_status(
 /// Two enrichment passes:
 /// 1. For each Rust atom with a Lean translation, set `translation-name`,
 ///    `translation-path`, `translation-text`, and `verification-status`
-///    (spec-based) from the Lean atom and its primary spec — **unless** the
-///    translation carries `@[out_of_scope]`, in which case no status is set
-///    (an out-of-scope atom carries no `verification-status`).
+///    (spec-based) from the Lean atom and its primary spec, marking the
+///    copied status `status-origin: "translation"` (ADR-006 Decision 2) —
+///    **unless** the translation carries `@[out_of_scope]`, in which case no
+///    status is set (an out-of-scope atom carries no `verification-status`).
 /// 2. For every Rust atom, default `untracked` to `false` (tracked backlog),
 ///    and set it to `true` only when the atom has **no** (string-typed)
 ///    `verification-status` **and** it is genuinely out of scope: a foreign
@@ -966,6 +999,14 @@ fn enrich_with_aeneas_metadata(
             if !out_of_scope {
                 atom.extensions
                     .insert("verification-status".to_string(), vs);
+                // Every copied status is imported evidence: enrichment treats
+                // it as a blocker seed, never promoting the atom or its
+                // callers to transitively-verified, and a copied `trusted`
+                // does not shield its callers (ADR-006 Decision 2, P23).
+                atom.extensions.insert(
+                    "status-origin".to_string(),
+                    serde_json::json!("translation"),
+                );
             }
         }
     }
@@ -1265,7 +1306,8 @@ fn write_aeneas_envelope(
 
     let envelope = MergedAtomEnvelope {
         schema: "probe-aeneas/extract".to_string(),
-        schema_version: "3.0".to_string(),
+        // 3.1: the hub minor that adds `maps-to`/`mapped-from` records.
+        schema_version: "3.1".to_string(),
         tool: Tool {
             name: "probe-aeneas".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -1289,7 +1331,7 @@ fn write_aeneas_envelope(
     println!("  Total entries:    {}", stats.total_entries);
     println!("  Stubs remaining:  {}", stats.stubs_remaining);
     println!("  New entries added: {}", stats.entries_added);
-    println!("  Cross-lang edges: {}", stats.mappings_applied);
+    println!("  Correspondence records: {}", stats.records_attached);
 
     Ok(())
 }
@@ -2680,6 +2722,10 @@ charon:
             !atom.extensions.contains_key("verification-status"),
             "out-of-scope atom carries no verification-status (P24)"
         );
+        assert!(
+            !atom.extensions.contains_key("status-origin"),
+            "no copied status, so no translation marker"
+        );
         // Translation metadata is still recorded.
         assert_eq!(
             atom.extensions.get("translation-name"),
@@ -2901,5 +2947,329 @@ charon:
         assert_eq!(sanitize_for_filename("a/b\\c"), "a_b_c");
         assert_eq!(sanitize_for_filename("foo..bar"), "foo_bar");
         assert_eq!(sanitize_for_filename("normal-name"), "normal-name");
+    }
+
+    // -----------------------------------------------------------------------
+    // ADR-006 end-to-end regressions: raw merge → Aeneas metadata → the one
+    // enrichment pass, over real envelopes on disk.
+    // -----------------------------------------------------------------------
+
+    const RUST_FN: &str = "probe:my-crate/1.0/my_fn()";
+    const RUST_CALLER: &str = "probe:my-crate/1.0/caller()";
+    const LEAN_FN: &str = "probe:my_crate.my_fn";
+    const LEAN_SPEC: &str = "probe:my_crate.my_fn_spec";
+    const LEAN_LEMMA: &str = "probe:my_crate.lemma";
+
+    fn with_status(mut atom: Atom, vs: &str) -> Atom {
+        atom.extensions
+            .insert("verification-status".to_string(), serde_json::json!(vs));
+        atom
+    }
+
+    fn with_deps(mut atom: Atom, deps: &[&str]) -> Atom {
+        atom.dependencies = deps.iter().map(|d| d.to_string()).collect();
+        atom
+    }
+
+    /// Write a single-tool atoms envelope. `version` is the producer version
+    /// the hub's ADR-006 version gate sees.
+    fn write_envelope(
+        dir: &Path,
+        file: &str,
+        tool: &str,
+        version: &str,
+        language: &str,
+        data: std::collections::BTreeMap<String, Atom>,
+    ) -> PathBuf {
+        let path = dir.join(file);
+        let envelope = serde_json::json!({
+            "schema": format!("{tool}/extract"),
+            "schema-version": "3.0",
+            "tool": { "name": tool, "version": version, "command": "extract" },
+            "source": {
+                "repo": "", "commit": "", "language": language,
+                "package": "my-crate", "package-version": "1.0",
+            },
+            "timestamp": "2026-10-06T00:00:00Z",
+            "data": data,
+        });
+        std::fs::write(&path, serde_json::to_string(&envelope).unwrap()).unwrap();
+        path
+    }
+
+    fn exact_mapping() -> Mapping {
+        Mapping {
+            from: RUST_FN.to_string(),
+            to: LEAN_FN.to_string(),
+            confidence: "exact".to_string(),
+            method: Some("rust-qualified-name".to_string()),
+        }
+    }
+
+    /// Run the merge/metadata/enrich/write half of `extract` and return the
+    /// written envelope's `data`.
+    fn run_pipeline(
+        rust: std::collections::BTreeMap<String, Atom>,
+        lean: std::collections::BTreeMap<String, Atom>,
+        mappings: &[Mapping],
+        skip_enrich: bool,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let dir = tempfile::tempdir().unwrap();
+        let rust_path = write_envelope(
+            dir.path(),
+            "rust.json",
+            "probe-rust",
+            "0.12.0",
+            "rust",
+            rust,
+        );
+        let lean_path = write_envelope(
+            dir.path(),
+            "lean.json",
+            "probe-lean",
+            "0.16.0",
+            "lean",
+            lean,
+        );
+        let out = dir.path().join("out.json");
+        run_extract_with_translations(
+            &rust_path,
+            &lean_path,
+            mappings,
+            None,
+            &HashSet::new(),
+            Some(&out),
+            &AeneasConfig::default(),
+            None,
+            None,
+            skip_enrich,
+        )
+        .expect("pipeline");
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+        assert_eq!(json["schema-version"], "3.1");
+        json["data"].as_object().unwrap().clone()
+    }
+
+    fn status<'a>(data: &'a serde_json::Map<String, serde_json::Value>, key: &str) -> &'a str {
+        data[key]["verification-status"].as_str().unwrap()
+    }
+
+    /// Lean `T [verified] → lemma [unverified]`: the copy carries the
+    /// contaminated `verified` plus the translation marker.
+    fn contaminated_lean() -> std::collections::BTreeMap<String, Atom> {
+        std::collections::BTreeMap::from([
+            (LEAN_FN.to_string(), make_lean_atom("my_fn")),
+            (
+                LEAN_SPEC.to_string(),
+                with_deps(make_spec_atom("my_crate.my_fn", "verified"), &[LEAN_LEMMA]),
+            ),
+            (
+                LEAN_LEMMA.to_string(),
+                with_status(make_lean_atom("lemma"), "unverified"),
+            ),
+        ])
+    }
+
+    #[test]
+    fn copied_status_on_leaf_is_not_promoted() {
+        let rust =
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]);
+        let data = run_pipeline(rust, contaminated_lean(), &[exact_mapping()], false);
+
+        assert_eq!(data[RUST_FN]["status-origin"], "translation");
+        assert_eq!(
+            status(&data, RUST_FN),
+            "verified",
+            "a leaf Rust atom carrying contaminated imported evidence must not \
+             come out transitively-verified"
+        );
+    }
+
+    #[test]
+    fn locally_verified_caller_of_copied_status_is_not_promoted() {
+        let rust = std::collections::BTreeMap::from([
+            (RUST_FN.to_string(), make_rust_atom("my_fn")),
+            (
+                RUST_CALLER.to_string(),
+                with_deps(
+                    with_status(make_rust_atom("caller"), "verified"),
+                    &[RUST_FN],
+                ),
+            ),
+        ]);
+        let data = run_pipeline(rust, contaminated_lean(), &[exact_mapping()], false);
+
+        assert!(data[RUST_CALLER].get("status-origin").is_none());
+        assert_eq!(
+            status(&data, RUST_CALLER),
+            "verified",
+            "a caller one hop from imported evidence must not launder it into \
+             transitively-verified"
+        );
+    }
+
+    #[test]
+    fn imported_transitively_verified_is_demoted() {
+        // A clean Lean graph whose spec was already enriched upstream.
+        let lean = std::collections::BTreeMap::from([
+            (LEAN_FN.to_string(), make_lean_atom("my_fn")),
+            (
+                LEAN_SPEC.to_string(),
+                make_spec_atom("my_crate.my_fn", "transitively-verified"),
+            ),
+        ]);
+        let rust =
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]);
+
+        // Copy-time normalization alone, before any enrichment.
+        let raw = run_pipeline(rust.clone(), lean.clone(), &[exact_mapping()], true);
+        assert_eq!(status(&raw, RUST_FN), "verified");
+        assert_eq!(raw[RUST_FN]["status-origin"], "translation");
+
+        let data = run_pipeline(rust, lean, &[exact_mapping()], false);
+        assert_eq!(status(&data, RUST_FN), "verified");
+        assert_eq!(
+            status(&data, LEAN_SPEC),
+            "transitively-verified",
+            "the Lean side's own clean label is unaffected"
+        );
+    }
+
+    #[test]
+    fn copied_trusted_is_marked_and_does_not_shield_callers() {
+        let lean = std::collections::BTreeMap::from([(
+            LEAN_FN.to_string(),
+            with_status(make_lean_atom("my_fn"), "trusted"),
+        )]);
+        let rust = std::collections::BTreeMap::from([
+            (RUST_FN.to_string(), make_rust_atom("my_fn")),
+            (
+                RUST_CALLER.to_string(),
+                with_deps(
+                    with_status(make_rust_atom("caller"), "verified"),
+                    &[RUST_FN],
+                ),
+            ),
+        ]);
+        let data = run_pipeline(rust, lean, &[exact_mapping()], false);
+
+        assert_eq!(status(&data, RUST_FN), "trusted");
+        assert_eq!(data[RUST_FN]["status-origin"], "translation");
+        assert_eq!(
+            status(&data, RUST_CALLER),
+            "verified",
+            "a copied trusted is a blocker seed, not a trusted boundary"
+        );
+    }
+
+    #[test]
+    fn non_exact_confidence_and_method_reach_both_records() {
+        let mapping = Mapping {
+            confidence: "file-and-lines".to_string(),
+            method: Some("file+line-overlap".to_string()),
+            ..exact_mapping()
+        };
+        let rust =
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]);
+        let data = run_pipeline(rust, contaminated_lean(), &[mapping], false);
+
+        let expected_to = serde_json::json!([{
+            "target": LEAN_FN, "confidence": "file-and-lines", "method": "file+line-overlap",
+        }]);
+        let expected_from = serde_json::json!([{
+            "target": RUST_FN, "confidence": "file-and-lines", "method": "file+line-overlap",
+        }]);
+        assert_eq!(data[RUST_FN]["maps-to"], expected_to);
+        assert_eq!(data[LEAN_FN]["mapped-from"], expected_from);
+        assert_eq!(
+            data[RUST_FN]["dependencies"],
+            serde_json::json!([]),
+            "mappings never inject dependency edges (ADR-006)"
+        );
+    }
+
+    #[test]
+    fn skip_enrich_runs_no_enrichment() {
+        // A clean `verified` spec would be promoted by any enrichment pass.
+        let lean = std::collections::BTreeMap::from([
+            (LEAN_FN.to_string(), make_lean_atom("my_fn")),
+            (
+                LEAN_SPEC.to_string(),
+                make_spec_atom("my_crate.my_fn", "verified"),
+            ),
+        ]);
+        let rust =
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]);
+
+        let raw = run_pipeline(rust.clone(), lean.clone(), &[exact_mapping()], true);
+        assert_eq!(status(&raw, LEAN_SPEC), "verified");
+        let enriched = run_pipeline(rust, lean, &[exact_mapping()], false);
+        assert_eq!(status(&enriched, LEAN_SPEC), "transitively-verified");
+    }
+
+    #[test]
+    fn dotted_endpoints_resolve_after_canonicalization() {
+        // A legacy dotted key normalizes at merge; the mapping endpoint must
+        // normalize by the same rule or the metadata lookup misses the atom.
+        let rust =
+            std::collections::BTreeMap::from([(format!("{RUST_FN}."), make_rust_atom("my_fn"))]);
+        let mappings = canonicalize_mappings(vec![Mapping {
+            from: format!("{RUST_FN}."),
+            method: Some(String::new()),
+            ..exact_mapping()
+        }]);
+        assert_eq!(mappings[0].from, RUST_FN);
+        assert_eq!(
+            mappings[0].method, None,
+            "an empty method is canonicalized to absent"
+        );
+
+        let data = run_pipeline(rust, contaminated_lean(), &mappings, false);
+        assert_eq!(data[RUST_FN]["translation-name"], LEAN_FN);
+        assert_eq!(data[RUST_FN]["status-origin"], "translation");
+        assert_eq!(
+            data[RUST_FN]["maps-to"],
+            serde_json::json!([{ "target": LEAN_FN, "confidence": "exact" }])
+        );
+    }
+
+    #[test]
+    fn pre_contract_lean_input_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let rust_path = write_envelope(
+            dir.path(),
+            "rust.json",
+            "probe-rust",
+            "0.12.0",
+            "rust",
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]),
+        );
+        let lean_path = write_envelope(
+            dir.path(),
+            "lean.json",
+            "probe-lean",
+            "0.15.0",
+            "lean",
+            contaminated_lean(),
+        );
+        let err = run_extract_with_translations(
+            &rust_path,
+            &lean_path,
+            &[exact_mapping()],
+            None,
+            &HashSet::new(),
+            Some(&dir.path().join("out.json")),
+            &AeneasConfig::default(),
+            None,
+            None,
+            false,
+        )
+        .expect_err("probe-lean below 0.16.0 carries no kernel-taint marker");
+        assert!(
+            format!("{err:#}").contains("contract-release threshold 0.16.0"),
+            "unexpected error: {err:#}"
+        );
+        assert!(!dir.path().join("out.json").exists());
     }
 }
