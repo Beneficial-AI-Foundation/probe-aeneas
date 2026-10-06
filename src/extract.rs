@@ -3115,6 +3115,11 @@ charon:
 
         assert!(data[RUST_CALLER].get("status-origin").is_none());
         assert_eq!(
+            data[RUST_CALLER]["dependencies"],
+            serde_json::json!([RUST_FN]),
+            "no cross-language edge injected on the caller (ADR-006)"
+        );
+        assert_eq!(
             status(&data, RUST_CALLER),
             "verified",
             "a caller one hop from imported evidence must not launder it into \

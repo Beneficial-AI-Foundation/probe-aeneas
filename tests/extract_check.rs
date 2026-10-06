@@ -180,8 +180,10 @@ fn library_extract_with_pregenerated_json() {
     assert!(data
         .values()
         .any(|v| v["language"] == "lean" && v["mapped-from"].is_array()));
+    let mut copied = 0;
     for (key, atom) in data.iter().filter(|(_, v)| v["language"] == "rust") {
         if atom.get("verification-status").is_some() {
+            copied += 1;
             assert_eq!(atom["status-origin"], "translation", "{key}");
             assert_ne!(
                 atom["verification-status"], "transitively-verified",
@@ -189,4 +191,5 @@ fn library_extract_with_pregenerated_json() {
             );
         }
     }
+    assert!(copied > 0, "expected statuses copied onto Rust atoms");
 }
