@@ -31,7 +31,11 @@ is pre-0.21.0 output (injected cross-language edges, no records).
   and would promote a copied `verified` to `transitively-verified`.
 - probe-lean auto-install no longer reuses a cached binary older than
   0.16.0 (read from `probe-lean --version`). It installs a newer one, or
-  fails before extraction with an error that names the old binary.
+  fails before extraction with an error that names the rejected binary and
+  the reason. The pre-built download considers only releases tagged 0.16.0
+  or later, and checks the binary before it installs it, so an old archive
+  is never downloaded or installed. The version check retries when the
+  binary is briefly busy (`ETXTBSY`) instead of rejecting it.
 - Every `verification-status` copied from Lean onto a Rust atom carries
   `status-origin: "translation"`, and a copied `transitively-verified` is
   copied as `verified`. Enrichment treats the atom as a blocker seed, so
