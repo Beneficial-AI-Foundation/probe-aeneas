@@ -4,33 +4,33 @@
 
 `probe merge` is a generic merge engine in the
 [probe](https://github.com/Beneficial-AI-Foundation/probe) crate. It
-combines multiple atom maps into one and optionally adds cross-language
-dependency edges using a translations mapping. The engine is
-language-agnostic: as long as it receives a bidirectional mapping
+combines multiple atom maps into one and, given mapping records, attaches
+`maps-to`/`mapped-from` correspondence records that link code-names across
+languages (hub ADR-006). It never adds dependency edges for a mapping. The
+engine is language-agnostic: as long as it receives mapping records
 between code-names in language S and code-names in language T, it can
-merge heterogeneous atom files and wire up cross-language call edges.
+merge heterogeneous atom files and link them.
 
 probe-aeneas is an **instantiation** of this generic pattern for the
 specific case of Rust and Lean projects transpiled by
 [Aeneas](https://github.com/AeneasVerif/aeneas). It generates the
-translations that `merge_atom_maps` needs, calls the generic merge, and
-then layers on Aeneas-specific metadata that the generic engine does not
-know about.
+translations the merge needs, calls the generic merge, layers on
+Aeneas-specific metadata that the generic engine does not know about, and
+then runs the hub's enrichment once.
 
 ## The extract pipeline
 
-The `extract` command runs a three-phase pipeline. The first and third
-phases are Aeneas-specific; the second phase delegates to the generic
-merge engine from the probe crate.
+The `extract` command runs a four-phase pipeline. Phases 1 and 3 are
+Aeneas-specific; phases 2 and 4 delegate to the probe crate.
 
 ```
-                     Aeneas-specific              Generic               Aeneas-specific
-                 ┌─────────────────────┐  ┌────────────────────┐  ┌─────────────────────────┐
-  Rust atoms ──▶ │                     │  │                    │  │                         │
-  Lean atoms ──▶ │  1. Generate        │─▶│  2. merge_atom_maps│─▶│  3. Enrich with         │──▶ Output
-  functions  ──▶ │     translations    │  │     (probe crate)  │  │     Aeneas metadata     │
-  .json          │                     │  │                    │  │                         │
-                 └─────────────────────┘  └────────────────────┘  └─────────────────────────┘
+                  Aeneas-specific          Generic                Aeneas-specific        Generic
+               ┌──────────────────┐  ┌──────────────────────┐  ┌──────────────────┐  ┌──────────────┐
+ Rust atoms ──▶│                  │  │                      │  │                  │  │              │
+ Lean atoms ──▶│ 1. Generate      │─▶│ 2. merge_atom_files_ │─▶│ 3. Aeneas        │─▶│ 4. Enrich    │──▶ Output
+ functions  ──▶│    translations  │  │    raw (probe crate) │  │    metadata      │  │    (once)    │
+ .json         │                  │  │                      │  │                  │  │              │
+               └──────────────────┘  └──────────────────────┘  └──────────────────┘  └──────────────┘
 ```
 
 ### Phase 1: Generate translations (Aeneas-specific)
@@ -72,46 +72,51 @@ name-suffix heuristic (`_loop`/`_body`/`.body`), which remains the fallback when
 the manifest is absent. See the manifest overlay note in
 [USAGE.md](USAGE.md#translation-strategies).
 
-The output of this phase is a bidirectional map
-`(from_to: HashMap, to_from: HashMap)` -- the format that
-`merge_atom_maps` accepts.
+The output of this phase is the list of `Mapping` records, each with its
+`confidence` and `method`. The records stay authoritative for the rest of
+the pipeline: endpoints are normalized by the hub's P8 rule (strip trailing
+`.`), an empty `method` is dropped, and the `from → [to]` lookup map that
+phase 3 uses is derived from them. Confidence is never reconstructed from
+the lookup map.
 
 Implementation: `src/translate.rs` (matching logic),
 `src/translation_manifest.rs` (manifest overlay),
 `src/extract.rs::run_translate` (orchestration).
 
-### Phase 2: Merge with cross-language edges (generic)
+### Phase 2: Merge with correspondence records (generic)
 
-Calls `probe::commands::merge::merge_atom_maps` from the probe crate
-with `vec![rust_atoms, lean_atoms]` and the translations from phase 1.
+Calls `probe::commands::merge::merge_atom_files_raw` from the probe crate
+with the Rust and Lean atom files and the mapping records from phase 1.
 
-The generic engine performs three operations:
+The generic engine performs these operations:
 
-- **Combine**: unions the two atom maps. Stubs in the first map are
-  replaced by real atoms from the second; new atoms are added;
-  real-vs-real conflicts keep the first (but in practice the Rust and
-  Lean namespaces are disjoint, so conflicts do not arise).
-- **Cross-language edges**: for each atom, iterates its existing
-  dependencies and, if any dependency has a known translation, inserts
-  the translated code-name as an additional dependency. This creates
-  edges wherever a call site crosses the Rust/Lean boundary through
-  a translated function.
+- **Authority validation**: rejects projections and pre-contract inputs
+  (hub ADR-006 version gate: probe-lean output must come from >= 0.16.0)
+  and malformed `status-origin` markers.
+- **Combine**: normalizes keys per input, then unions the two atom maps.
+  Stubs in the first map are replaced by real atoms from the second; new
+  atoms are added; real-vs-real conflicts keep the first (but in practice
+  the Rust and Lean namespaces are disjoint, so conflicts do not arise).
+- **Correspondence records**: for each mapping, attaches a `maps-to`
+  record on the Rust atom and a `mapped-from` record on the Lean atom,
+  each carrying the mapping's `confidence` and `method`. `dependencies`
+  is never modified.
 - **Stub accounting**: counts stubs remaining, entries added, and
-  cross-language edges applied.
+  records attached.
 
-This step is identical to what `probe merge --mappings` does from
-the command line. probe-aeneas simply calls the library function
-directly.
+This is the raw staging variant of what `probe merge --mappings` does:
+it skips the enrichment recomputation, because phase 3 writes statuses
+and enrichment must run after that, exactly once (phase 4).
 
 Implementation: `src/extract.rs::run_extract_with_translations` calls
-`merge_atom_files` which handles file loading, provenance flattening,
-and the merge in one step. The function itself lives in
-`probe/src/commands/merge.rs`.
+`merge_atom_files_raw`, which handles file loading, validation,
+provenance flattening and the merge in one step. The function itself
+lives in `probe/src/commands/merge.rs`.
 
-### Phase 3: Enrich with Aeneas metadata (Aeneas-specific)
+### Phase 3: Add Aeneas metadata (Aeneas-specific)
 
-After the generic merge, probe-aeneas makes two enrichment passes over
-the merged atom map:
+After the generic merge, probe-aeneas makes these passes over the merged
+atom map:
 
 1. **Translation metadata**: for each Rust atom that has a Lean
    translation, sets `translation-name`, `translation-path`, and
@@ -121,8 +126,12 @@ the merged atom map:
    `verification-status` from the Lean definition's primary spec
    theorem (via `primary-spec` extension or `_spec` naming convention).
    If the Lean def is `"trusted"` or `"failed"`, that status is
-   propagated directly. Otherwise, the spec's status is used; if no
-   spec exists, the status is `"unverified"`.
+   copied directly. Otherwise, the spec's status is used (a
+   `"transitively-verified"` spec is copied as `"verified"`); if no spec
+   exists, the status is `"unverified"`. Every copied status is marked
+   `status-origin: "translation"` (hub ADR-006 Decision 2): it is
+   imported evidence, so phase 4 never promotes the atom or a caller that
+   reaches it to `"transitively-verified"`.
 
 3. **`untracked` flag**: every Rust atom is tracked backlog by default
    (`untracked: false`); membership in `functions.json` or the presence of
@@ -145,6 +154,13 @@ the merged atom map:
 
 Implementation: `src/extract.rs::enrich_with_aeneas_metadata`.
 
+### Phase 4: Enrich verification status (generic)
+
+Calls `probe::commands::propagate::enrich_verification_status` once over
+the whole merged graph (hub P23). Translation-marked atoms and probe-lean's
+`kernel-taint` atoms are blocker seeds. `--skip-enrich` skips this phase,
+and with it all enrichment in the pipeline.
+
 ## Why probe-aeneas uses its own schema
 
 The output carries `"schema": "probe-aeneas/extract"` rather than the
@@ -161,9 +177,11 @@ probe-aeneas depends on the `probe` crate for:
 
 | Import | Source | Role |
 |--------|--------|------|
-| `merge_atom_files` | `probe::commands::merge` | Load + merge atom files with provenance flattening (phase 2) |
+| `merge_atom_files_raw` | `probe::commands::merge` | Load, validate and merge atom files with provenance flattening, no enrichment (phase 2) |
+| `enrich_verification_status` | `probe::commands::propagate` | The single enrichment pass (phase 4) |
 | `Atom` | `probe::types` | Core atom representation |
-| `Mapping` | `probe::types` | Cross-language mapping entry type |
+| `Mapping` | `probe::types` | Cross-language mapping record (`from`, `to`, `confidence`, `method`) |
+| `endpoint_lookup_maps` | `probe::types` | Derives the endpoint lookup maps from mapping records (phase 3) |
 | `MergedAtomEnvelope` | `probe::types` | Output envelope (multi-input variant) |
 | `InputProvenance` | `probe::types` | Per-input provenance metadata |
 | `Tool` | `probe::types` | Tool metadata in the envelope |
@@ -178,9 +196,11 @@ The pattern -- generate translations, merge, enrich -- is not specific
 to Aeneas. Any cross-language bridge that can produce a bidirectional
 code-name mapping can follow the same architecture:
 
-1. Produce `Mapping` entries by whatever means the bridge provides.
-2. Call `merge_atom_maps` with the two atom files and the translations.
-3. Add domain-specific metadata to the merged output.
+1. Produce `Mapping` records by whatever means the bridge provides.
+2. Call `merge_atom_files_raw` with the two atom files and the records.
+3. Add domain-specific metadata to the merged output, marking any status
+   copied across languages with `status-origin: "translation"`.
+4. Run `enrich_verification_status` once.
 
 Future tools bridging other language pairs (e.g., Rust + Dafny,
 Rust + Verus specs) could reuse the same generic merge step.

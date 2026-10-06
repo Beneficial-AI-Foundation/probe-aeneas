@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-06
+
+The hub ADR-006 contract release (closes #71, #70). 0.21.0 is the version
+the hub 0.5.0 version gate requires of `probe-aeneas/extract` envelopes.
+
+### Changed
+- **Breaking**: requires the probe hub 0.5.0. Translations no longer add
+  cross-language `dependencies` edges. The merge step now attaches a
+  `maps-to` record on the Rust atom and a `mapped-from` record on the Lean
+  atom, each carrying the mapping's `confidence` and `method`. Consumers that
+  followed `dependencies` across the Rust/Lean boundary must read the
+  records (or `translation-name`) instead.
+- **Breaking**: the Lean input must come from probe-lean >= 0.16.0. The hub's
+  version gate rejects older output because it lacks the `kernel-taint`
+  marker. Projections are also rejected.
+- Every `verification-status` copied from Lean onto a Rust atom carries
+  `status-origin: "translation"`, and a copied `transitively-verified` is
+  copied as `verified`. Enrichment treats the atom as a blocker seed, so
+  imported evidence can no longer turn into `transitively-verified` on the
+  Rust side, on the atom or on a locally verified caller, and a copied
+  `trusted` no longer shields its callers.
+- `extract` stages on the hub's raw merge (`merge_atom_files_raw`) and runs
+  enrichment exactly once, after the Aeneas metadata phase. `--skip-enrich`
+  now means no enrichment at all.
+- The generated mapping records stay authoritative through the pipeline.
+  Endpoints are normalized by the hub's P8 rule and the endpoint lookup map
+  is derived from the records, so `confidence`/`method` reach the output
+  instead of being dropped before merge.
+- The `extract` envelope is stamped `schema-version: "3.1"`. The CLI summary
+  reports `Correspondence records` instead of `Cross-lang edges`.
+- README, USAGE, SCHEMA and architecture docs describe correspondence
+  records instead of cross-language dependency edges.
+
 ## [0.20.0] - 2026-09-09
 
 ### Added

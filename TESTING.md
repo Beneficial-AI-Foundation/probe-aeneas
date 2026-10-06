@@ -27,6 +27,8 @@ All tests run without external tools or `#[ignore]`.
 - Lean atom double-claim prevention
 - `build_functions_rust_names` extraction from functions.json
 
+The ADR-006 end-to-end regressions live in `src/extract.rs` (`copied_status_on_leaf_is_not_promoted` and the tests after it). They write small Rust and Lean envelopes to a temp dir and run the merge, metadata and enrichment phases. They cover leaf and caller laundering, demotion of an imported `transitively-verified`, a copied `trusted` not shielding callers, non-exact confidence and method in both records, `--skip-enrich`, dotted endpoints, and rejection of probe-lean < 0.16.0 input.
+
 Run only unit tests: `cargo test --lib`
 
 ## Integration tests
@@ -39,7 +41,7 @@ Run only unit tests: `cargo test --lib`
 | `example_merged_json_atoms_have_required_fields` | All atoms have `probe:` key prefix, non-empty `display-name`, `kind`, and `language` |
 | `example_merged_json_rust_atoms_have_translations` | Rust atoms have `untracked` field; at least some have `translation-name` |
 | `micro_fixture_structural_check` | Loads the `aeneas_micro` fixture from `probe-extract-check` as `AtomEnvelope` and runs `check_all` (skips gracefully if fixture not found) |
-| `library_extract_with_pregenerated_json` | Runs `run_extract` via the library API with pre-generated example files (`examples/rust_*.json`, `examples/lean_*.json`, `examples/functions.json`). Validates the merged output has both Rust and Lean atoms with translation metadata. |
+| `library_extract_with_pregenerated_json` | Runs `run_extract` via the library API with pre-generated example files (`examples/rust_*.json`, `examples/lean_*.json`, `examples/functions.json`). The Lean example comes from probe-lean 0.4.5, which the hub version gate rejects, so the test runs on a copy restamped as 0.16.0 until the examples are re-extracted. Validates the merged output has both Rust and Lean atoms with translation metadata, one `maps-to` record per translated Rust atom, `mapped-from` records on Lean atoms, and `status-origin: "translation"` on every copied Rust status. |
 
 The `library_extract_with_pregenerated_json` test exercises the full merge
 pipeline (load atoms, generate translations, merge, write output) without

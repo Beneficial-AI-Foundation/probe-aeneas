@@ -20,7 +20,7 @@ sections below), but share this structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema` | string | Data type identifier (e.g. `"probe-aeneas/extract"`) |
-| `schema-version` | string | Interchange spec version (`"3.0"` for both `extract` and `translate`) |
+| `schema-version` | string | Interchange spec version (`"3.1"` for `extract`, `"3.0"` for `translate`; see [Schema Evolution](#schema-evolution)) |
 | `tool.name` | string | Always `"probe-aeneas"` |
 | `tool.version` | string | Semver version of the probe-aeneas binary |
 | `tool.command` | string | Subcommand that produced the file |
@@ -38,7 +38,7 @@ sections below), but share this structure:
 ```json
 {
   "schema": "probe-aeneas/extract",
-  "schema-version": "3.0",
+  "schema-version": "3.1",
   "tool": {
     "name": "probe-aeneas",
     "version": "0.9.0",
@@ -97,19 +97,20 @@ sections below), but share this structure:
 ### Data Shape
 
 `data` is an object keyed by code-name. Each value is an atom from one of the
-input files, potentially enriched with cross-language dependency edges. The
-atom format follows the shared `probe` atom schema with language-specific
+input files. Translations link Rust and Lean atoms through `maps-to` /
+`mapped-from` correspondence records (see
+[Correspondence Records](#correspondence-records)); `dependencies` holds only
+each producer's own edges. The atom format follows the shared `probe` atom schema with language-specific
 extension fields passed through verbatim.
 
-**Rust atom example** (with translation metadata, verification status, and cross-language edge):
+**Rust atom example** (with translation metadata, a copied verification status, and a correspondence record):
 
 ```json
 {
   "probe:curve25519-dalek/4.1.3/scalar/Scalar#from_bytes_mod_order()": {
     "display-name": "Scalar::from_bytes_mod_order",
     "dependencies": [
-      "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()",
-      "probe:curve25519_dalek.scalar.Scalar.reduce"
+      "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()"
     ],
     "code-module": "scalar",
     "code-path": "curve25519-dalek/src/scalar.rs",
@@ -121,26 +122,33 @@ extension fields passed through verbatim.
     "is-public": true,
     "is-public-api": true,
     "verification-status": "verified",
+    "status-origin": "translation",
     "translation-name": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
     "translation-path": "Curve25519Dalek/Funs.lean",
-    "translation-text": { "lines-start": 7089, "lines-end": 7098 }
+    "translation-text": { "lines-start": 7089, "lines-end": 7098 },
+    "maps-to": [
+      {
+        "target": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
+        "confidence": "exact",
+        "method": "rust-qualified-name"
+      }
+    ]
   }
 }
 ```
 
-In this example, `from_bytes_mod_order` calls Rust `reduce`, which has a
-Lean translation `probe:curve25519_dalek.scalar.Scalar.reduce`. The
-cross-language edge to the Lean `reduce` is added automatically by the
-merge step (see [Cross-Language Edges](#cross-language-edges) below).
+In this example, `from_bytes_mod_order` calls Rust `reduce`. Its status is
+copied from the primary spec of its Lean translation, so it carries
+`status-origin: "translation"`, and the `maps-to` record names that
+translation with the mapping's confidence and method.
 
-**Lean atom example** (def with specs, cross-language edges, and translation metadata):
+**Lean atom example** (def with specs and a correspondence record):
 
 ```json
 {
   "probe:curve25519_dalek.scalar.Scalar.reduce": {
     "display-name": "reduce",
     "dependencies": [
-      "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/impl<Scalar52>#[Scalar52]montgomery_reduce()",
       "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_reduce",
       "probe:curve25519_dalek.scalar.Scalar",
       "probe:curve25519_dalek.scalar.Scalar.unpack",
@@ -172,14 +180,21 @@ merge step (see [Cross-Language Edges](#cross-language-edges) below).
     "is-ignored": false,
     "is-hidden": false,
     "is-extraction-artifact": false,
-    "rust-source": "curve25519-dalek/src/scalar.rs"
+    "rust-source": "curve25519-dalek/src/scalar.rs",
+    "mapped-from": [
+      {
+        "target": "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()",
+        "confidence": "exact",
+        "method": "rust-qualified-name"
+      }
+    ]
   }
 }
 ```
 
 Here the Lean `reduce` depends on Lean definitions like `montgomery_reduce`
-and `Scalar.unpack`, plus cross-language edges back to the corresponding
-Rust atoms (added automatically by the merge step).
+and `Scalar.unpack`, and its `mapped-from` record links back to the Rust
+`reduce`.
 
 **Lean trusted atom example** (axiom from `*External.lean`):
 
@@ -209,7 +224,7 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `display-name` | string | yes | Human-readable name |
-| `dependencies` | array of strings | yes | Sorted code-names of callees, including cross-language edges added by extract |
+| `dependencies` | array of strings | yes | Sorted code-names of callees in the atom's own language. Translations never add entries here (they become correspondence records). |
 | `code-module` | string | yes | Module path |
 | `code-path` | string | yes | Source file path relative to the repository root (empty for external stubs). For Rust atoms, includes the crate directory prefix when the crate is a subdirectory (e.g. `curve25519-dalek/src/scalar.rs`). |
 | `code-text` | object | yes | `{"lines-start": N, "lines-end": M}` (1-based, inclusive) |
@@ -246,7 +261,9 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `untracked-reason` | string | no | Emitted by probe-aeneas >= 0.19.0 (older outputs carry `untracked` without it): present exactly when `untracked` is `true`, naming the most intrinsic applicable cause. One of `foreign-declaration`, `trait-signature` (>= 0.20.0), `unmounted`, `file-cfg-inactive`, `cfg-inactive`, `out-of-scope-translation`, `non-library-target`, `config-out-of-scope`. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
-| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Derived from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is propagated directly. Otherwise, if a primary spec exists, the spec's status is used; if no spec exists, the status is `"unverified"`. After enrichment (default, `--skip-enrich` to disable): `"verified"` is upgraded to `"transitively-verified"` when all transitive deps are verified/trusted. |
+| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Copied from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is copied directly. Otherwise, if a primary spec exists, the spec's status is used (a `"transitively-verified"` spec is copied as `"verified"`); if no spec exists, the status is `"unverified"`. Every copied status carries `status-origin: "translation"`, so enrichment never labels a Rust atom with a translation `"transitively-verified"`, and its callers stay `"verified"` too. |
+| `status-origin` | string | no | `"translation"` on every Rust atom whose `verification-status` was copied from Lean (since 0.21.0): the status is imported evidence. Enrichment treats the atom as a blocker seed, so it and every caller that reaches it keep `"verified"` instead of becoming `"transitively-verified"`, and a copied `"trusted"` does not shield its callers. See the hub's [ADR-006 Decision 2](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/decisions/006-correspondence-records.md#decision-2-the-status-origin-marker). |
+| `maps-to` | array of objects | no | Correspondence records written by the merge step (since 0.21.0), one per translation: `{"target": <Lean code-name>, "confidence": ..., "method": ...}` (`method` omitted when absent). See [Correspondence Records](#correspondence-records). |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
@@ -262,6 +279,8 @@ the enrichment pass:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `verification-status` | string | yes | `"transitively-verified"`, `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. `"trusted"` indicates the declaration belongs to the trust base (axioms or `*External.lean` files). After enrichment: `"transitively-verified"` means all transitive deps are verified/trusted. |
+| `status-origin` | string | no | `"kernel-taint"`, passed through from probe-lean >= 0.16.0: the `verified` label reflects taint the kernel found but the emitted graph cannot express. Enrichment never promotes such an atom or its callers. |
+| `mapped-from` | array of objects | no | Correspondence records written by the merge step (since 0.21.0): `{"target": <Rust code-name>, "confidence": ..., "method": ...}` for each Rust atom that translates to this declaration. See [Correspondence Records](#correspondence-records). |
 | `trusted-reason` | string | no | Why the atom is trusted: `"axiom"` (axiomatic declaration) or `"external"` (defined in an `*External.lean` file). Present only when `verification-status` is `"trusted"`. |
 | `type-dependencies` | array of strings | yes | Code-names of dependencies used in the type signature |
 | `term-dependencies` | array of strings | yes | Code-names of dependencies used in the definition body |
@@ -461,22 +480,20 @@ Aeneas loop decompositions (e.g. `add_assign_loop`, `add_assign_loop.mutual`)
 are reachable via the Lean definition's own dependency graph, not listed as
 separate translations.
 
-### Cross-Language Edges
+### Correspondence Records
 
-In addition to the translation metadata fields above, `extract` adds
-cross-language dependency edges via transitive expansion. For each atom
-in the merged graph, every dependency that has a known translation gains
-the translated code-name as an additional dependency:
+Since 0.21.0 (hub 0.5.0, ADR-006), the merge step turns each translation
+into two correspondence records and never adds `dependencies` entries:
 
-- Rust atom A calls Rust atom B; B has Lean translation B' →
-  A gains a dependency on B'.
-- Lean atom X calls Lean atom Y; Y has Rust translation Y' →
-  X gains a dependency on Y'.
+- The Rust atom gets a `maps-to` record whose `target` is the Lean code-name.
+- The Lean atom gets a `mapped-from` record whose `target` is the Rust code-name.
 
-This creates cross-language edges wherever a call site crosses the
-Rust/Lean boundary through translated functions. The edges are
-bidirectional in aggregate (Rust callers reach into the Lean graph and
-vice versa) but each individual edge follows the call direction.
+Both records carry the translation's `confidence` and, when present, its
+`method`, exactly as in the `translate` output. The records do not take part
+in enrichment. Earlier releases instead added cross-language dependency
+edges, which let enrichment combine evidence across the two graphs. The
+normative definition is the hub's
+[correspondence records](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/engineering/schema.md#correspondence-records-maps-to-mapped-from).
 
 ### External Stubs
 
@@ -676,19 +693,18 @@ The `listfuns` command has three modes:
 
 ## Schema Evolution
 
-When adding new optional fields, increment the minor version (`2.0` -> `2.1`).
+When adding new optional fields, increment the minor version (`3.0` -> `3.1`).
 When changing required fields or their semantics, increment the major version
 (`2.0` -> `3.0`).
 
 Consumers should check `schema-version` and reject files with an unsupported
-major version. A minor bump is backward-compatible: a `2.0` consumer can read a
-`2.1` file (the new fields are optional).
+major version. A minor bump is backward-compatible: a `3.0` consumer can read a
+`3.1` file (the new fields are optional).
 
-The `probe-aeneas/extract` envelope is at `2.1`: it carries the optional
-`charon-def-id`/`charon-version` atom fields (passed through from probe-rust).
-The `probe/mappings` (`translate`) envelope remains `2.0` — it gained no new
-fields (the `charon-def-id` `method` value is a backward-compatible addition to
-an existing field).
+The `probe-aeneas/extract` envelope is at `3.1` since 0.21.0: it carries the
+hub 3.1 `maps-to`/`mapped-from` correspondence records and the
+`status-origin` marker. The `probe/mappings` (`translate`) envelope remains
+`3.0`, because it gained no new fields.
 
 ---
 
@@ -705,15 +721,19 @@ join (strategy 0) and `rust-qualified-name` (strategy 1).
 ### With probe-lean
 
 probe-aeneas consumes `probe-lean/extract` files as input. These follow a
-similar Schema 3.0 envelope with `"lean"` language atoms.
+similar Schema 3.0 envelope with `"lean"` language atoms. Since 0.21.0 the
+input must come from probe-lean >= 0.16.0: the hub's version gate (ADR-006
+Decision 7) rejects older output, because it lacks the `kernel-taint` marker.
 
 ### With probe (shared crate)
 
 probe-aeneas is an instantiation of the generic `probe merge` engine for
 the Aeneas Rust-to-Lean case. The `extract` command generates
-Aeneas-specific translations, calls `merge_atom_maps` from
-`probe::commands::merge` for the combine + cross-language-edge step, then
-enriches the result with Aeneas metadata (`translation-*`, `untracked`).
+Aeneas-specific translations, calls `merge_atom_files_raw` from
+`probe::commands::merge` for the combine + correspondence-record step (no
+enrichment), adds Aeneas metadata (`translation-*`, the copied
+`verification-status` with `status-origin`, `untracked`), and then runs the
+hub's enrichment once.
 Shared types (`Atom`, `Mapping`, `MergedAtomEnvelope`,
 `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
 See [architecture.md](architecture.md) for the full architectural

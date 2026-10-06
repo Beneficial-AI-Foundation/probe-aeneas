@@ -63,8 +63,10 @@ fallback.
 ### `extract`
 
 Full pipeline: extract atoms (if needed), generate translation mappings, and
-merge Rust + Lean call graphs into a unified atom file with cross-language
-dependency edges.
+merge Rust + Lean call graphs into a unified atom file in which translations
+are `maps-to`/`mapped-from` correspondence records. The Lean input must come
+from probe-lean >= 0.16.0 (the hub's ADR-006 version gate rejects older
+output).
 
 ```
 probe-aeneas extract [OPTIONS] [PROJECT]
@@ -382,10 +384,11 @@ For the complete JSON schema specification covering all commands, see
 
 ### Merged Atoms
 
-The `extract` command produces a JSON file wrapped in a Schema 3.0 metadata
+The `extract` command produces a JSON file wrapped in a Schema 3.1 metadata
 envelope with `"probe-aeneas/extract"` schema. The `data` field contains all
-atoms from both inputs, with cross-language dependency edges added where
-translations exist.
+atoms from both inputs. Each translation adds a `maps-to` record on the Rust
+atom and a `mapped-from` record on the Lean atom, and every status copied onto
+a Rust atom carries `status-origin: "translation"`.
 
 ### Translations
 
