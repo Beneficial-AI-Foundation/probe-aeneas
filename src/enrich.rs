@@ -507,6 +507,16 @@ fn hide_single_child_parents(results: &mut [EnrichedFunctionOutput]) {
 // Spec theorem lookup
 // ---------------------------------------------------------------------------
 
+/// The atom key a `primary-spec` value names: the value itself when it
+/// already carries the `probe:` prefix, otherwise the prefixed value.
+pub(crate) fn primary_spec_key(ps: &str) -> String {
+    if ps.starts_with(PROBE_PREFIX) {
+        ps.to_string()
+    } else {
+        format!("{PROBE_PREFIX}{ps}")
+    }
+}
+
 /// Find the primary spec atom for a function.
 ///
 /// Checks the `primary-spec` extension first, then falls back to the
@@ -519,11 +529,7 @@ pub(crate) fn find_primary_spec<'a>(
 
     if let Some(atom) = atoms.get(&key) {
         if let Some(ps) = atom.extensions.get("primary-spec").and_then(|v| v.as_str()) {
-            let ps_key = if ps.starts_with(PROBE_PREFIX) {
-                ps.to_string()
-            } else {
-                format!("{PROBE_PREFIX}{ps}")
-            };
+            let ps_key = primary_spec_key(ps);
             if let Some(spec_atom) = atoms.get(&ps_key) {
                 return (Some(ps_key), Some(spec_atom));
             }

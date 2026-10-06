@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [0.21.0] - 2026-10-06
 
-The hub ADR-006 contract release (#71, closes #70). 0.21.0 is the version
+The hub ADR-006 contract release (#71, closes #70, closes #73). 0.21.0 is the version
 the hub 0.5.0 version gate requires of `probe-aeneas/extract` envelopes.
 Still open from #71: re-extracting the `examples/` fixtures with probe-lean
 0.16.0 once it is released. Until then `examples/aeneas_curve25519-dalek_4.1.3.json`
@@ -38,6 +38,27 @@ is pre-0.21.0 output (injected cross-language edges, no records).
   imported evidence can no longer turn into `transitively-verified` on the
   Rust side, on the atom or on a locally verified caller, and a copied
   `trusted` no longer shields its callers.
+- **Breaking**: a translated Rust function for whose Lean def no primary spec
+  is found gets no `verification-status` and no `status-origin` (#73). See
+  the note on spec discovery in docs/SCHEMA.md. Before, it got
+  `"unverified"`. A Lean def that is `"trusted"` or `"failed"` still gives
+  that status, with or without a spec. A spec without a status still gives
+  `"unverified"`.
+- Every Rust function with a matched translation stays `untracked: false`,
+  unless its translation carries `@[out_of_scope]`. Before, only the copied
+  status kept it tracked, and #73 removes that status for spec-less
+  functions. `non-library-target` and `config-out-of-scope` are now excluded
+  for a matched translation by rule, not only through the copied status. For
+  valid input no `untracked` value changes, because every such function had
+  a status before. The stale-fact warning
+  now counts atoms with a status or a matched translation.
+- **Breaking**: `extract` rejects a `--rust` input unless every provenance
+  entry has schema `probe-rust/extract`, and a `--lean` input unless every
+  entry has schema `probe-lean/extract`. A probe-aeneas output fed back as
+  `--rust` fails before any other work. A `probe merge` of probe-rust files
+  is accepted.
+- `extract` prints a warning when a Lean atom's `primary-spec` names an atom
+  that is not in the Lean input.
 - `extract` stages on the hub's raw merge (`merge_atom_files_raw`), because
   the hub 0.5.0 `merge_atom_files` enriches. Enrichment runs exactly once,
   after the Aeneas metadata phase, and `--skip-enrich` keeps meaning no

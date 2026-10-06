@@ -141,6 +141,31 @@ flags below. These are mutually exclusive with the positional `PROJECT` argument
 
 Exactly one of `--rust` or `--rust-project` is required (when not using `PROJECT`).
 
+`--rust` and `--lean` accept only the output of the matching extractor. Every
+provenance entry of the `--rust` file must have schema `probe-rust/extract`,
+and of the `--lean` file `probe-lean/extract`. A probe-aeneas output given as
+`--rust` is rejected before any other work. See "Input contract" in
+[SCHEMA.md](SCHEMA.md#input-contract).
+
+The Rust input form changes the scope classification and the code paths:
+
+- `--rust` (pre-generated JSON) has no Rust project, so `extract` resolves no
+  feature set and skips `cfg` scope classification. It also adds no
+  `crate.dir` prefix to code paths.
+- `--rust-project` resolves the default feature set of the project for `cfg`
+  classification, but ignores `charon.cargo_args` and adds no prefix. This
+  works only when the project has one package. For a workspace with several
+  packages, no target package is known, so `extract` skips `cfg`
+  classification.
+- Only the positional `PROJECT` form applies `charon.cargo_args` to the
+  feature set and adds the `crate.dir` prefix.
+
+`extract` supports one target crate. It applies the feature set and the
+prefix of the target crate to every Rust atom, also to the atoms of other
+crates in a merged or workspace input. Do not change the input files during a
+run, and do not run two `extract` runs at the same time on one project: both
+write to `<lean_project>/.verilib/probes/`.
+
 **Input options (Lean):**
 
 | Flag | Description |
@@ -157,7 +182,7 @@ At least one of `--lean` or `--lean-project` is required (when not using `PROJEC
 | `--functions <PATH>` | | Path to `functions.json` (Aeneas name mapping). Auto-generated when `--lean-project` or `PROJECT` is given. Required when using `--lean` alone. |
 | `--translation <PATH>` | | Path to Aeneas's `translation.json` (emitted with the `emit-json` arg). Authoritative loop/primary classification overlay. Auto-detected at the project root (or `aeneas_args.dest`) when `PROJECT` is given; optional otherwise. |
 | `--output <PATH>` | `-o` | Output file path. Default: `<project>/.verilib/probes/aeneas_<pkg>_<ver>.json` when a project root is available; otherwise `aeneas_<pkg>_<ver>.json` in the current directory. |
-| `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`). Defaults to `.verilib/aeneas.json` in the Lean project. |
+| `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`) and the curated `out-of-scope` globs (see [SCHEMA.md](SCHEMA.md#aeneas-config-file)). Defaults to `.verilib/aeneas.json` in the Lean project. |
 | `--lake` | | Use `lake exe listfuns` to generate `functions.json` instead of parsing Aeneas-generated Lean files directly. |
 | `--with-public-api` | | Use `cargo public-api` to compute accurate `is-public-api` on Rust atoms (requires `cargo-public-api`; see below). |
 | `--skip-enrich` | | Skip the hub's verification enrichment, the only enrichment pass in the pipeline. Derived labels (`verified`/`transitively-verified`) then stay as the inputs and the status copy left them until a later `probe enrich` or `probe merge` recomputes them. |

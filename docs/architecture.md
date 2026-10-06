@@ -23,6 +23,12 @@ then runs the hub's enrichment once.
 The `extract` command runs a four-phase pipeline. Phases 1 and 3 are
 Aeneas-specific; phases 2 and 4 delegate to the probe crate.
 
+Before phase 1, `check_input_authority` checks both inputs: the hub's ADR-006
+version gate, and the provenance guard (every provenance entry of the Rust
+input has schema `probe-rust/extract`, of the Lean input
+`probe-lean/extract`). Pre-generated inputs are checked before any extractor
+runs, extracted inputs right after extraction.
+
 ```
                   Aeneas-specific          Generic                Aeneas-specific        Generic
                ┌──────────────────┐  ┌──────────────────────┐  ┌──────────────────┐  ┌──────────────┐
@@ -127,20 +133,22 @@ atom map:
    theorem (via `primary-spec` extension or `_spec` naming convention).
    If the Lean def is `"trusted"` or `"failed"`, that status is
    copied directly. Otherwise, the spec's status is used (a
-   `"transitively-verified"` spec is copied as `"verified"`); if no spec
-   exists, the status is `"unverified"`. Every copied status is marked
+   `"transitively-verified"` spec is copied as `"verified"`, and a spec
+   without a status gives `"unverified"`). If no spec is found, the atom
+   gets no status and no marker (#73). Every copied status is marked
    `status-origin: "translation"` (hub ADR-006 Decision 2): it is
    imported evidence, so phase 4 never promotes the atom, or a caller that
    reaches it along a path without a trusted boundary, to
    `"transitively-verified"`.
 
 3. **`untracked` flag**: every Rust atom is tracked backlog by default
-   (`untracked: false`); membership in `functions.json` or the presence of
-   a `translation-name` does **not** decide scope (with one narrow exception:
-   a matched translation suppresses the bodyless-trait-signature cause below,
-   because Aeneas does translate some trait *declarations* as interface
-   records). An atom flips to
-   `untracked: true` only when it carries no `verification-status` **and**
+   (`untracked: false`); membership in `functions.json` does **not** decide
+   scope. An atom with a `verification-status`, or with a matched
+   translation (`translation-name`) that does not carry `@[out_of_scope]`,
+   is always tracked: only `@[out_of_scope]` can untrack a matched
+   translation. The input guard in `check_input_authority` makes sure that
+   these fields come from this run. An atom flips to
+   `untracked: true` only when this in-scope rule does not apply **and**
    is genuinely out of the Aeneas verification build — a foreign declaration
    (probe-rust's `is-foreign`: an extern-block member with no Rust body), a
    bodyless trait method signature with no matched translation (probe-rust's

@@ -649,6 +649,14 @@ pub fn run_extract(
 /// a doomed run stops before translation and before `functions.json` is
 /// written. The merge still validates again; this check only moves the error
 /// earlier.
+///
+/// Also reject an input that does not come from the expected extractor: every
+/// flattened `provenance` entry (hub P9) of the Rust input must have schema
+/// `probe-rust/extract`, and of the Lean input `probe-lean/extract`. The
+/// metadata pass relies on this: probe-rust emits no `verification-status`
+/// and no `translation-name`, so every such field on a Rust atom comes from
+/// this run's matches. A probe-aeneas output fed back as `--rust` carries a
+/// `probe-lean/extract` entry and is rejected here.
 fn check_input_authority(path: &Path, language: &str) -> Result<()> {
     let meta = probe::types::load_envelope(path).map_err(anyhow::Error::msg)?;
     probe::authority::validate_authority(
@@ -658,6 +666,20 @@ fn check_input_authority(path: &Path, language: &str) -> Result<()> {
     )
     .map_err(anyhow::Error::msg)
     .with_context(|| format!("{language} input"))?;
+    let expected = match language {
+        "Rust" => "probe-rust/extract",
+        _ => "probe-lean/extract",
+    };
+    if let Some(entry) = meta.provenance.iter().find(|p| p.schema != expected) {
+        return Err(anyhow::anyhow!(
+            "{language} input {}: provenance entry with schema \"{}\" rejected; \
+             every entry must have schema \"{expected}\" (pass the extractor output, \
+             not a probe-aeneas output or another tool's file)",
+            path.display(),
+            entry.schema
+        )
+        .into());
+    }
     Ok(())
 }
 
@@ -877,6 +899,7 @@ fn run_extract_with_translations(
     }
 
     // Phase 2: Aeneas metadata (Aeneas-specific)
+    warn_on_dangling_primary_specs(&merged);
     enrich_with_aeneas_metadata(&mut merged, &from_to, cfg_config, &config.out_of_scope);
     enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config, aux_defs);
 
@@ -908,41 +931,91 @@ fn prefix_rust_code_paths(merged: &mut std::collections::BTreeMap<String, Atom>,
     }
 }
 
-/// Resolve the `verification-status` to copy onto a Rust atom.
+/// Resolve the `verification-status` to copy onto a Rust atom, or `None`
+/// when the atom gets no status.
 ///
-/// - `"trusted"` / `"failed"` on the Lean def are preserved as-is.
-/// - Otherwise, the primary spec theorem is looked up: if found, its
-///   `verification-status` is used; if absent, `"unverified"` is returned.
+/// - `"trusted"` / `"failed"` on the Lean def are preserved as-is, with or
+///   without a spec.
+/// - Otherwise, the primary spec theorem is looked up. No spec found: `None`
+///   (no status, hub P16/P24). A spec with a status: that status. A spec
+///   without a status: `"unverified"`.
 /// - A copied `"transitively-verified"` is normalized to `"verified"`
 ///   (ADR-006 Decision 2): the label was computed over the Lean graph, and
 ///   the copy is imported evidence, which is never a transitive result on
 ///   the Rust side.
 ///
-/// The caller marks the copied status `status-origin: "translation"`.
+/// The caller marks a copied status `status-origin: "translation"`.
 fn resolve_verification_status(
     lean_name: &str,
     lean_atom: &Atom,
     atoms: &std::collections::BTreeMap<String, Atom>,
-) -> serde_json::Value {
+) -> Option<serde_json::Value> {
     let lean_vs = lean_atom
         .extensions
         .get("verification-status")
         .and_then(|v| v.as_str());
 
     match lean_vs {
-        Some("trusted") | Some("failed") => lean_atom.extensions["verification-status"].clone(),
+        Some("trusted") | Some("failed") => {
+            Some(lean_atom.extensions["verification-status"].clone())
+        }
         _ => {
             let stripped = enrich::strip_prefix(lean_name);
             let (_, spec_atom) = enrich::find_primary_spec(stripped, atoms);
-            match spec_atom.and_then(|s| s.extensions.get("verification-status")) {
+            let spec_atom = spec_atom?;
+            match spec_atom.extensions.get("verification-status") {
                 Some(vs) if vs.as_str() == Some("transitively-verified") => {
-                    serde_json::json!("verified")
+                    Some(serde_json::json!("verified"))
                 }
-                Some(vs) => vs.clone(),
-                None => serde_json::json!("unverified"),
+                Some(vs) => Some(vs.clone()),
+                None => Some(serde_json::json!("unverified")),
             }
         }
     }
+}
+
+/// Keys of the Lean atoms whose `primary-spec` names an atom that is not in
+/// `merged`, sorted.
+///
+/// probe-lean computes `primary-spec` over the same atom array it writes, so
+/// valid input gives none. A dangling reference means a producer bug, and the
+/// copied status can then come from the `<name>_spec` fallback instead of the
+/// theorem probe-lean named. Status resolution is not affected; this is a
+/// diagnostic only.
+fn dangling_primary_specs(merged: &std::collections::BTreeMap<String, Atom>) -> Vec<&str> {
+    merged
+        .iter()
+        .filter(|(_, atom)| atom.language == "lean")
+        .filter_map(|(key, atom)| {
+            let ps = atom.extensions.get("primary-spec")?.as_str()?;
+            (!merged.contains_key(&enrich::primary_spec_key(ps))).then_some(key.as_str())
+        })
+        .collect()
+}
+
+/// Print a warning when some Lean atoms carry a dangling `primary-spec` (see
+/// [`dangling_primary_specs`]), and return it.
+fn warn_on_dangling_primary_specs(
+    merged: &std::collections::BTreeMap<String, Atom>,
+) -> Option<String> {
+    let dangling = dangling_primary_specs(merged);
+    if dangling.is_empty() {
+        return None;
+    }
+    let shown: Vec<&str> = dangling.iter().take(5).copied().collect();
+    let more = if dangling.len() > shown.len() {
+        ", ..."
+    } else {
+        ""
+    };
+    let msg = format!(
+        "  warning: {} Lean atom(s) name a primary-spec that is not in the Lean input \
+         ({}{more}); check the probe-lean input",
+        dangling.len(),
+        shown.join(", ")
+    );
+    println!("{msg}");
+    Some(msg)
 }
 
 /// Add Aeneas-specific metadata to merged atoms, and set `untracked` per the
@@ -951,23 +1024,29 @@ fn resolve_verification_status(
 /// Two enrichment passes:
 /// 1. For each Rust atom with a Lean translation, set `translation-name`,
 ///    `translation-path`, `translation-text`, and `verification-status`
-///    (spec-based) from the Lean atom and its primary spec, marking the
-///    copied status `status-origin: "translation"` (ADR-006 Decision 2) —
-///    **unless** the translation carries `@[out_of_scope]`, in which case no
-///    status is set (an out-of-scope atom carries no `verification-status`).
-/// 2. For every Rust atom, default `untracked` to `false` (tracked backlog),
-///    and set it to `true` only when the atom has **no** (string-typed)
-///    `verification-status` **and** it is genuinely out of scope: a foreign
+///    (spec-based, see [`resolve_verification_status`]) from the Lean atom
+///    and its primary spec, marking the copied status
+///    `status-origin: "translation"` (ADR-006 Decision 2). No status and no
+///    marker are set when the translation carries `@[out_of_scope]`, or when
+///    no spec is found and the Lean def is neither `"trusted"` nor `"failed"`.
+/// 2. For every Rust atom, default `untracked` to `false` (tracked backlog).
+///    The in-scope rule keeps an atom tracked when it has a (string-typed)
+///    `verification-status` (P24), or a (string-typed) `translation-name`
+///    whose translation does not carry `@[out_of_scope]`. Any other atom
+///    is `untracked: true` when it is genuinely out of scope: a foreign
 ///    declaration (`is-foreign`), a bodyless trait method signature with no
 ///    matched translation (`trait-required`), in a file no lib/bin `mod` chain reaches
 ///    (`is-unmounted`), cfg-inactive in the Aeneas build (its complete `cfg`
 ///    predicate evaluates definitively false; `file-cfg` only refines the
 ///    reason), its translation is `@[out_of_scope]`, a non-library target, or
-///    config-curated out of scope. A status-bearing atom is never disabled
-///    (P24); disagreements between a status and out-of-scope source facts are
-///    counted and reported. Membership in `functions.json` no longer affects
-///    scope — a compiled function Aeneas has not translated is unverified
-///    backlog, not out of scope.
+///    config-curated out of scope. So only `@[out_of_scope]` can untrack a
+///    matched translation. Disagreements between a kept atom and
+///    out-of-scope source facts are counted and reported. Membership in
+///    `functions.json` does not affect scope: a compiled function Aeneas has
+///    not translated is unverified backlog, not out of scope.
+///
+/// Returns the number of stale-fact conflicts (atoms the in-scope rule keeps
+/// that carry an out-of-scope source fact), which it also prints.
 ///
 /// `cfg_config` is `None` when the active feature set could not be resolved; cfg
 /// scope classification is then skipped entirely (conservative — never disables
@@ -988,7 +1067,7 @@ fn enrich_with_aeneas_metadata(
     from_to: &HashMap<String, Vec<String>>,
     cfg_config: Option<&crate::cfg_eval::CfgConfig>,
     out_of_scope_patterns: &[String],
-) {
+) -> usize {
     let enrichments: Vec<_> = from_to
         .iter()
         .flat_map(|(rust_name, lean_names)| {
@@ -1030,8 +1109,10 @@ fn enrich_with_aeneas_metadata(
                 );
             }
             // An out-of-scope translation carries no verification-status
-            // (P24: has-status ⟹ ¬untracked).
-            if !out_of_scope {
+            // (P24: has-status ⟹ ¬untracked). A translation with no spec
+            // carries none either, and no marker: P23 counts a marked atom
+            // without a status as a seed.
+            if let Some(vs) = vs.filter(|_| !out_of_scope) {
                 atom.extensions
                     .insert("verification-status".to_string(), vs);
                 // Every copied status is imported evidence: enrichment treats
@@ -1053,9 +1134,10 @@ fn enrich_with_aeneas_metadata(
         .filter_map(|p| enrich::glob_to_regex(p))
         .collect();
 
-    // Diagnostics: source facts and statuses can disagree (stale facts
-    // against fresher Lean progress, or a malformed producer). P24 decides
-    // the outcome, but the disagreement itself must be visible.
+    // Diagnostics: source facts can disagree with a status or a matched
+    // translation (stale facts against fresher Lean progress, a wrong match,
+    // or a malformed producer). The in-scope rule decides the outcome,
+    // but the disagreement itself must be visible.
     let mut stale_fact_conflicts = 0usize;
     let mut malformed_facts = 0usize;
     // Out-of-scope atoms per cause. Reported unconditionally, as information
@@ -1126,10 +1208,10 @@ fn enrich_with_aeneas_metadata(
         // Aeneas DOES translate some trait *declarations* as interface records,
         // so the fact alone is not sufficient: gate on the absence of a matched
         // translation, which is what makes the cause true rather than merely
-        // structural. A matched record normally carries a status and `has_status`
-        // keeps the atom tracked (P24); a record annotated `@[out_of_scope]`
-        // carries none, and gating here lets it fall through to that explicit
-        // cause instead of being re-attributed to bodylessness.
+        // structural. A matched record is kept by `in_scope` below; a
+        // record annotated `@[out_of_scope]` is not, and gating here lets it
+        // fall through to that explicit cause instead of being re-attributed
+        // to bodylessness.
         //
         // The branch therefore fires exactly on signatures with no matched
         // translation, which also means a signature whose interface record was
@@ -1137,22 +1219,27 @@ fn enrich_with_aeneas_metadata(
         // backlog. See the caveat in docs/SCHEMA.md for how to audit that.
         //
         // Only a string-typed `translation-name` counts as a match, mirroring
-        // `has_status` above: this pass writes the field from a Lean atom key,
-        // but the input can carry its own (an already-merged file fed back in,
-        // or a producer emitting the name), and a `null` or otherwise mistyped
-        // value names no Lean def, so it must not shield the atom from
-        // classification.
+        // `has_status` above. The input guard (`check_input_authority`) rejects
+        // input that carries its own, so the field comes from this run's
+        // matches; a `null` names no Lean def either way.
+        let has_translation = atom
+            .extensions
+            .get("translation-name")
+            .and_then(|v| v.as_str())
+            .is_some();
         let trait_signature = atom
             .extensions
             .get("trait-required")
             .and_then(|v| v.as_bool())
             .unwrap_or(false)
-            && atom
-                .extensions
-                .get("translation-name")
-                .and_then(|v| v.as_str())
-                .is_none();
+            && !has_translation;
         let out_of_scope = out_of_scope_rust.contains(key);
+        // The in-scope rule: a status (P24), or a matched translation that does not
+        // carry `@[out_of_scope]`. A match is strong evidence that Aeneas
+        // compiled the function, so the build-dependent causes and the
+        // policy opt-outs below do not apply to it. Only `@[out_of_scope]`
+        // can untrack a matched translation.
+        let in_scope = has_status || (has_translation && !out_of_scope);
         // A present-but-mistyped fact is indistinguishable from absence to
         // the classifier (conservative), but it means a broken producer or a
         // corrupted cache — count it.
@@ -1171,19 +1258,18 @@ fn enrich_with_aeneas_metadata(
             malformed_facts += 1;
         }
         // `trait_signature` is absent from this list because it could never
-        // fire: a Rust atom gets a `verification-status` only from a matched
-        // translation, and `trait_signature` requires that no translation was
-        // matched, so the two are mutually exclusive by construction (verified
-        // on SymCRust: status and `translation-name` are present on exactly the
-        // same 268 atoms). Counting the raw `trait-required` fact instead would
+        // fire: with valid input an `in_scope` atom has a matched translation
+        // (a status is only ever a copy from one), and `trait_signature`
+        // requires that no translation was matched, so the two are mutually
+        // exclusive by construction. Counting the raw `trait-required` fact instead would
         // be a different check — it reports bodyless signatures bound to some
         // Lean def, of which SymCRust has none and spqr has 2, both heuristic
         // mis-matches to an `impl` method's def (#69). That is a real signal,
         // but it is a mis-match signal rather than a stale-source-fact one, so
         // it does not belong in this counter. The other three facts mean the
-        // function is not compiled at all, which a status genuinely
-        // contradicts.
-        if has_status && (foreign || unmounted || cfg_inactive) {
+        // function is not compiled at all, which a status or a matched
+        // translation genuinely contradicts.
+        if in_scope && (foreign || unmounted || cfg_inactive) {
             stale_fact_conflicts += 1;
         }
         // Non-library targets (build.rs / tests / examples / benches) are
@@ -1202,7 +1288,7 @@ fn enrich_with_aeneas_metadata(
             enrich::is_config_out_of_scope(rqn, &atom.display_name, &oos_globs)
         };
         // Tracked backlog by default; disabled only when out of scope and not
-        // status-bearing (P24/P25).
+        // kept by the in-scope rule (P24/P25).
         // Most intrinsic cause first: the two bodyless-declaration facts are
         // properties of the declaration itself, true regardless of build
         // configuration, so they precede the configuration-dependent causes
@@ -1211,7 +1297,7 @@ fn enrich_with_aeneas_metadata(
         // `trait_signature` are mutually exclusive by construction in
         // probe-rust (disjoint AST visitors), so their relative order is
         // unobservable.
-        let reason = if has_status {
+        let reason = if in_scope {
             None
         } else if foreign {
             Some("foreign-declaration")
@@ -1275,7 +1361,7 @@ fn enrich_with_aeneas_metadata(
     }
     if stale_fact_conflicts > 0 {
         println!(
-            "  scope: {} status-bearing atom(s) also carry out-of-scope source facts — kept tracked (P24); \
+            "  scope: {} atom(s) with a status or a matched translation also carry out-of-scope source facts — kept tracked; \
              probe-rust facts or the translation match may be stale",
             stale_fact_conflicts
         );
@@ -1286,6 +1372,7 @@ fn enrich_with_aeneas_metadata(
             malformed_facts
         );
     }
+    stale_fact_conflicts
 }
 
 /// Warn when the Rust atoms were produced by a probe-rust older than 0.10.0:
@@ -1373,61 +1460,86 @@ fn write_aeneas_envelope(
     Ok(())
 }
 
-/// Print public API verification coverage for Rust atoms that have
-/// `is-public-api: true` (set by probe-rust). Uses the `verification-status`
-/// already propagated onto Rust atoms from their Lean translations.
-fn print_public_api_coverage(merged: &std::collections::BTreeMap<String, Atom>) {
-    let public_api: Vec<&Atom> = merged
-        .values()
-        .filter(|a| {
-            a.language == "rust"
-                && a.extensions.get("is-public-api").and_then(|v| v.as_bool()) == Some(true)
-        })
-        .collect();
+/// Public API coverage counts, one bucket per atom (see
+/// [`public_api_coverage`]).
+#[derive(Debug, Default, PartialEq, Eq)]
+struct PublicApiCoverage {
+    verified: u32,
+    unverified: u32,
+    trusted: u32,
+    other_status: u32,
+    /// Translated, but no status (no primary spec found): backlog.
+    no_spec: u32,
+    /// No matched translation and in scope: backlog.
+    no_translation: u32,
+    /// `untracked: true`, whatever else the atom carries.
+    out_of_scope: u32,
+}
 
-    if public_api.is_empty() {
-        return;
+impl PublicApiCoverage {
+    fn total(&self) -> u32 {
+        self.verified
+            + self.unverified
+            + self.trusted
+            + self.other_status
+            + self.no_spec
+            + self.no_translation
+            + self.out_of_scope
     }
+}
 
-    let mut verified = 0u32;
-    let mut unverified = 0u32;
-    let mut trusted = 0u32;
-    let mut other_status = 0u32;
-    let mut no_translation = 0u32;
-
-    for atom in &public_api {
+/// Count the Rust atoms with `is-public-api: true` (set by probe-rust) by
+/// coverage bucket. Reads the statuses and scope that the metadata pass set.
+fn public_api_coverage(merged: &std::collections::BTreeMap<String, Atom>) -> PublicApiCoverage {
+    let mut c = PublicApiCoverage::default();
+    let public_api = merged.values().filter(|a| {
+        a.language == "rust"
+            && a.extensions.get("is-public-api").and_then(|v| v.as_bool()) == Some(true)
+    });
+    for atom in public_api {
         let status = atom
             .extensions
             .get("verification-status")
             .and_then(|v| v.as_str());
-
+        let untracked = atom.extensions.get("untracked").and_then(|v| v.as_bool()) == Some(true);
+        let translated = atom
+            .extensions
+            .get("translation-name")
+            .and_then(|v| v.as_str())
+            .is_some();
         match status {
-            Some("verified") => verified += 1,
-            Some("unverified") => unverified += 1,
-            Some("trusted") => trusted += 1,
-            Some(_) => other_status += 1,
-            None => no_translation += 1,
+            _ if untracked => c.out_of_scope += 1,
+            Some("verified") => c.verified += 1,
+            Some("unverified") => c.unverified += 1,
+            Some("trusted") => c.trusted += 1,
+            Some(_) => c.other_status += 1,
+            None if translated => c.no_spec += 1,
+            None => c.no_translation += 1,
         }
     }
+    c
+}
 
-    let total = public_api.len() as u32;
-
+/// Print public API verification coverage (see [`public_api_coverage`]).
+fn print_public_api_coverage(merged: &std::collections::BTreeMap<String, Atom>) {
+    let c = public_api_coverage(merged);
+    if c.total() == 0 {
+        return;
+    }
     println!("\nPublic API coverage:");
-    println!("  {total} public API functions");
-    if verified > 0 {
-        println!("    {verified} verified");
-    }
-    if unverified > 0 {
-        println!("    {unverified} unverified");
-    }
-    if trusted > 0 {
-        println!("    {trusted} trusted");
-    }
-    if other_status > 0 {
-        println!("    {other_status} other");
-    }
-    if no_translation > 0 {
-        println!("    {no_translation} not in scope (no Lean translation)");
+    println!("  {} public API functions", c.total());
+    for (count, label) in [
+        (c.verified, "verified"),
+        (c.unverified, "unverified"),
+        (c.trusted, "trusted"),
+        (c.other_status, "other"),
+        (c.no_spec, "translated, no spec (backlog)"),
+        (c.no_translation, "no Lean translation (backlog)"),
+        (c.out_of_scope, "out of scope (untracked)"),
+    ] {
+        if count > 0 {
+            println!("    {count} {label}");
+        }
     }
 }
 
@@ -2160,8 +2272,9 @@ charon:
         assert_eq!(
             atom.extensions.get("untracked"),
             Some(&serde_json::json!(false)),
-            "a translated (status-bearing) atom is tracked, never disabled"
+            "a translated atom is tracked even without a status"
         );
+        assert!(!atom.extensions.contains_key("untracked-reason"));
         assert_eq!(
             atom.extensions.get("is-relevant"),
             Some(&serde_json::json!(true)),
@@ -2174,10 +2287,13 @@ charon:
             )),
             "translation-name should be set from Lean atom"
         );
-        assert_eq!(
-            atom.extensions.get("verification-status"),
-            Some(&serde_json::json!("unverified")),
-            "translated atom without spec should get unverified status"
+        assert!(
+            !atom.extensions.contains_key("verification-status"),
+            "translated atom without a spec gets no status (#73)"
+        );
+        assert!(
+            !atom.extensions.contains_key("status-origin"),
+            "no copied status, so no translation marker"
         );
     }
 
@@ -2755,6 +2871,10 @@ charon:
             Some(&serde_json::json!(true)),
             "@[out_of_scope] translation marks the Rust function out of scope"
         );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("out-of-scope-translation"))
+        );
         assert!(
             !atom.extensions.contains_key("verification-status"),
             "out-of-scope atom carries no verification-status (P24)"
@@ -2767,6 +2887,102 @@ charon:
         assert_eq!(
             atom.extensions.get("translation-name"),
             Some(&serde_json::json!("probe:my_crate.opt_out"))
+        );
+    }
+
+    #[test]
+    fn out_of_scope_translation_with_false_cfg_reports_cfg_inactive() {
+        // Pins the reason order: the configuration-dependent cause precedes
+        // the `@[out_of_scope]` opt-out. Untracked either way.
+        let mut merged = std::collections::BTreeMap::new();
+        let mut rust_atom = make_rust_atom("opt_out");
+        rust_atom
+            .extensions
+            .insert("cfg".to_string(), serde_json::json!(r#"feature = "serde""#));
+        merged.insert("probe:my-crate/1.0/opt_out()".to_string(), rust_atom);
+        let mut lean_atom = make_lean_atom("opt_out");
+        lean_atom.extensions.insert(
+            "attributes".to_string(),
+            serde_json::json!(["out_of_scope"]),
+        );
+        merged.insert("probe:my_crate.opt_out".to_string(), lean_atom);
+        let from_to = HashMap::from([(
+            "probe:my-crate/1.0/opt_out()".to_string(),
+            vec!["probe:my_crate.opt_out".to_string()],
+        )]);
+        let cfg = crate::cfg_eval::CfgConfig {
+            features: ["alloc"].iter().map(|s| s.to_string()).collect(),
+        };
+
+        enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg), &[]);
+
+        let atom = &merged["probe:my-crate/1.0/opt_out()"];
+        assert_eq!(
+            atom.extensions.get("untracked"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            atom.extensions.get("untracked-reason"),
+            Some(&serde_json::json!("cfg-inactive"))
+        );
+    }
+
+    #[test]
+    fn public_api_coverage_buckets() {
+        let public = |name: &str, fields: &[(&str, serde_json::Value)]| {
+            let mut atom = make_rust_atom(name);
+            atom.extensions
+                .insert("is-public-api".to_string(), serde_json::json!(true));
+            for (k, v) in fields {
+                atom.extensions.insert(k.to_string(), v.clone());
+            }
+            (format!("probe:crate/1.0/{name}()"), atom)
+        };
+        let tn = || ("translation-name", serde_json::json!("probe:crate.x"));
+        let merged = std::collections::BTreeMap::from([
+            public(
+                "verified",
+                &[tn(), ("verification-status", serde_json::json!("verified"))],
+            ),
+            public("no_spec", &[tn()]),
+            public("untranslated", &[]),
+            public(
+                "out_of_scope",
+                &[tn(), ("untracked", serde_json::json!(true))],
+            ),
+            public(
+                "failed",
+                &[tn(), ("verification-status", serde_json::json!("failed"))],
+            ),
+            public(
+                "trusted",
+                &[tn(), ("verification-status", serde_json::json!("trusted"))],
+            ),
+            public(
+                "unverified",
+                &[
+                    tn(),
+                    ("verification-status", serde_json::json!("unverified")),
+                ],
+            ),
+            // Not public API: not counted.
+            (
+                "probe:crate/1.0/private()".to_string(),
+                make_rust_atom("private"),
+            ),
+        ]);
+
+        assert_eq!(
+            public_api_coverage(&merged),
+            PublicApiCoverage {
+                verified: 1,
+                unverified: 1,
+                trusted: 1,
+                other_status: 1,
+                no_spec: 1,
+                no_translation: 1,
+                out_of_scope: 1,
+            }
         );
     }
 
@@ -2881,11 +3097,11 @@ charon:
         enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
-        assert_eq!(
-            atom.extensions.get("verification-status"),
-            Some(&serde_json::json!("unverified")),
-            "def without spec should be unverified even if lean def is verified"
+        assert!(
+            !atom.extensions.contains_key("verification-status"),
+            "def without spec gets no status even if the lean def is verified"
         );
+        assert!(!atom.extensions.contains_key("status-origin"));
     }
 
     #[test]
@@ -2937,11 +3153,251 @@ charon:
         enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
 
         let atom = merged.get("probe:my-crate/1.0/my_fn()").unwrap();
+        assert!(
+            !atom.extensions.contains_key("verification-status"),
+            "lean def without status and no spec gets no status"
+        );
+        assert!(!atom.extensions.contains_key("status-origin"));
+    }
+
+    /// Assert the Rust atom of [`setup_translation`] carries `vs` and the
+    /// translation marker.
+    fn assert_copied_status(merged: &std::collections::BTreeMap<String, Atom>, vs: &str) {
+        let atom = &merged["probe:my-crate/1.0/my_fn()"];
         assert_eq!(
             atom.extensions.get("verification-status"),
-            Some(&serde_json::json!("unverified")),
-            "lean def without status and no spec should be unverified"
+            Some(&serde_json::json!(vs))
         );
+        assert_eq!(
+            atom.extensions.get("status-origin"),
+            Some(&serde_json::json!("translation"))
+        );
+    }
+
+    #[test]
+    fn vs_trusted_def_without_spec_preserved() {
+        // The trusted/failed arm runs before the spec lookup.
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, Some("trusted"), None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+        assert_copied_status(&merged, "trusted");
+    }
+
+    #[test]
+    fn vs_failed_def_without_spec_preserved() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, Some("failed"), None);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+        assert_copied_status(&merged, "failed");
+    }
+
+    #[test]
+    fn vs_spec_without_status_is_unverified() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, None, Some("verified"));
+        merged
+            .get_mut("probe:my_crate.my_fn_spec")
+            .unwrap()
+            .extensions
+            .remove("verification-status");
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+        assert_copied_status(&merged, "unverified");
+    }
+
+    /// Point the Lean def of [`setup_translation`] at a `primary-spec` that is
+    /// not in the atom map.
+    fn with_dangling_primary_spec(merged: &mut std::collections::BTreeMap<String, Atom>) {
+        merged
+            .get_mut("probe:my_crate.my_fn")
+            .unwrap()
+            .extensions
+            .insert(
+                "primary-spec".to_string(),
+                serde_json::json!("my_crate.missing_spec"),
+            );
+    }
+
+    #[test]
+    fn dangling_primary_spec_without_fallback_gives_no_status() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, None, None);
+        with_dangling_primary_spec(&mut merged);
+        assert_eq!(dangling_primary_specs(&merged), ["probe:my_crate.my_fn"]);
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+        assert!(!merged["probe:my-crate/1.0/my_fn()"]
+            .extensions
+            .contains_key("verification-status"));
+    }
+
+    #[test]
+    fn dangling_primary_spec_with_fallback_copies_fallback_status() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, None, Some("failed"));
+        with_dangling_primary_spec(&mut merged);
+        assert_eq!(
+            dangling_primary_specs(&merged),
+            ["probe:my_crate.my_fn"],
+            "counted even though the `<name>_spec` fallback finds a spec"
+        );
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+        assert_copied_status(&merged, "failed");
+    }
+
+    #[test]
+    fn dangling_primary_spec_on_trusted_def_keeps_trusted() {
+        let mut merged = std::collections::BTreeMap::new();
+        let from_to = setup_translation(&mut merged, Some("trusted"), None);
+        with_dangling_primary_spec(&mut merged);
+        assert_eq!(
+            dangling_primary_specs(&merged),
+            ["probe:my_crate.my_fn"],
+            "counted independently of status resolution"
+        );
+        enrich_with_aeneas_metadata(&mut merged, &from_to, None, &[]);
+        assert_copied_status(&merged, "trusted");
+    }
+
+    #[test]
+    fn dangling_primary_spec_warning_names_at_most_five() {
+        let mut merged = std::collections::BTreeMap::new();
+        for i in 0..6 {
+            let mut atom = make_lean_atom(&format!("f{i}"));
+            atom.extensions
+                .insert("primary-spec".to_string(), serde_json::json!("missing"));
+            merged.insert(format!("probe:m.f{i}"), atom);
+        }
+        let msg = warn_on_dangling_primary_specs(&merged).expect("warning");
+        assert!(msg.contains("6 Lean atom(s)"), "{msg}");
+        assert!(
+            msg.contains("probe:m.f0, probe:m.f1, probe:m.f2, probe:m.f3, probe:m.f4, ..."),
+            "{msg}"
+        );
+        assert!(!msg.contains("probe:m.f5"), "{msg}");
+
+        merged.retain(|k, _| k == "probe:m.f0");
+        let msg = warn_on_dangling_primary_specs(&merged).expect("warning");
+        assert!(
+            msg.contains("(probe:m.f0); "),
+            "no ellipsis under the cap: {msg}"
+        );
+        assert!(warn_on_dangling_primary_specs(&std::collections::BTreeMap::new()).is_none());
+    }
+
+    #[test]
+    fn resolvable_primary_spec_is_not_dangling() {
+        let mut merged = std::collections::BTreeMap::new();
+        setup_translation(&mut merged, None, Some("verified"));
+        merged
+            .get_mut("probe:my_crate.my_fn")
+            .unwrap()
+            .extensions
+            .insert(
+                "primary-spec".to_string(),
+                serde_json::json!("probe:my_crate.my_fn_spec"),
+            );
+        assert!(dangling_primary_specs(&merged).is_empty());
+    }
+
+    #[test]
+    fn matched_translation_stays_in_scope_for_every_cause() {
+        // A translated, spec-less function (no status) stays tracked whatever
+        // out-of-scope fact it carries. Only `@[out_of_scope]` untracks it.
+        type Setup = fn(&mut Atom);
+        let cases: [(&str, Setup, bool); 7] = [
+            (
+                "is-foreign",
+                |a| {
+                    a.extensions
+                        .insert("is-foreign".to_string(), serde_json::json!(true));
+                },
+                true,
+            ),
+            (
+                "is-unmounted",
+                |a| {
+                    a.extensions
+                        .insert("is-unmounted".to_string(), serde_json::json!(true));
+                },
+                true,
+            ),
+            (
+                "false cfg",
+                |a| {
+                    a.extensions
+                        .insert("cfg".to_string(), serde_json::json!(r#"feature = "serde""#));
+                },
+                true,
+            ),
+            (
+                "false cfg and file-cfg",
+                |a| {
+                    a.extensions
+                        .insert("cfg".to_string(), serde_json::json!(r#"feature = "serde""#));
+                    a.extensions.insert(
+                        "file-cfg".to_string(),
+                        serde_json::json!(r#"feature = "serde""#),
+                    );
+                },
+                true,
+            ),
+            (
+                "non-library target",
+                |a| a.code_path = "tests/integration.rs".to_string(),
+                false,
+            ),
+            (
+                "config out-of-scope glob",
+                |a| {
+                    a.extensions.insert(
+                        "rust-qualified-name".to_string(),
+                        serde_json::json!("my_crate::{core::fmt::Debug for my_crate::T}::fmt"),
+                    );
+                },
+                false,
+            ),
+            (
+                // Passes without the in-scope rule too, because the trait gate also
+                // checks for a translation. The gate itself is pinned by
+                // `enrich_trait_signature_with_out_of_scope_translation_reports_out_of_scope`.
+                "trait-required",
+                |a| {
+                    a.extensions
+                        .insert("trait-required".to_string(), serde_json::json!(true));
+                },
+                false,
+            ),
+        ];
+        let cfg = crate::cfg_eval::CfgConfig {
+            features: ["alloc"].iter().map(|s| s.to_string()).collect(),
+        };
+        let patterns = ["*core::fmt::Debug*".to_string()];
+        for (name, setup, stale_fact) in cases {
+            let mut merged = std::collections::BTreeMap::new();
+            let from_to = setup_translation(&mut merged, None, None);
+            setup(merged.get_mut("probe:my-crate/1.0/my_fn()").unwrap());
+            let conflicts =
+                enrich_with_aeneas_metadata(&mut merged, &from_to, Some(&cfg), &patterns);
+
+            let atom = &merged["probe:my-crate/1.0/my_fn()"];
+            assert!(
+                !atom.extensions.contains_key("verification-status"),
+                "{name}: fixture must have no status"
+            );
+            assert_eq!(
+                atom.extensions.get("untracked"),
+                Some(&serde_json::json!(false)),
+                "{name}: a matched translation stays tracked"
+            );
+            assert!(
+                !atom.extensions.contains_key("untracked-reason"),
+                "{name}: no reason on a tracked atom"
+            );
+            assert_eq!(
+                conflicts,
+                usize::from(stale_fact),
+                "{name}: stale-fact conflict count"
+            );
+        }
     }
 
     fn make_provenance(pkg: &str, ver: &str) -> InputProvenance {
@@ -3356,6 +3812,65 @@ charon:
     }
 
     #[test]
+    fn every_rust_status_carries_the_translation_marker() {
+        // The P23 argument for spec-less callees rests on this: with valid
+        // input every Rust status is a copy, and every copy is a blocker seed.
+        // Three translated Rust atoms: one with a spec (copied `verified`), one
+        // whose Lean def is `trusted`, one spec-less (no status at all).
+        const RUST_TRUSTED: &str = "probe:my-crate/1.0/trusted_fn()";
+        const LEAN_TRUSTED: &str = "probe:my_crate.trusted_fn";
+        const RUST_NO_SPEC: &str = "probe:my-crate/1.0/no_spec()";
+        const LEAN_NO_SPEC: &str = "probe:my_crate.no_spec";
+        let rust = std::collections::BTreeMap::from([
+            (RUST_FN.to_string(), make_rust_atom("my_fn")),
+            (RUST_TRUSTED.to_string(), make_rust_atom("trusted_fn")),
+            (RUST_NO_SPEC.to_string(), make_rust_atom("no_spec")),
+            (
+                RUST_CALLER.to_string(),
+                with_deps(make_rust_atom("caller"), &[RUST_FN, RUST_NO_SPEC]),
+            ),
+        ]);
+        let mut lean = contaminated_lean();
+        lean.insert(
+            LEAN_TRUSTED.to_string(),
+            with_status(make_lean_atom("trusted_fn"), "trusted"),
+        );
+        lean.insert(LEAN_NO_SPEC.to_string(), make_lean_atom("no_spec"));
+        let mapping = |from: &str, to: &str| Mapping {
+            from: from.to_string(),
+            to: to.to_string(),
+            ..exact_mapping()
+        };
+        let mappings = [
+            exact_mapping(),
+            mapping(RUST_TRUSTED, LEAN_TRUSTED),
+            mapping(RUST_NO_SPEC, LEAN_NO_SPEC),
+        ];
+        let data = run_pipeline(rust, lean, &mappings, false);
+
+        assert_eq!(status(&data, RUST_TRUSTED), "trusted");
+        assert!(data[RUST_NO_SPEC].get("verification-status").is_none());
+        assert!(data[RUST_NO_SPEC].get("status-origin").is_none());
+        assert_eq!(data[RUST_NO_SPEC]["untracked"], false);
+        assert!(
+            data[RUST_CALLER].get("verification-status").is_none(),
+            "enrichment adds no status to the caller"
+        );
+
+        let with_status: Vec<_> = data
+            .iter()
+            .filter(|(_, v)| v["language"] == "rust" && v.get("verification-status").is_some())
+            .collect();
+        assert_eq!(with_status.len(), 2, "fixture copies two statuses");
+        for (key, atom) in with_status {
+            assert_eq!(
+                atom["status-origin"], "translation",
+                "{key}: unmarked Rust status"
+            );
+        }
+    }
+
+    #[test]
     fn probe_lean_contract_version_matches_hub_gate() {
         // The runner's binary floor restates the hub's private gate table;
         // pin it against the hub's own validator so the two cannot drift.
@@ -3433,5 +3948,152 @@ charon:
             "unexpected error: {msg}"
         );
         assert!(!out.exists());
+    }
+
+    /// Run `run_extract` on pre-generated inputs with a missing `functions`
+    /// path, so a check placed after record resolution fails with a
+    /// different error. Returns the error text; asserts no output.
+    fn run_extract_err(rust: &Path, lean: &Path, dir: &Path) -> String {
+        let out = dir.join("out.json");
+        let err = run_extract(
+            Some(rust),
+            None,
+            Some(lean),
+            None,
+            Some(&dir.join("missing-functions.json")),
+            None,
+            Some(&out),
+            None,
+            false,
+            None,
+            false,
+            false,
+            None,
+        )
+        .expect_err("input is rejected");
+        assert!(!out.exists());
+        format!("{err:#}")
+    }
+
+    fn valid_inputs(dir: &Path) -> (PathBuf, PathBuf) {
+        let rust = write_envelope(
+            dir,
+            "rust.json",
+            "probe-rust",
+            "0.12.0",
+            "rust",
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]),
+        );
+        let lean = write_envelope(
+            dir,
+            "lean.json",
+            "probe-lean",
+            "0.16.0",
+            "lean",
+            contaminated_lean(),
+        );
+        (rust, lean)
+    }
+
+    #[test]
+    fn run_extract_rejects_probe_aeneas_output_as_rust_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let (rust, lean) = valid_inputs(dir.path());
+        let merged = dir.path().join("aeneas.json");
+        run_extract_with_translations(
+            &rust,
+            &lean,
+            &[exact_mapping()],
+            None,
+            &HashSet::new(),
+            Some(&merged),
+            &AeneasConfig::default(),
+            None,
+            None,
+            false,
+        )
+        .expect("pipeline");
+
+        let msg = run_extract_err(&merged, &lean, dir.path());
+        assert!(msg.contains("Rust input"), "unexpected error: {msg}");
+        assert!(
+            msg.contains(r#"schema "probe-lean/extract" rejected"#),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[test]
+    fn run_extract_rejects_probe_rust_file_as_lean_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let (rust, _) = valid_inputs(dir.path());
+        let msg = run_extract_err(&rust, &rust, dir.path());
+        assert!(msg.contains("Lean input"), "unexpected error: {msg}");
+        assert!(
+            msg.contains(r#"schema "probe-rust/extract" rejected"#),
+            "unexpected error: {msg}"
+        );
+    }
+
+    /// Write an empty `probe merge` output whose `inputs` have `schemas`, in
+    /// order.
+    fn write_merged(dir: &Path, file: &str, schemas: &[&str]) -> PathBuf {
+        let inputs: Vec<_> = schemas
+            .iter()
+            .enumerate()
+            .map(|(i, schema)| {
+                serde_json::json!({
+                    "schema": schema,
+                    "source": {
+                        "repo": "", "commit": "", "language": "rust",
+                        "package": format!("crate-{i}"), "package-version": "1.0",
+                    },
+                })
+            })
+            .collect();
+        let envelope = serde_json::json!({
+            "schema": "probe/merged-atoms",
+            "schema-version": "3.0",
+            "tool": { "name": "probe", "version": "0.5.0", "command": "merge" },
+            "inputs": inputs,
+            "timestamp": "2026-10-06T00:00:00Z",
+            "data": {},
+        });
+        let path = dir.join(file);
+        std::fs::write(&path, envelope.to_string()).unwrap();
+        path
+    }
+
+    #[test]
+    fn check_input_authority_accepts_merged_probe_rust_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_merged(
+            dir.path(),
+            "merged.json",
+            &["probe-rust/extract", "probe-rust/extract"],
+        );
+
+        check_input_authority(&path, "Rust").expect("two probe-rust entries are accepted");
+        let msg = format!("{:#}", check_input_authority(&path, "Lean").unwrap_err());
+        assert!(
+            msg.contains(r#"schema "probe-rust/extract" rejected"#),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[test]
+    fn check_input_authority_checks_every_provenance_entry() {
+        // The wrong entry first, then last: a check of one end only fails one.
+        let dir = tempfile::tempdir().unwrap();
+        for (file, schemas) in [
+            ("first.json", ["probe-lean/extract", "probe-rust/extract"]),
+            ("last.json", ["probe-rust/extract", "probe-lean/extract"]),
+        ] {
+            let path = write_merged(dir.path(), file, &schemas);
+            let msg = format!("{:#}", check_input_authority(&path, "Rust").unwrap_err());
+            assert!(
+                msg.contains(r#"schema "probe-lean/extract" rejected"#),
+                "{file}: unexpected error: {msg}"
+            );
+        }
     }
 }
