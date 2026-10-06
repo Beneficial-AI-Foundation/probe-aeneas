@@ -262,7 +262,7 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
 | `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Copied from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is copied directly. Otherwise, if a primary spec exists, the spec's status is used (a `"transitively-verified"` spec is copied as `"verified"`); if no spec exists, the status is `"unverified"`. Every copied status carries `status-origin: "translation"`, so enrichment never labels a Rust atom with a translation `"transitively-verified"`, and neither does it promote a caller that reaches the atom along a path without a trusted boundary. |
-| `status-origin` | string | no | `"translation"` on every Rust atom whose `verification-status` was copied from Lean (since 0.21.0): the status is imported evidence. Enrichment treats the atom as a blocker seed, so it and every caller that reaches it along a path without a trusted boundary (an unmarked `"trusted"` atom) keep `"verified"` instead of becoming `"transitively-verified"`, and a copied `"trusted"` does not shield its callers. See the hub's [ADR-006 Decision 2](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/decisions/006-correspondence-records.md#decision-2-the-status-origin-marker). |
+| `status-origin` | string | no | `"translation"` on every Rust atom whose `verification-status` was copied from Lean (since 0.21.0): the status is imported evidence. Enrichment treats the atom as a blocker seed, so it is never promoted (it keeps its copied status), and a `"verified"` caller that reaches it along a path without a trusted boundary (an unmarked `"trusted"` atom) stays `"verified"` instead of becoming `"transitively-verified"`, and a copied `"trusted"` does not shield its callers. See the hub's [ADR-006 Decision 2](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/decisions/006-correspondence-records.md#decision-2-the-status-origin-marker). |
 | `maps-to` | array of objects | no | Correspondence records written by the merge step (since 0.21.0), one per translation: `{"target": <Lean code-name>, "confidence": ..., "method": ...}` (`method` omitted when absent). See [Correspondence Records](#correspondence-records). |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
@@ -694,9 +694,12 @@ The `listfuns` command has three modes:
 
 ## Schema Evolution
 
-When adding new optional fields, increment the minor version (`3.0` -> `3.1`).
-When changing required fields or their semantics, increment the major version
-(`2.0` -> `3.0`).
+The hub owns the interchange schema number
+([version history](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/engineering/schema.md#version-history)).
+probe-aeneas changes its stamp only when that history says producers do:
+a hub minor (`3.0` -> `3.1`) adds optional fields and producers may keep
+stamping `3.0`; a major (`2.0` -> `3.0`) changes required fields or their
+semantics and lands in lockstep across all producers.
 
 Consumers should check `schema-version` and reject files with an unsupported
 major version. A minor bump is backward-compatible: a `3.0` consumer can read a
@@ -715,7 +718,7 @@ cross-language edges in `dependencies`, is identified by `tool.version`
 
 ### With probe-rust
 
-probe-aeneas consumes `probe-rust/extract` (Schema 2.x — probe-rust emits `2.1`)
+probe-aeneas consumes `probe-rust/extract` (Schema 3.x — probe-rust emits `3.0`)
 files as input. Charon enrichment on `probe-rust extract` is recommended for best
 translation accuracy: `--with-charon` (or `--translation <manifest>`, which reads
 charon `def_id`s from an Aeneas `translation.json`) enables the `charon-def-id`
