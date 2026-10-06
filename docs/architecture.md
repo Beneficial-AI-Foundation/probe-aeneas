@@ -130,8 +130,9 @@ atom map:
    `"transitively-verified"` spec is copied as `"verified"`); if no spec
    exists, the status is `"unverified"`. Every copied status is marked
    `status-origin: "translation"` (hub ADR-006 Decision 2): it is
-   imported evidence, so phase 4 never promotes the atom or a caller that
-   reaches it to `"transitively-verified"`.
+   imported evidence, so phase 4 never promotes the atom, or a caller that
+   reaches it along a path without a trusted boundary, to
+   `"transitively-verified"`.
 
 3. **`untracked` flag**: every Rust atom is tracked backlog by default
    (`untracked: false`); membership in `functions.json` or the presence of
@@ -152,7 +153,10 @@ atom map:
    `out-of-scope` glob in `aeneas.json` (KB P24/P25). The cause is emitted
    as `untracked-reason`.
 
-Implementation: `src/extract.rs::enrich_with_aeneas_metadata`.
+Implementation: `src/extract.rs::enrich_with_aeneas_metadata`. Phase 3
+also prefixes Rust `code-path`s with the crate directory
+(`prefix_rust_code_paths`) and sets the Lean atom flags
+(`enrich::enrich_lean_atom_flags`).
 
 ### Phase 4: Enrich verification status (generic)
 
@@ -165,7 +169,7 @@ and with it all enrichment in the pipeline.
 
 The output carries `"schema": "probe-aeneas/extract"` rather than the
 generic `"probe/merged-atoms"` used by `probe merge`. This is because
-the enrichment in phase 3 makes the output semantically richer than a
+the Aeneas metadata in phase 3 makes the output semantically richer than a
 plain merge: it contains `translation-*` fields and `untracked` that
 the generic merge engine does not produce. The distinct schema name lets
 downstream consumers distinguish the two and apply appropriate

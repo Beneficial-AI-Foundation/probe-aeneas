@@ -8,8 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [0.21.0] - 2026-10-06
 
-The hub ADR-006 contract release (closes #71, #70). 0.21.0 is the version
+The hub ADR-006 contract release (#71, closes #70). 0.21.0 is the version
 the hub 0.5.0 version gate requires of `probe-aeneas/extract` envelopes.
+Still open from #71: re-extracting the `examples/` fixtures with probe-lean
+0.16.0 once it is released. Until then `examples/aeneas_curve25519-dalek_4.1.3.json`
+is pre-0.21.0 output (injected cross-language edges, no records).
 
 ### Changed
 - **Breaking**: requires the probe hub 0.5.0. Translations no longer add
@@ -27,15 +30,17 @@ the hub 0.5.0 version gate requires of `probe-aeneas/extract` envelopes.
   imported evidence can no longer turn into `transitively-verified` on the
   Rust side, on the atom or on a locally verified caller, and a copied
   `trusted` no longer shields its callers.
-- `extract` stages on the hub's raw merge (`merge_atom_files_raw`) and runs
-  enrichment exactly once, after the Aeneas metadata phase. `--skip-enrich`
-  now means no enrichment at all.
+- `extract` stages on the hub's raw merge (`merge_atom_files_raw`), because
+  the hub 0.5.0 `merge_atom_files` enriches. Enrichment runs exactly once,
+  after the Aeneas metadata phase, and `--skip-enrich` keeps meaning no
+  enrichment at all.
 - The generated mapping records stay authoritative through the pipeline.
   Endpoints are normalized by the hub's P8 rule and the endpoint lookup map
   is derived from the records, so `confidence`/`method` reach the output
   instead of being dropped before merge.
-- The `extract` envelope is stamped `schema-version: "3.1"`. The CLI summary
-  reports `Correspondence records` instead of `Cross-lang edges`.
+- The `extract` envelope stays `schema-version: "3.0"` (the hub's 3.1 is a
+  hub-side minor; consumers key the new behavior on `tool.version`). The
+  CLI summary reports `Correspondence records` instead of `Cross-lang edges`.
 - README, USAGE, SCHEMA and architecture docs describe correspondence
   records instead of cross-language dependency edges.
 

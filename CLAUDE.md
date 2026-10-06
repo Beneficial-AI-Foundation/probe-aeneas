@@ -55,7 +55,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 ### Pipeline
 
-1. **Extract Pipeline** (`extract` command): resolve project (parse `aeneas-config.yml` if positional arg given) → resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → raw merge (correspondence records, no enrichment) → Aeneas metadata → one enrichment pass → Schema 3.1 envelope → output
+1. **Extract Pipeline** (`extract` command): resolve project (parse `aeneas-config.yml` if positional arg given) → resolve inputs → extract atoms (if project paths given) → load atoms + functions.json → generate translations → raw merge (correspondence records, no enrichment) → Aeneas metadata → one enrichment pass → Schema 3.0 envelope → output
 2. **Translate Pipeline** (`translate` command): load Rust atoms + Lean atoms + functions.json → priority-ordered matching → translations JSON
 3. **Listfuns Pipeline** (`listfuns` command): `lake exe listfuns` → functions.json
 
@@ -75,7 +75,7 @@ examples/              # Sample input/output JSON files (curve25519-dalek ↔ Cu
 
 **Auto-Install**: `probe-rust` is installed via `cargo install --git`. `probe-lean` is version-aware: the target project's `lean-toolchain` is read, then a versioned binary (`~/.local/bin/probe-lean-<version>`) is looked up or installed (pre-built download from GitHub Releases, falling back to source build with `lake build`). A `~/.local/bin/probe-lean` symlink points to the active version.
 
-**Schema 3.x Metadata Envelope**: Merged output uses the `probe-aeneas/extract` schema (`schema-version: "3.1"`, for the hub 3.1 `maps-to`/`mapped-from` records and `status-origin`); translation output uses the `probe/mappings` schema (`schema-version: "3.0"`). Both wrap payloads with tool info, source provenance, and timestamps.
+**Schema 3.0 Metadata Envelope**: Merged output uses the `probe-aeneas/extract` schema (`schema-version: "3.0"`; it carries the hub 3.1 `maps-to`/`mapped-from` records and `status-origin`, but per the hub KB version history producers keep stamping 3.0); translation output uses the `probe/mappings` schema (`schema-version: "3.0"`). Both wrap payloads with tool info, source provenance, and timestamps.
 
 **Relationship to `probe merge`**: probe-aeneas's `extract` command is an instantiation of the generic `probe merge` engine for the Aeneas Rust-to-Lean case. It generates translations (Aeneas-specific) as authoritative `Vec<Mapping>` records, calls `merge_atom_files_raw` from `probe::commands::merge` for the generic combine + correspondence-record step (no enrichment), adds Aeneas-specific metadata (`translation-*`, the copied `verification-status` marked `status-origin: "translation"`, `untracked`), then runs `enrich_verification_status` once (hub ADR-006). See [docs/architecture.md](docs/architecture.md) for the full picture. Shared types (`Atom`, `Mapping`, `MergedAtomEnvelope`, `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
 

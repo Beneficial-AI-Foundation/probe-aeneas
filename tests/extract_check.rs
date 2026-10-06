@@ -134,7 +134,7 @@ fn library_extract_with_pregenerated_json() {
     let json: serde_json::Value = serde_json::from_str(&content).unwrap();
 
     assert_eq!(json["schema"], "probe-aeneas/extract");
-    assert_eq!(json["schema-version"], "3.1");
+    assert_eq!(json["schema-version"], "3.0");
     assert!(json["data"].is_object());
 
     let data = json["data"].as_object().unwrap();
@@ -166,6 +166,17 @@ fn library_extract_with_pregenerated_json() {
         .filter(|v| v["language"] == "rust" && v["maps-to"].is_array())
         .count();
     assert_eq!(rust_with_record, rust_with_translation);
+    // Confidence and method come from the generated records, not from a
+    // reconstructed default: the example yields non-exact matches too.
+    let records: Vec<&serde_json::Value> = data
+        .values()
+        .filter_map(|v| v["maps-to"].as_array())
+        .flatten()
+        .collect();
+    assert!(records.iter().all(|r| r["method"].is_string()));
+    assert!(records
+        .iter()
+        .any(|r| r["confidence"] == "exact-disambiguated"));
     assert!(data
         .values()
         .any(|v| v["language"] == "lean" && v["mapped-from"].is_array()));

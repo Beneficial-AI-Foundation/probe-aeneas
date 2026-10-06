@@ -119,7 +119,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 ```json
 {
   "schema": "probe-aeneas/extract",
-  "schema-version": "3.1",
+  "schema-version": "3.0",
   "tool": { "name": "probe-aeneas", "version": "0.21.0", "command": "extract" },
   "inputs": [
     { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
@@ -160,8 +160,8 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
    3. `file+line-overlap` -- same source file + overlapping line ranges
 5. **Merge** -- combines Rust and Lean atom maps with the hub's raw merge (no enrichment yet) and attaches a `maps-to`/`mapped-from` correspondence record pair, with the mapping's confidence and method, for each translation. Dependency edges are never added. The hub rejects probe-lean output older than 0.16.0.
 6. **Aeneas metadata** -- adds `translation-name`, `translation-path`, `translation-text`, the copied `verification-status` (marked `status-origin: "translation"`), and `untracked` to Rust atoms. Scope (`untracked`) evaluates the source facts probe-rust (>= 0.10.0) puts on each atom: the `cfg` predicate (parent-file mod-chain gates included; deliberately under-gating where probe-rust's walk cannot see) against the Aeneas build's feature set, plus the `is-unmounted`, `is-foreign` and `trait-required` declaration facts; `untracked-reason` records the cause.
-7. **Verification enrichment** -- runs the hub's enrichment once over the merged graph (skipped by `--skip-enrich`). A translation-marked status is imported evidence: neither the atom nor its callers become `transitively-verified`.
-8. **Schema 3.1 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
+7. **Verification enrichment** -- runs the hub's enrichment once over the merged graph (skipped by `--skip-enrich`). A translation-marked status is imported evidence: neither the atom nor a caller that reaches it along a path without a trusted boundary becomes `transitively-verified`.
+8. **Schema 3.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
 ## How probe-aeneas decides what to analyze
 

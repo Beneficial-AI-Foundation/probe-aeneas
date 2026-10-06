@@ -66,7 +66,10 @@ Full pipeline: extract atoms (if needed), generate translation mappings, and
 merge Rust + Lean call graphs into a unified atom file in which translations
 are `maps-to`/`mapped-from` correspondence records. The Lean input must come
 from probe-lean >= 0.16.0 (the hub's ADR-006 version gate rejects older
-output).
+output). Auto-install does not enforce this: if the cached
+`~/.local/bin/probe-lean-<lean-version>` is older, the merge step fails with
+the gate's message, and you must install probe-lean 0.16.0 or later for that
+Lean toolchain.
 
 ```
 probe-aeneas extract [OPTIONS] [PROJECT]
@@ -157,6 +160,7 @@ At least one of `--lean` or `--lean-project` is required (when not using `PROJEC
 | `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`). Defaults to `.verilib/aeneas.json` in the Lean project. |
 | `--lake` | | Use `lake exe listfuns` to generate `functions.json` instead of parsing Aeneas-generated Lean files directly. |
 | `--with-public-api` | | Use `cargo public-api` to compute accurate `is-public-api` on Rust atoms (requires `cargo-public-api`; see below). |
+| `--skip-enrich` | | Skip the hub's verification enrichment, the only enrichment pass in the pipeline. Derived labels (`verified`/`transitively-verified`) then stay as the inputs and the status copy left them until a later `probe enrich` or `probe merge` recomputes them. |
 
 #### Installing `cargo-public-api` (for `--with-public-api`)
 
@@ -384,7 +388,7 @@ For the complete JSON schema specification covering all commands, see
 
 ### Merged Atoms
 
-The `extract` command produces a JSON file wrapped in a Schema 3.1 metadata
+The `extract` command produces a JSON file wrapped in a Schema 3.0 metadata
 envelope with `"probe-aeneas/extract"` schema. The `data` field contains all
 atoms from both inputs. Each translation adds a `maps-to` record on the Rust
 atom and a `mapped-from` record on the Lean atom, and every status copied onto

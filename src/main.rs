@@ -84,7 +84,7 @@ enum Commands {
         #[arg(long)]
         with_public_api: bool,
 
-        /// Skip the verification status enrichment step (transitive verification propagation)
+        /// Skip the verification status enrichment step (the pipeline's single enrichment recomputation)
         #[arg(long)]
         skip_enrich: bool,
     },

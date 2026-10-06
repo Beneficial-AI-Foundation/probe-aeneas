@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.8
-Date: 2026-07-11
+Version: 3.0
+Date: 2026-10-06
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -11,7 +11,7 @@ the `data` field and the output of non-enveloped commands.
 
 ---
 
-## Common: Envelope (Schema 2.x)
+## Common: Envelope (Schema 3.x)
 
 Both `extract` and `translate` commands wrap their output in a standardized
 metadata envelope. The envelope fields vary slightly between commands (see
@@ -20,7 +20,7 @@ sections below), but share this structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema` | string | Data type identifier (e.g. `"probe-aeneas/extract"`) |
-| `schema-version` | string | Interchange spec version (`"3.1"` for `extract`, `"3.0"` for `translate`; see [Schema Evolution](#schema-evolution)) |
+| `schema-version` | string | Interchange spec version (`"3.0"` for both `extract` and `translate`; see [Schema Evolution](#schema-evolution)) |
 | `tool.name` | string | Always `"probe-aeneas"` |
 | `tool.version` | string | Semver version of the probe-aeneas binary |
 | `tool.command` | string | Subcommand that produced the file |
@@ -38,10 +38,10 @@ sections below), but share this structure:
 ```json
 {
   "schema": "probe-aeneas/extract",
-  "schema-version": "3.1",
+  "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.9.0",
+    "version": "0.21.0",
     "command": "extract"
   },
   "inputs": [
@@ -261,8 +261,8 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `untracked-reason` | string | no | Emitted by probe-aeneas >= 0.19.0 (older outputs carry `untracked` without it): present exactly when `untracked` is `true`, naming the most intrinsic applicable cause. One of `foreign-declaration`, `trait-signature` (>= 0.20.0), `unmounted`, `file-cfg-inactive`, `cfg-inactive`, `out-of-scope-translation`, `non-library-target`, `config-out-of-scope`. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
-| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Copied from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is copied directly. Otherwise, if a primary spec exists, the spec's status is used (a `"transitively-verified"` spec is copied as `"verified"`); if no spec exists, the status is `"unverified"`. Every copied status carries `status-origin: "translation"`, so enrichment never labels a Rust atom with a translation `"transitively-verified"`, and its callers stay `"verified"` too. |
-| `status-origin` | string | no | `"translation"` on every Rust atom whose `verification-status` was copied from Lean (since 0.21.0): the status is imported evidence. Enrichment treats the atom as a blocker seed, so it and every caller that reaches it keep `"verified"` instead of becoming `"transitively-verified"`, and a copied `"trusted"` does not shield its callers. See the hub's [ADR-006 Decision 2](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/decisions/006-correspondence-records.md#decision-2-the-status-origin-marker). |
+| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Copied from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is copied directly. Otherwise, if a primary spec exists, the spec's status is used (a `"transitively-verified"` spec is copied as `"verified"`); if no spec exists, the status is `"unverified"`. Every copied status carries `status-origin: "translation"`, so enrichment never labels a Rust atom with a translation `"transitively-verified"`, and neither does it promote a caller that reaches the atom along a path without a trusted boundary. |
+| `status-origin` | string | no | `"translation"` on every Rust atom whose `verification-status` was copied from Lean (since 0.21.0): the status is imported evidence. Enrichment treats the atom as a blocker seed, so it and every caller that reaches it along a path without a trusted boundary (an unmarked `"trusted"` atom) keep `"verified"` instead of becoming `"transitively-verified"`, and a copied `"trusted"` does not shield its callers. See the hub's [ADR-006 Decision 2](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/decisions/006-correspondence-records.md#decision-2-the-status-origin-marker). |
 | `maps-to` | array of objects | no | Correspondence records written by the merge step (since 0.21.0), one per translation: `{"target": <Lean code-name>, "confidence": ..., "method": ...}` (`method` omitted when absent). See [Correspondence Records](#correspondence-records). |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
@@ -274,12 +274,12 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 
 These fields include data from `probe-lean extract` (passed through via the
 atom's extension map) and additional fields computed by probe-aeneas during
-the enrichment pass:
+the Aeneas metadata pass:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `verification-status` | string | yes | `"transitively-verified"`, `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. `"trusted"` indicates the declaration belongs to the trust base (axioms or `*External.lean` files). After enrichment: `"transitively-verified"` means all transitive deps are verified/trusted. |
-| `status-origin` | string | no | `"kernel-taint"`, passed through from probe-lean >= 0.16.0: the `verified` label reflects taint the kernel found but the emitted graph cannot express. Enrichment never promotes such an atom or its callers. |
+| `verification-status` | string | yes | `"transitively-verified"`, `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. `"trusted"` indicates the declaration belongs to the trust base (axioms or `*External.lean` files). After enrichment (hub P23), a `"verified"` atom becomes `"transitively-verified"` only when no dependency path without a trusted boundary reaches a `"failed"`/`"unverified"` atom or an atom carrying `status-origin`. |
+| `status-origin` | string | no | `"kernel-taint"`, passed through from probe-lean >= 0.16.0: the `verified` label reflects taint the kernel found but the emitted graph cannot express. Enrichment never promotes such an atom, or a caller that reaches it along a path without a trusted boundary. |
 | `mapped-from` | array of objects | no | Correspondence records written by the merge step (since 0.21.0): `{"target": <Rust code-name>, "confidence": ..., "method": ...}` for each Rust atom that translates to this declaration. See [Correspondence Records](#correspondence-records). |
 | `trusted-reason` | string | no | Why the atom is trusted: `"axiom"` (axiomatic declaration) or `"external"` (defined in an `*External.lean` file). Present only when `verification-status` is `"trusted"`. |
 | `type-dependencies` | array of strings | yes | Code-names of dependencies used in the type signature |
@@ -489,7 +489,8 @@ into two correspondence records and never adds `dependencies` entries:
 - The Lean atom gets a `mapped-from` record whose `target` is the Rust code-name.
 
 Both records carry the translation's `confidence` and, when present, its
-`method`, exactly as in the `translate` output. The records do not take part
+`method` from the `translate` step, in canonical form: endpoints have
+trailing `.` stripped and an empty `method` is omitted. The records do not take part
 in enrichment. Earlier releases instead added cross-language dependency
 edges, which let enrichment combine evidence across the two graphs. The
 normative definition is the hub's
@@ -518,7 +519,7 @@ entries with:
   "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.9.0",
+    "version": "0.21.0",
     "command": "translate"
   },
   "timestamp": "2026-03-16T12:00:00Z",
@@ -701,10 +702,12 @@ Consumers should check `schema-version` and reject files with an unsupported
 major version. A minor bump is backward-compatible: a `3.0` consumer can read a
 `3.1` file (the new fields are optional).
 
-The `probe-aeneas/extract` envelope is at `3.1` since 0.21.0: it carries the
-hub 3.1 `maps-to`/`mapped-from` correspondence records and the
-`status-origin` marker. The `probe/mappings` (`translate`) envelope remains
-`3.0`, because it gained no new fields.
+Both envelopes stamp `3.0`. Since 0.21.0 the `probe-aeneas/extract` data
+carries the hub 3.1 `maps-to`/`mapped-from` correspondence records and the
+`status-origin` marker, but the hub defines 3.1 as a hub-side minor:
+producers keep stamping `3.0`. The change that matters to consumers, no
+cross-language edges in `dependencies`, is identified by `tool.version`
+(>= 0.21.0, the hub's ADR-006 version gate), not by the schema number.
 
 ---
 

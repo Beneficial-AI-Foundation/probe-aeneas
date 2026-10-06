@@ -712,8 +712,7 @@ fn resolve_inputs(
     }
 }
 
-/// Run the translate step, returning the generated mapping records in
-/// canonical form (see [`canonicalize_mappings`]).
+/// Run the translate step, returning the generated mapping records.
 ///
 /// The records stay authoritative through the rest of the pipeline: merge
 /// writes their `confidence`/`method` into the `maps-to`/`mapped-from`
@@ -749,7 +748,7 @@ fn run_translate(
         println!("    {conf}: {count}");
     }
 
-    Ok(canonicalize_mappings(mappings))
+    Ok(mappings)
 }
 
 /// Put mapping records in the canonical form the hub's `load_mappings` gives
@@ -776,7 +775,8 @@ fn canonicalize_mappings(mappings: Vec<Mapping>) -> Vec<Mapping> {
 
 /// Merge atoms with pre-computed translations and produce the final output.
 ///
-/// The pipeline has four clearly separated phases:
+/// The pipeline has four clearly separated phases (docs/architecture.md
+/// numbers translation generation as phase 1, so its phases 2-4 are 1-3 here):
 /// 1. **Merge** — generic `probe merge` operation via the hub's raw staging
 ///    primitive `merge_atom_files_raw`: authority validation, normalization,
 ///    conflict resolution and `maps-to`/`mapped-from` correspondence records,
@@ -808,16 +808,19 @@ fn run_extract_with_translations(
     skip_enrich: bool,
 ) -> Result<()> {
     warn_on_old_probe_rust(rust_path);
+    // Canonicalize here, next to the lookups that depend on it, so every
+    // caller gets the same endpoint rule as the merged keys.
+    let mappings = canonicalize_mappings(mappings.to_vec());
     // Phase 1: Merge (generic probe operation, raw staging: no enrichment)
     // merge_atom_files_raw still returns Result<_, String>; bridge via anyhow.
     println!("\nMerging atoms with translations...");
     let (mut merged, provenance, stats) =
-        merge_atom_files_raw(&[rust_path, lean_path], Some(mappings))
+        merge_atom_files_raw(&[rust_path, lean_path], Some(&mappings))
             .map_err(anyhow::Error::msg)
             .context("merge atom files")?;
     // Derived index over the canonical records (same normalization as the
     // merged keys); confidence is never reconstructed from it.
-    let (from_to, _) = endpoint_lookup_maps(mappings);
+    let (from_to, _) = endpoint_lookup_maps(&mappings);
 
     let output_path_buf;
     let output_path = match output_path {
@@ -834,14 +837,14 @@ fn run_extract_with_translations(
         .map(|p| p.source.package.as_str())
         .unwrap_or("");
 
-    // Phase 1.5: Prefix Rust code-paths with crate directory when the Rust
+    // Phase 1b: Prefix Rust code-paths with crate directory when the Rust
     // crate lives in a subdirectory of the repository root (e.g. crate.dir =
     // "curve25519-dalek" → "src/foo.rs" becomes "curve25519-dalek/src/foo.rs").
     if let Some(prefix) = rust_path_prefix {
         prefix_rust_code_paths(&mut merged, prefix);
     }
 
-    // Phase 2: Enrich (Aeneas-specific)
+    // Phase 2: Aeneas metadata (Aeneas-specific)
     enrich_with_aeneas_metadata(&mut merged, &from_to, cfg_config, &config.out_of_scope);
     enrich::enrich_lean_atom_flags(&mut merged, rust_crate_name, config, aux_defs);
 
@@ -1306,8 +1309,10 @@ fn write_aeneas_envelope(
 
     let envelope = MergedAtomEnvelope {
         schema: "probe-aeneas/extract".to_string(),
-        // 3.1: the hub minor that adds `maps-to`/`mapped-from` records.
-        schema_version: "3.1".to_string(),
+        // Stays 3.0 although the data carries the hub 3.1 records: 3.1 is a
+        // hub-side minor and producers keep stamping 3.0 (hub schema.md
+        // version history; ADR-006 coordinates the change by tool version).
+        schema_version: "3.0".to_string(),
         tool: Tool {
             name: "probe-aeneas".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -3045,9 +3050,17 @@ charon:
             skip_enrich,
         )
         .expect("pipeline");
+        // The output must be acceptable at the hub's recomputation
+        // boundaries (version gate at 0.21.0, composed provenance, P9).
+        let validated = probe::authority::load_validated_atom_file(
+            &out,
+            probe::authority::AuthorityScope::Recompute,
+        )
+        .expect("hub accepts probe-aeneas output for re-merge");
+        assert_eq!(validated.provenance.len(), 2);
         let json: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
-        assert_eq!(json["schema-version"], "3.1");
+        assert_eq!(json["schema-version"], "3.0");
         json["data"].as_object().unwrap().clone()
     }
 
@@ -3214,23 +3227,19 @@ charon:
         // normalize by the same rule or the metadata lookup misses the atom.
         let rust =
             std::collections::BTreeMap::from([(format!("{RUST_FN}."), make_rust_atom("my_fn"))]);
-        let mappings = canonicalize_mappings(vec![Mapping {
+        let mappings = [Mapping {
             from: format!("{RUST_FN}."),
-            method: Some(String::new()),
             ..exact_mapping()
-        }]);
-        assert_eq!(mappings[0].from, RUST_FN);
-        assert_eq!(
-            mappings[0].method, None,
-            "an empty method is canonicalized to absent"
-        );
+        }];
 
         let data = run_pipeline(rust, contaminated_lean(), &mappings, false);
         assert_eq!(data[RUST_FN]["translation-name"], LEAN_FN);
         assert_eq!(data[RUST_FN]["status-origin"], "translation");
         assert_eq!(
             data[RUST_FN]["maps-to"],
-            serde_json::json!([{ "target": LEAN_FN, "confidence": "exact" }])
+            serde_json::json!([{
+                "target": LEAN_FN, "confidence": "exact", "method": "rust-qualified-name",
+            }])
         );
     }
 

@@ -45,7 +45,7 @@ probe-aeneas extract \
 
 **Results** (2026-03-18):
 - Total entries: 2290 (603 Rust + 1687 Lean)
-- Cross-language edges: 1132
+- Cross-language edges: 1132 (pre-0.21.0 output; since 0.21.0 extract adds no edges and prints `Correspondence records` instead)
 - Stubs remaining: 119
 - Rust atoms with translation metadata: 162
 
@@ -102,7 +102,7 @@ workspace root.
 - probe-lean: 1687 atoms (1631 verified, 56 unverified)
 - listfuns: 557 functions
 - Translations: 162 (all `exact`)
-- Merge: 2290 total entries, 1132 cross-language edges, 119 stubs remaining
+- Merge: 2290 total entries, 1132 cross-language edges (pre-0.21.0), 119 stubs remaining
 
 **Lean atom breakdown:**
 
