@@ -8,11 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [0.21.0] - 2026-10-06
 
-The hub ADR-006 contract release (#71, closes #70, closes #73). 0.21.0 is the version
+The hub ADR-006 contract release (closes #70, #71 and #73). 0.21.0 is the version
 the hub 0.5.0 version gate requires of `probe-aeneas/extract` envelopes.
-Still open from #71: re-extracting the `examples/` fixtures with probe-lean
-0.16.0 once it is released. Until then `examples/aeneas_curve25519-dalek_4.1.3.json`
-is pre-0.21.0 output (injected cross-language edges, no records).
 
 ### Changed
 - **Breaking**: requires the probe hub 0.5.0. Translations no longer add
@@ -78,6 +75,10 @@ is pre-0.21.0 output (injected cross-language edges, no records).
   `Cross-lang edges`.
 - README, USAGE, SCHEMA and architecture docs describe correspondence
   records instead of cross-language dependency edges.
+- The `examples/` fixtures and `docs/validation-merged-json.md` are
+  removed. A small synthetic fixture in `tests/fixtures/mini/` replaces them
+  in the integration test. Real-data checks run on the canonical test
+  projects (see docs/testing.md).
 
 ## [0.20.0] - 2026-09-09
 

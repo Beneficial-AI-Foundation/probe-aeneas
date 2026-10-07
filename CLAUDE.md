@@ -47,8 +47,10 @@ docs/
 ├── architecture.md    # How probe-aeneas relates to probe merge
 ├── SCHEMA.md          # JSON schema specification for all output formats
 ├── USAGE.md           # Full command reference with examples
-└── testing.md         # Manual testing notes
-examples/              # Sample input/output JSON files (curve25519-dalek ↔ Curve25519Dalek)
+└── testing.md         # Manual testing on real Aeneas projects
+tests/
+├── extract_check.rs   # Integration test: library extract on the synthetic fixture
+└── fixtures/mini/     # Synthetic Rust and Lean extracts and functions.json
 ```
 
 ## Architecture

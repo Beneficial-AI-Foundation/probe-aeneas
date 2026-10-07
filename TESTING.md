@@ -8,16 +8,16 @@ cargo test
 
 ## Test layers
 
-| Layer | Count | Location | Requires |
-|-------|-------|----------|----------|
-| Unit tests | 13 | `src/translate.rs` (`#[cfg(test)]` module) | Nothing |
-| Integration tests | 5 | `tests/extract_check.rs` | Nothing |
+| Layer | Location | Requires |
+|-------|----------|----------|
+| Unit tests | `#[cfg(test)]` modules in `src/` | Nothing |
+| Integration test | `tests/extract_check.rs` | Nothing |
 
 All tests run without external tools or `#[ignore]`.
 
 ## Unit tests
 
-13 tests in `src/translate.rs` covering:
+The tests in `src/translate.rs` cover:
 
 - Rust name normalization (generics stripping, ref removal)
 - Line range parsing and overlap detection
@@ -33,20 +33,34 @@ Run only unit tests: `cargo test --lib`
 
 ## Integration tests
 
-5 tests in `tests/extract_check.rs`:
+`library_extract_on_synthetic_fixture` in `tests/extract_check.rs` runs
+`run_extract` through the library API on the synthetic fixture in
+`tests/fixtures/mini/`. The files are hand-written: `rust.json` is stamped
+as probe-rust 0.12.0 output, `lean.json` as probe-lean 0.16.0 output, and
+`functions.json` lists the translations. The test needs no external tools.
+It checks the envelope fields and one outcome for each Rust function:
 
-| Test | What it checks |
-|------|---------------|
-| `example_merged_json_has_valid_structure` | Validates `MergedEnvelope` top-level fields: schema (`probe-aeneas/extract`), schema-version, tool, inputs array, timestamp, data object |
-| `example_merged_json_atoms_have_required_fields` | All atoms have `probe:` key prefix, non-empty `display-name`, `kind`, and `language` |
-| `example_merged_json_rust_atoms_have_translations` | Rust atoms have `untracked` field; at least some have `translation-name` |
-| `micro_fixture_structural_check` | Loads the `aeneas_micro` fixture from `probe-extract-check` as `AtomEnvelope` and runs `check_all` (skips gracefully if fixture not found) |
-| `library_extract_with_pregenerated_json` | Runs `run_extract` via the library API with pre-generated example files (`examples/rust_*.json`, `examples/lean_*.json`, `examples/functions.json`). The Lean example comes from probe-lean 0.4.5, which the hub version gate rejects, so the test runs on a copy restamped as 0.16.0 until the examples are re-extracted. Validates the merged output has both Rust and Lean atoms with translation metadata, one `maps-to` record per translated Rust atom, `mapped-from` records on Lean atoms, and `status-origin: "translation"` on every copied Rust status. |
+- `add`: an `exact` match through `rust-qualified-name`, a copied `verified`
+  status marked `status-origin: "translation"`, and `is-public-api` passed
+  through.
+- `Point::scale`: a `file-and-name` match through `file+display-name`. Its
+  primary spec carries `status-origin: "kernel-taint"`. The marker stays on
+  the Lean spec, and the Rust copy is marked `"translation"`.
+- `helper`: a `file-and-lines` match through `file+line-overlap`. The Lean
+  def has no spec, so the Rust atom gets no status and stays tracked.
+- `Point::new` in `src/point.rs`, `src/other.rs` and `src/shadow.rs`: the
+  three share one `rust-qualified-name`. The `functions.json` source file
+  picks the one in `src/point.rs` (`exact-disambiguated`), and the others stay
+  unmatched. The matched atom key sorts between the other two, so the test
+  fails if the match takes the first or the last candidate.
+- `untranslated`: no match, no status, and `untracked: false`.
 
-The `library_extract_with_pregenerated_json` test exercises the full merge
-pipeline (load atoms, generate translations, merge, write output) without
-needing any external tools -- it uses the pre-generated example JSON files
-shipped in `examples/`.
+The test also checks that enrichment runs: the unmarked Lean spec
+`Mini.add_spec` becomes `transitively-verified`.
+
+The fixture has no `translation.json`, so strategy 0 (`charon-def-id`) does
+not run. The unit tests in `src/translate.rs` cover it. Real-data checks run
+outside the repo on the canonical test projects (see `docs/testing.md`).
 
 ## CI
 
@@ -56,15 +70,14 @@ shipped in `examples/`.
 2. **Clippy** -- `cargo clippy --all-targets -- -D warnings`
 3. **Test** -- `cargo test --verbose`
 
-The CI checks out the sibling `probe` repo alongside for both the
-`probe` build dependency and the `probe-extract-check` dev-dependency.
+Cargo fetches the `probe` dependency from its git tag (see `Cargo.toml`).
 
 ## Adding tests
 
 - **Unit tests:** add to the `#[cfg(test)] mod tests` block in `src/translate.rs` (or create one in another module).
-- **Integration tests:** add to `tests/extract_check.rs`. For `MergedEnvelope` tests, use `serde_json::Value`; for `AtomEnvelope` tests, use `probe_extract_check`.
-- **New example JSON:** place in `examples/` and add corresponding test assertions.
+- **Integration tests:** add to `tests/extract_check.rs`. Read the output envelope as `serde_json::Value`.
+- **Fixture changes:** edit the files in `tests/fixtures/mini/` by hand. Keep them small: add an atom only for a new outcome that the test checks.
 
 ## See also
 
-- `docs/testing.md` -- manual testing record with example commands
+- `docs/testing.md` -- manual testing on real projects
