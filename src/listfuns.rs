@@ -50,8 +50,7 @@ pub enum ListfunsError {
 
     /// Catch-all for context-chained errors built via `anyhow`.
     ///
-    /// Used for io::Error, serde_json::Error, and the `String`-error bridge
-    /// from `probe::commands::merge::merge_atom_files` (not yet migrated).
+    /// Used for io::Error and serde_json::Error.
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

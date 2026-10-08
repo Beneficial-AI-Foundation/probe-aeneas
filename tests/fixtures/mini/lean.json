@@ -1,0 +1,101 @@
+{
+  "schema": "probe-lean/extract",
+  "schema-version": "3.0",
+  "tool": {
+    "name": "probe-lean",
+    "version": "0.16.0",
+    "command": "extract"
+  },
+  "source": {
+    "repo": "",
+    "commit": "",
+    "language": "lean",
+    "package": "Mini",
+    "package-version": "0.1.0"
+  },
+  "timestamp": "2026-10-07T00:00:00Z",
+  "data": {
+    "probe:Mini.add": {
+      "display-name": "Mini.add",
+      "dependencies": [],
+      "code-module": "Mini.Funs",
+      "code-path": "Mini/Funs.lean",
+      "code-text": {
+        "lines-start": 10,
+        "lines-end": 14
+      },
+      "kind": "def",
+      "language": "lean"
+    },
+    "probe:Mini.add_spec": {
+      "display-name": "Mini.add_spec",
+      "dependencies": [
+        "probe:Mini.add"
+      ],
+      "code-module": "Mini.Specs",
+      "code-path": "Mini/Specs.lean",
+      "code-text": {
+        "lines-start": 5,
+        "lines-end": 9
+      },
+      "kind": "theorem",
+      "language": "lean",
+      "verification-status": "verified"
+    },
+    "probe:Mini.Point.scale": {
+      "display-name": "Mini.Point.scale",
+      "dependencies": [
+        "probe:Mini.add"
+      ],
+      "code-module": "Mini.Funs",
+      "code-path": "Mini/Funs.lean",
+      "code-text": {
+        "lines-start": 20,
+        "lines-end": 26
+      },
+      "kind": "def",
+      "language": "lean",
+      "primary-spec": "Mini.Point.scale_correct"
+    },
+    "probe:Mini.Point.scale_correct": {
+      "display-name": "Mini.Point.scale_correct",
+      "dependencies": [
+        "probe:Mini.Point.scale"
+      ],
+      "code-module": "Mini.Specs",
+      "code-path": "Mini/Specs.lean",
+      "code-text": {
+        "lines-start": 15,
+        "lines-end": 22
+      },
+      "kind": "theorem",
+      "language": "lean",
+      "verification-status": "verified",
+      "status-origin": "kernel-taint"
+    },
+    "probe:Mini.helper_inner": {
+      "display-name": "Mini.helper_inner",
+      "dependencies": [],
+      "code-module": "Mini.Funs",
+      "code-path": "Mini/Funs.lean",
+      "code-text": {
+        "lines-start": 30,
+        "lines-end": 38
+      },
+      "kind": "def",
+      "language": "lean"
+    },
+    "probe:Mini.Point.new": {
+      "display-name": "Mini.Point.new",
+      "dependencies": [],
+      "code-module": "Mini.Funs",
+      "code-path": "Mini/Funs.lean",
+      "code-text": {
+        "lines-start": 40,
+        "lines-end": 44
+      },
+      "kind": "def",
+      "language": "lean"
+    }
+  }
+}

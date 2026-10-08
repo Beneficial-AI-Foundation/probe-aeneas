@@ -1,0 +1,36 @@
+{
+  "functions": [
+    {
+      "lean_name": "Mini.add",
+      "rust_name": "mini::add",
+      "source": "src/lib.rs",
+      "lines": "L1-L5",
+      "is_hidden": false,
+      "is_extraction_artifact": false
+    },
+    {
+      "lean_name": "Mini.Point.scale",
+      "rust_name": "mini::point::Point::scale",
+      "source": "src/point.rs",
+      "lines": "L10-L20",
+      "is_hidden": false,
+      "is_extraction_artifact": false
+    },
+    {
+      "lean_name": "Mini.helper_inner",
+      "rust_name": "mini::point::helper_inner",
+      "source": "src/point.rs",
+      "lines": "L31-L39",
+      "is_hidden": false,
+      "is_extraction_artifact": false
+    },
+    {
+      "lean_name": "Mini.Point.new",
+      "rust_name": "mini::Point::new",
+      "source": "src/point.rs",
+      "lines": "L50-L55",
+      "is_hidden": false,
+      "is_extraction_artifact": false
+    }
+  ]
+}

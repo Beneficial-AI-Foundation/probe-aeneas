@@ -2,7 +2,7 @@
 
 Cross-language extract tool for [Aeneas](https://github.com/AeneasVerif/aeneas)-transpiled projects.
 
-`probe-aeneas` bridges `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms) by generating translation mappings and producing a combined call graph with cross-language dependency edges. Output follows the Schema 3.0 envelope format; see [docs/SCHEMA.md](docs/SCHEMA.md) for the full specification.
+`probe-aeneas` bridges `probe-rust` (Rust atoms) and `probe-lean` (Lean atoms) by generating translation mappings and producing a combined call graph in which each translation links a Rust atom to its Lean definition through `maps-to`/`mapped-from` correspondence records. Output follows the Schema 3.x envelope format; see [docs/SCHEMA.md](docs/SCHEMA.md) for the full specification.
 
 ## Prerequisites
 
@@ -114,13 +114,13 @@ For the full command reference with all options, examples, and input modes, see 
 
 ## Example Output
 
-Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` describes a function from either language, with cross-language dependency edges:
+Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` describes a function from either language. A translated Rust atom names its Lean definition in `translation-name` and in a `maps-to` record, and carries the status copied from Lean, marked `status-origin: "translation"`:
 
 ```json
 {
   "schema": "probe-aeneas/extract",
   "schema-version": "3.0",
-  "tool": { "name": "probe-aeneas", "version": "0.9.0", "command": "extract" },
+  "tool": { "name": "probe-aeneas", "version": "0.21.0", "command": "extract" },
   "inputs": [
     { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
     { "schema": "probe-lean/extract", "package": "Curve25519Dalek", "package-version": "0.1.0" }
@@ -129,7 +129,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
   "data": {
     "probe:curve25519-dalek/4.1.3/scalar/Scalar#add()": {
       "display-name": "Scalar::add",
-      "dependencies": ["probe:Curve25519Dalek.Scalar.add"],
+      "dependencies": [],
       "code-module": "scalar",
       "code-path": "src/scalar.rs",
       "code-text": { "lines-start": 42, "lines-end": 67 },
@@ -138,6 +138,11 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
       "translation-name": "probe:Curve25519Dalek.Scalar.add",
       "translation-path": "Curve25519Dalek/Scalar.lean",
       "translation-text": { "lines-start": 10, "lines-end": 25 },
+      "verification-status": "verified",
+      "status-origin": "translation",
+      "maps-to": [
+        { "target": "probe:Curve25519Dalek.Scalar.add", "confidence": "exact", "method": "rust-qualified-name" }
+      ],
       "untracked": false
     }
   }
@@ -146,16 +151,17 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 
 ## How It Works
 
-1. **Input resolution** -- accepts an Aeneas project directory (auto-detects paths from `aeneas-config.yml`), pre-generated JSON files, explicit project paths, or a mix.
+1. **Input resolution** -- accepts an Aeneas project directory (auto-detects paths from `aeneas-config.yml`), pre-generated JSON files, explicit project paths, or a mix. A pre-generated Rust file must come from probe-rust and a Lean file from probe-lean (every provenance entry is checked), so a probe-aeneas output cannot be fed back in. Both inputs also pass the hub's ADR-006 version gate (probe-lean output must come from 0.16.0 or later) before any other work.
 2. **Extraction** -- runs `probe-rust extract --with-charon` on the Rust crate and `probe-lean extract` on the Lean project in parallel. Charon is auto-installed by `probe-rust` if not already present and provides Aeneas-compatible qualified names for Rust functions.
 3. **`functions.json` generation** -- if no `functions.json` is provided, one is generated automatically by parsing the Aeneas-generated `.lean` files in the Lean project. This file maps Lean definitions back to their Rust source names and locations.
 4. **Translation generation** -- matches Rust atoms to Lean atoms via `functions.json` using three strategies in priority order:
    1. `rust-qualified-name` -- exact match via Charon-derived qualified names
    2. `file+display-name` -- same source file + matching base method name
    3. `file+line-overlap` -- same source file + overlapping line ranges
-5. **Merge** -- combines Rust and Lean atom maps, adding cross-language dependency edges where translations exist.
-6. **Enrich** -- adds `translation-name`, `translation-path`, `translation-text`, and `untracked` to Rust atoms. Scope (`untracked`) evaluates the source facts probe-rust (>= 0.10.0) puts on each atom: the `cfg` predicate (parent-file mod-chain gates included; deliberately under-gating where probe-rust's walk cannot see) against the Aeneas build's feature set, plus the `is-unmounted`, `is-foreign` and `trait-required` declaration facts; `untracked-reason` records the cause.
-7. **Schema 3.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
+5. **Merge** -- combines Rust and Lean atom maps with the hub's raw merge (no enrichment yet) and attaches a `maps-to`/`mapped-from` correspondence record pair, with the mapping's confidence and method, for each translation. Dependency edges are never added.
+6. **Aeneas metadata** -- adds `translation-name`, `translation-path`, `translation-text`, the copied `verification-status` (marked `status-origin: "translation"`; none when no spec is found and the Lean def is neither `trusted` nor `failed`), and `untracked` to Rust atoms. A Rust atom with a matched translation stays tracked unless the translation carries `@[out_of_scope]`. Scope (`untracked`) evaluates the source facts probe-rust (>= 0.10.0) puts on each atom: the `cfg` predicate (parent-file mod-chain gates included; deliberately under-gating where probe-rust's walk cannot see) against the Aeneas build's feature set, plus the `is-unmounted`, `is-foreign` and `trait-required` declaration facts; `untracked-reason` records the cause.
+7. **Verification enrichment** -- runs the hub's enrichment once over the merged graph (skipped by `--skip-enrich`). A translation-marked status is imported evidence: neither the atom nor a caller that reaches it along a path without a trusted boundary becomes `transitively-verified`.
+8. **Schema 3.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
 ## How probe-aeneas decides what to analyze
 

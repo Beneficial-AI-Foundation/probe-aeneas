@@ -63,8 +63,13 @@ fallback.
 ### `extract`
 
 Full pipeline: extract atoms (if needed), generate translation mappings, and
-merge Rust + Lean call graphs into a unified atom file with cross-language
-dependency edges.
+merge Rust + Lean call graphs into a unified atom file in which translations
+are `maps-to`/`mapped-from` correspondence records. The Lean input must come
+from probe-lean >= 0.16.0 (the hub's ADR-006 version gate rejects older
+output). `extract` checks both inputs against that gate before translation, so
+an old pre-generated `--lean` file fails before any other work. Auto-install
+does not reuse a probe-lean binary older than 0.16.0. It tries to install a
+newer one, and if none is available it fails before extraction.
 
 ```
 probe-aeneas extract [OPTIONS] [PROJECT]
@@ -136,6 +141,31 @@ flags below. These are mutually exclusive with the positional `PROJECT` argument
 
 Exactly one of `--rust` or `--rust-project` is required (when not using `PROJECT`).
 
+`--rust` and `--lean` accept only the output of the matching extractor. Every
+provenance entry of the `--rust` file must have schema `probe-rust/extract`,
+and of the `--lean` file `probe-lean/extract`. A probe-aeneas output given as
+`--rust` is rejected before any other work. See "Input contract" in
+[SCHEMA.md](SCHEMA.md#input-contract).
+
+The Rust input form changes the scope classification and the code paths:
+
+- `--rust` (pre-generated JSON) has no Rust project, so `extract` resolves no
+  feature set and skips `cfg` scope classification. It also adds no
+  `crate.dir` prefix to code paths.
+- `--rust-project` resolves the default feature set of the project for `cfg`
+  classification, but ignores `charon.cargo_args` and adds no prefix. This
+  works only when the project has one package. For a workspace with several
+  packages, no target package is known, so `extract` skips `cfg`
+  classification.
+- Only the positional `PROJECT` form applies `charon.cargo_args` to the
+  feature set and adds the `crate.dir` prefix.
+
+`extract` supports one target crate. It applies the feature set and the
+prefix of the target crate to every Rust atom, also to the atoms of other
+crates in a merged or workspace input. Do not change the input files during a
+run, and do not run two `extract` runs at the same time on one project: both
+write to `<lean_project>/.verilib/probes/`.
+
 **Input options (Lean):**
 
 | Flag | Description |
@@ -152,9 +182,10 @@ At least one of `--lean` or `--lean-project` is required (when not using `PROJEC
 | `--functions <PATH>` | | Path to `functions.json` (Aeneas name mapping). Auto-generated when `--lean-project` or `PROJECT` is given. Required when using `--lean` alone. |
 | `--translation <PATH>` | | Path to Aeneas's `translation.json` (emitted with the `emit-json` arg). Authoritative loop/primary classification overlay. Auto-detected at the project root (or `aeneas_args.dest`) when `PROJECT` is given; optional otherwise. |
 | `--output <PATH>` | `-o` | Output file path. Default: `<project>/.verilib/probes/aeneas_<pkg>_<ver>.json` when a project root is available; otherwise `aeneas_<pkg>_<ver>.json` in the current directory. |
-| `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`). Defaults to `.verilib/aeneas.json` in the Lean project. |
+| `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`) and the curated `out-of-scope` globs (see [SCHEMA.md](SCHEMA.md#aeneas-config-file)). Defaults to `.verilib/aeneas.json` in the Lean project. |
 | `--lake` | | Use `lake exe listfuns` to generate `functions.json` instead of parsing Aeneas-generated Lean files directly. |
 | `--with-public-api` | | Use `cargo public-api` to compute accurate `is-public-api` on Rust atoms (requires `cargo-public-api`; see below). |
+| `--skip-enrich` | | Skip the hub's verification enrichment, the only enrichment pass in the pipeline. Derived labels (`verified`/`transitively-verified`) then stay as the inputs and the status copy left them until a later `probe enrich` or `probe merge` recomputes them. |
 
 #### Installing `cargo-public-api` (for `--with-public-api`)
 
@@ -384,8 +415,9 @@ For the complete JSON schema specification covering all commands, see
 
 The `extract` command produces a JSON file wrapped in a Schema 3.0 metadata
 envelope with `"probe-aeneas/extract"` schema. The `data` field contains all
-atoms from both inputs, with cross-language dependency edges added where
-translations exist.
+atoms from both inputs. Each translation adds a `maps-to` record on the Rust
+atom and a `mapped-from` record on the Lean atom, and every status copied onto
+a Rust atom carries `status-origin: "translation"`.
 
 ### Translations
 
@@ -421,6 +453,20 @@ Multiple Lean versions can coexist via per-version binaries.
 3. `~/.local/bin/probe-lean` (unversioned symlink / fallback when no `lean-toolchain` is found)
 4. Download pre-built binary from GitHub Releases (`probe-lean-<version>-<platform>.tar.gz`)
 5. Clone from source, pin `lean-toolchain` to the target version, build with `lake build`, install to `~/.local/bin/probe-lean-<version>`
+
+For `extract`, steps 1-5 accept a binary only if `probe-lean --version`
+reports 0.16.0 or later (the hub's ADR-006 version gate). An older binary, or
+one whose version cannot be read, is skipped. Step 4 downloads an archive only
+from a release tagged 0.16.0 or later, and it checks the downloaded binary
+before it installs anything, so a binary below 0.16.0 is never installed from a
+download. A source build (step 5) is installed before the version check. If a
+cached or built binary was rejected and no step produces an accepted one,
+`extract` stops with an error that names the rejected binary and the reason
+(its version, or why the version could not be read). A source build that fails
+reports its own error instead, for example the `lake build` output. If no
+binary was found at all, `extract` shows the source-build error, for example
+that source builds are off. `listfuns` accepts
+any version, because its output does not go through the hub merge.
 
 After installation, a `~/.local/bin/probe-lean` symlink is created pointing
 to the versioned binary.

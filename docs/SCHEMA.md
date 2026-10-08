@@ -1,7 +1,7 @@
 # probe-aeneas Data Schemas
 
-Version: 2.8
-Date: 2026-07-11
+Version: 3.0
+Date: 2026-10-06
 
 This document specifies the JSON output formats produced by each probe-aeneas
 subcommand. It complements the language-agnostic
@@ -11,7 +11,7 @@ the `data` field and the output of non-enveloped commands.
 
 ---
 
-## Common: Envelope (Schema 2.x)
+## Common: Envelope (Schema 3.x)
 
 Both `extract` and `translate` commands wrap their output in a standardized
 metadata envelope. The envelope fields vary slightly between commands (see
@@ -20,7 +20,7 @@ sections below), but share this structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `schema` | string | Data type identifier (e.g. `"probe-aeneas/extract"`) |
-| `schema-version` | string | Interchange spec version (`"3.0"` for both `extract` and `translate`) |
+| `schema-version` | string | Interchange spec version (`"3.0"` for both `extract` and `translate`; see [Schema Evolution](#schema-evolution)) |
 | `tool.name` | string | Always `"probe-aeneas"` |
 | `tool.version` | string | Semver version of the probe-aeneas binary |
 | `tool.command` | string | Subcommand that produced the file |
@@ -41,7 +41,7 @@ sections below), but share this structure:
   "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.9.0",
+    "version": "0.21.0",
     "command": "extract"
   },
   "inputs": [
@@ -94,22 +94,60 @@ sections below), but share this structure:
 | `package` | string | Package/crate name |
 | `package-version` | string | Package version |
 
+### Input contract
+
+`extract` gives correct output when the inputs come from the expected
+extractors. For other input, it promises nothing, but it rejects the cases
+that it can detect cheaply:
+
+- Both inputs must first pass the hub's ADR-006 authority check: no
+  projections, and gated producers at or above their contract release (for
+  example probe-lean >= 0.16.0, probe-aeneas >= 0.21.0). A failing input is
+  rejected with the hub's own error.
+- `--rust` accepts a file whose provenance entries (the `source` of a
+  single-tool file, or every `inputs` entry of a composed file) all have
+  schema `probe-rust/extract`. A `probe merge` of probe-rust files is accepted.
+- `--lean` accepts a file whose provenance entries all have schema
+  `probe-lean/extract`.
+- Other input is rejected before any other work, with an error that names the
+  input and the schema of the first wrong entry. A probe-aeneas output
+  (0.21.0 or later) given as `--rust` fails this way, because it carries a
+  `probe-lean/extract` entry. An older probe-aeneas output fails the authority
+  check first.
+  This matters because probe-rust emits no `verification-status` and no
+  `translation-name`. So each such field on a Rust atom in the output comes
+  from the matches of the same run.
+
+Two more limits apply:
+
+- One target crate. Relevance flags, `cfg` evaluation and the `crate.dir` path
+  prefix assume one target crate. `extract` takes the first Rust provenance
+  entry as the crate name, and applies the feature set of the target package
+  and one prefix to every Rust atom. A file with atoms of several crates (a
+  merge, or a workspace extraction) is accepted, but the atoms of the other
+  crates get the feature set and the prefix of the target crate. Lean atoms
+  whose `rust-source` names another crate get `is-relevant: false`.
+- Inputs must not change during a run. `extract` reads each input file more
+  than once. Two runs at the same time on the same project are not supported,
+  because both write to `<lean_project>/.verilib/probes/`.
+
 ### Data Shape
 
 `data` is an object keyed by code-name. Each value is an atom from one of the
-input files, potentially enriched with cross-language dependency edges. The
-atom format follows the shared `probe` atom schema with language-specific
+input files. Translations link Rust and Lean atoms through `maps-to` /
+`mapped-from` correspondence records (see
+[Correspondence Records](#correspondence-records)); `dependencies` holds only
+each producer's own edges. The atom format follows the shared `probe` atom schema with language-specific
 extension fields passed through verbatim.
 
-**Rust atom example** (with translation metadata, verification status, and cross-language edge):
+**Rust atom example** (with translation metadata, a copied verification status, and a correspondence record):
 
 ```json
 {
   "probe:curve25519-dalek/4.1.3/scalar/Scalar#from_bytes_mod_order()": {
     "display-name": "Scalar::from_bytes_mod_order",
     "dependencies": [
-      "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()",
-      "probe:curve25519_dalek.scalar.Scalar.reduce"
+      "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()"
     ],
     "code-module": "scalar",
     "code-path": "curve25519-dalek/src/scalar.rs",
@@ -121,26 +159,33 @@ extension fields passed through verbatim.
     "is-public": true,
     "is-public-api": true,
     "verification-status": "verified",
+    "status-origin": "translation",
     "translation-name": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
     "translation-path": "Curve25519Dalek/Funs.lean",
-    "translation-text": { "lines-start": 7089, "lines-end": 7098 }
+    "translation-text": { "lines-start": 7089, "lines-end": 7098 },
+    "maps-to": [
+      {
+        "target": "probe:curve25519_dalek.scalar.Scalar.from_bytes_mod_order",
+        "confidence": "exact",
+        "method": "rust-qualified-name"
+      }
+    ]
   }
 }
 ```
 
-In this example, `from_bytes_mod_order` calls Rust `reduce`, which has a
-Lean translation `probe:curve25519_dalek.scalar.Scalar.reduce`. The
-cross-language edge to the Lean `reduce` is added automatically by the
-merge step (see [Cross-Language Edges](#cross-language-edges) below).
+In this example, `from_bytes_mod_order` calls Rust `reduce`. Its status is
+copied from the primary spec of its Lean translation, so it carries
+`status-origin: "translation"`, and the `maps-to` record names that
+translation with the mapping's confidence and method.
 
-**Lean atom example** (def with specs, cross-language edges, and translation metadata):
+**Lean atom example** (def with specs and a correspondence record):
 
 ```json
 {
   "probe:curve25519_dalek.scalar.Scalar.reduce": {
     "display-name": "reduce",
     "dependencies": [
-      "probe:curve25519-dalek/4.1.3/backend/serial/u64/scalar/impl<Scalar52>#[Scalar52]montgomery_reduce()",
       "probe:curve25519_dalek.backend.serial.u64.scalar.Scalar52.montgomery_reduce",
       "probe:curve25519_dalek.scalar.Scalar",
       "probe:curve25519_dalek.scalar.Scalar.unpack",
@@ -172,14 +217,21 @@ merge step (see [Cross-Language Edges](#cross-language-edges) below).
     "is-ignored": false,
     "is-hidden": false,
     "is-extraction-artifact": false,
-    "rust-source": "curve25519-dalek/src/scalar.rs"
+    "rust-source": "curve25519-dalek/src/scalar.rs",
+    "mapped-from": [
+      {
+        "target": "probe:curve25519-dalek/4.1.3/scalar/Scalar#reduce()",
+        "confidence": "exact",
+        "method": "rust-qualified-name"
+      }
+    ]
   }
 }
 ```
 
 Here the Lean `reduce` depends on Lean definitions like `montgomery_reduce`
-and `Scalar.unpack`, plus cross-language edges back to the corresponding
-Rust atoms (added automatically by the merge step).
+and `Scalar.unpack`, and its `mapped-from` record links back to the Rust
+`reduce`.
 
 **Lean trusted atom example** (axiom from `*External.lean`):
 
@@ -209,7 +261,7 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `display-name` | string | yes | Human-readable name |
-| `dependencies` | array of strings | yes | Sorted code-names of callees, including cross-language edges added by extract |
+| `dependencies` | array of strings | yes | Sorted code-names of callees in the atom's own language. Translations never add entries here (they become correspondence records). |
 | `code-module` | string | yes | Module path |
 | `code-path` | string | yes | Source file path relative to the repository root (empty for external stubs). For Rust atoms, includes the crate directory prefix when the crate is a subdirectory (e.g. `curve25519-dalek/src/scalar.rs`). |
 | `code-text` | object | yes | `{"lines-start": N, "lines-end": M}` (1-based, inclusive) |
@@ -236,7 +288,7 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `rust-qualified-name` | string | no | Rust-qualified path (when available from Charon) |
 | `charon-def-id` | integer | no | The charon `FunDeclId` for this function (from probe-rust's span→`FunDecl` resolution). Equals Aeneas's `translation.json` `def_id`, enabling a precise integer join to the Lean translation. Always emitted **together with** `charon-version` (see below). |
 | `charon-version` | string | no | The charon version that produced `charon-def-id`. Provenance-gates the `def_id` join: the join runs only when this matches Aeneas's `translation.json` `charon_version`. |
-| `untracked` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. `true` (out of scope) only when the function has **no** `verification-status` **and** it is cfg-inactive in the Aeneas build (its `cfg` predicate is false), unmounted (`is-unmounted` from probe-rust), a foreign declaration (`is-foreign` from probe-rust), a bodyless trait signature (`trait-required` from probe-rust) **with no matched translation**, or its Lean translation carries `@[out_of_scope]`. Membership in `functions.json` does **not** affect this. |
+| `untracked` | bool | yes | Verification scope (KB P24/P25). `false` (tracked backlog) by default for every compiled Rust function. A function with a `verification-status`, or with a matched translation that does not carry `@[out_of_scope]`, is always `false`. Otherwise `true` (out of scope) when it is cfg-inactive in the Aeneas build (its `cfg` predicate is false), unmounted (`is-unmounted` from probe-rust), a foreign declaration (`is-foreign` from probe-rust), a bodyless trait signature (`trait-required` from probe-rust) **with no matched translation**, its Lean translation carries `@[out_of_scope]`, a non-library target, or a match for a config `out-of-scope` glob. Membership in `functions.json` does **not** affect this. See [`untracked`](#untracked----aeneas-scope-indicator-kb-p24p25). |
 | `is-relevant` | bool | yes | Crate membership, independent of scope: `true` when the atom belongs to the analyzed crate (non-empty `code-path`), `false` for external stubs. |
 | `cfg` | string | no | The item-gating `#[cfg(...)]` predicate governing the function (from probe-rust; with probe-rust >= 0.10.0 this includes the parent-file mod-chain gates, `all(...)`-joined). Omitted when the function is not gated. Used to decide `untracked` (cfg-inactive ⟹ out of scope). |
 | `file-cfg` | string | no | From probe-rust >= 0.10.0: the parent-file mod-chain component of `cfg`, alone (already folded into `cfg`). Used only for reason granularity: when this component alone is inactive, `untracked-reason` says `file-cfg-inactive` instead of the catch-all `cfg-inactive`. |
@@ -246,7 +298,9 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `untracked-reason` | string | no | Emitted by probe-aeneas >= 0.19.0 (older outputs carry `untracked` without it): present exactly when `untracked` is `true`, naming the most intrinsic applicable cause. One of `foreign-declaration`, `trait-signature` (>= 0.20.0), `unmounted`, `file-cfg-inactive`, `cfg-inactive`, `out-of-scope-translation`, `non-library-target`, `config-out-of-scope`. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
-| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Derived from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is propagated directly. Otherwise, if a primary spec exists, the spec's status is used; if no spec exists, the status is `"unverified"`. After enrichment (default, `--skip-enrich` to disable): `"verified"` is upgraded to `"transitively-verified"` when all transitive deps are verified/trusted. |
+| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Copied from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is copied directly. Otherwise, if a primary spec is found, the spec's status is used (a `"transitively-verified"` spec is copied as `"verified"`, and a spec without a status gives `"unverified"`). If no spec is found, the atom gets no `verification-status` and no `status-origin` (since 0.21.0; before, it got `"unverified"`). No status is copied when the translation carries `@[out_of_scope]`. See the note on spec discovery below. Every copied status carries `status-origin: "translation"`, so enrichment never labels a Rust atom with a translation `"transitively-verified"`, and neither does it promote a caller that reaches the atom along a path without a trusted boundary. |
+| `status-origin` | string | no | `"translation"` on every Rust atom whose `verification-status` was copied from Lean (since 0.21.0): the status is imported evidence. Enrichment treats the atom as a blocker seed, so it is never promoted (it keeps its copied status), and a `"verified"` caller that reaches it along a path without a trusted boundary (an unmarked `"trusted"` atom) stays `"verified"` instead of becoming `"transitively-verified"`, and a copied `"trusted"` does not shield its callers. See the hub's [ADR-006 Decision 2](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/decisions/006-correspondence-records.md#decision-2-the-status-origin-marker). |
+| `maps-to` | array of objects | no | Correspondence records written by the merge step (since 0.21.0), one per translation: `{"target": <Lean code-name>, "confidence": ..., "method": ...}` (`method` omitted when absent). See [Correspondence Records](#correspondence-records). |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
 | `translation-text` | object | no | `{"lines-start": N, "lines-end": M}` of the Lean translation |
@@ -257,11 +311,13 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 
 These fields include data from `probe-lean extract` (passed through via the
 atom's extension map) and additional fields computed by probe-aeneas during
-the enrichment pass:
+the Aeneas metadata pass:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `verification-status` | string | yes | `"transitively-verified"`, `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. `"trusted"` indicates the declaration belongs to the trust base (axioms or `*External.lean` files). After enrichment: `"transitively-verified"` means all transitive deps are verified/trusted. |
+| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"unverified"`, `"trusted"`, or `"failed"`. `"trusted"` indicates the declaration belongs to the trust base (axioms or `*External.lean` files). After enrichment (hub P23), a `"verified"` atom becomes `"transitively-verified"` only when no dependency path without a trusted boundary reaches a `"failed"`/`"unverified"` atom or an atom carrying `status-origin`. |
+| `status-origin` | string | no | `"kernel-taint"`, passed through from probe-lean >= 0.16.0: the `verified` label reflects taint the kernel found but the emitted graph cannot express. Enrichment never promotes such an atom, or a caller that reaches it along a path without a trusted boundary. |
+| `mapped-from` | array of objects | no | Correspondence records written by the merge step (since 0.21.0): `{"target": <Rust code-name>, "confidence": ..., "method": ...}` for each Rust atom that translates to this declaration. See [Correspondence Records](#correspondence-records). |
 | `trusted-reason` | string | no | Why the atom is trusted: `"axiom"` (axiomatic declaration) or `"external"` (defined in an `*External.lean` file). Present only when `verification-status` is `"trusted"`. |
 | `type-dependencies` | array of strings | yes | Code-names of dependencies used in the type signature |
 | `term-dependencies` | array of strings | yes | Code-names of dependencies used in the definition body |
@@ -275,9 +331,22 @@ the enrichment pass:
 | `specs` | array of strings | no | Code-names of spec theorems (present on defs/abbrevs that have associated specs) |
 | `primary-spec` | string | no | Code-name of the primary spec theorem for this definition |
 | `is-primary-spec` | bool | no | Whether this atom is the primary spec for a function (present on spec theorems) |
-
-> **Note on spec discovery**: probe-aeneas resolves the primary spec via the `primary-spec` extension on the definition atom, falling back to the `<name>_spec` naming convention. It does not currently walk the `specs` array. Definitions whose specs do not match either pattern will be classified as `"unverified"` on the Rust side.
 | `rust-source` | string or null | no | Rust source reference from Aeneas docstring |
+
+> **Note on spec discovery**: probe-aeneas finds the spec of a Lean def through the `primary-spec` field of the def atom. If that field is absent or names no atom, it uses the atom named `<name>_spec`. It does not read the `specs` array. If neither finds a spec and the def is neither `"trusted"` nor `"failed"`, the Rust function gets no status. It shows as backlog unless its translation carries `@[out_of_scope]`.
+>
+> In probe-lean, a spec of a def is a theorem whose statement names the def. Generated theorems are not specs, unless they carry `@[primary_spec]`. As of probe-lean 0.16.0 (`computeSpecs` in `ProbeLean/Atomize.lean`; the normative source is probe-lean's [schema.md](https://github.com/Beneficial-AI-Foundation/probe-lean/blob/main/docs/schema.md)), probe-lean sets `primary-spec` by the first signal that applies:
+>
+> 1. A `@[primary_spec]` theorem names the def in its statement. If the statement names no def, the proof can name exactly one.
+> 2. Exactly one spec carries `@[progress]`, `@[pspec]` or `@[step]`.
+> 3. A spec has the name `<name>_spec`.
+> 4. The def has exactly one spec.
+>
+> So a def with two or more specs gets no `primary-spec` when no theorem carries `@[primary_spec]`, no single spec has a known attribute, and no spec has the name `<name>_spec`. Its Rust function shows as backlog, unless the def is `"trusted"` or `"failed"`. A theorem that names the def only in its proof is not a spec. The `<name>_spec` fallback of probe-aeneas adds one case only: a theorem with that name that probe-lean does not count as a spec (its statement does not name the def, or it is generated).
+>
+> If the Lean def of a translation with no primary spec contains a `sorry`, the Rust function still shows as backlog. Once a spec exists, the `sorry` shows only on the Lean side: the Lean spec stays `"verified"` instead of `"transitively-verified"`. The Rust atom gets `"verified"` in both cases, because a copied `"transitively-verified"` becomes `"verified"`.
+>
+> probe-lean computes `primary-spec` over the atoms that it writes, so every value names an atom in the same file. If a value names no atom, `extract` prints a warning with the count and up to five Lean atom keys.
 
 ### `untracked` -- Aeneas Scope Indicator (KB P24/P25)
 
@@ -288,8 +357,11 @@ two-state scope model of KB P24/P25.
 **Semantics:**
 - `untracked: false` -- **in scope**. Every compiled Rust function is tracked
   by default. This includes the *backlog*: compiled functions that Aeneas has
-  not translated (or has translated but not yet verified) carry
-  `untracked: false` and no or `"unverified"` `verification-status`.
+  not translated, translated functions with no spec, and translated functions
+  whose spec is not proved. They carry `untracked: false` and no
+  `verification-status`, or `"unverified"` or `"failed"`. A function with a matched translation
+  stays in scope unless the translation carries `@[out_of_scope]` (see
+  "How it is computed" below).
 - `untracked: true` -- **out of scope**, and carries no `verification-status`.
   A function is out of scope only when:
   1. **cfg-inactive** -- its `cfg` predicate is false under the Aeneas build's
@@ -315,10 +387,9 @@ two-state scope model of KB P24/P25.
      **Caveat.** Aeneas does translate some trait *declarations* as interface
      records, so the fact alone does not decide the cause: it fires only on
      signatures with **no matched translation** (4 of the 6 on spqr, for
-     instance). Where a record is matched, the atom normally carries a
-     `verification-status` and P24 keeps it tracked; where the record is
-     annotated `@[out_of_scope]` it carries none, and cause (5) below is
-     reported instead of this one. The consequence to be aware of: a signature
+     instance). Where a record is matched, the matched translation keeps the
+     atom tracked, with or without a status. Where the record is annotated
+     `@[out_of_scope]`, cause (5) below is reported instead of this one. The consequence to be aware of: a signature
      whose interface record exists but is *missed* by the matching strategies
      greys out instead of showing up as untranslated backlog, so a matching gap
      becomes less visible. `extract` prints an out-of-scope count per cause on
@@ -332,10 +403,12 @@ two-state scope model of KB P24/P25.
   5. **`@[out_of_scope]`** -- its generated Lean translation carries the
      `@[out_of_scope]` attribute, an explicit opt-out.
   6. **non-library target** -- its path marks it as compiled outside the
-     verified library (`benches/`, `build.rs`, `tests/`, `examples/`).
+     verified library (`benches/`, `build.rs`, `tests/`, `examples/`). It
+     applies only to a function without a matched translation.
   7. **config out-of-scope** -- it matches the project's curated
      `out-of-scope` globs in `.verilib/aeneas.json` (functions Aeneas
-     structurally does not translate).
+     structurally does not translate). It applies only to a function without a
+     matched translation.
 
   (3) and (4) are the two bodyless-declaration forms Rust has, and they are
   mutually exclusive: probe-rust derives them from disjoint AST visitors. Both
@@ -356,23 +429,42 @@ Aeneas has not translated is backlog (`untracked: false`), not out of scope.
 `functions.json` remains the translation-matching bridge, not the scope oracle.
 
 **How it is computed:** During the `extract` merge step, probe-aeneas populates
-`translation-name`/`verification-status` for translated Rust atoms (a status is
-skipped when the translation is `@[out_of_scope]`). Then, for each Rust atom,
-`untracked` defaults to `false` and is set to `true` only when the atom has no
-`verification-status` **and** is cfg-inactive, unmounted, a foreign
-declaration, a bodyless trait signature with no matched translation, or
-`@[out_of_scope]`. The active
-feature set is resolved via `cargo metadata` (default features overlaid by
-`charon.cargo_args`); when it cannot be resolved, cfg classification is skipped
-entirely (conservative — a backlog atom is never disabled on a guess; the
-configuration-independent `is-unmounted`/`is-foreign`/`trait-required` facts
-still apply). A status-bearing atom is never disabled (P24) — this is what
-keeps the trait *declarations* Aeneas does translate as interface records
-tracked, even though they carry `trait-required`.
+`translation-name` for translated Rust atoms, and `verification-status` when a
+status is found (no status when the translation is `@[out_of_scope]`, or when
+no spec is found and the Lean def is neither `"trusted"` nor `"failed"`). Then,
+for each Rust atom, `untracked` defaults to `false`. The in-scope rule keeps
+the atom `false` when it has a string `verification-status` (P24) or a
+[matched translation](#translation-metadata) that does not carry
+`@[out_of_scope]`. For any other atom, `untracked` is `true` when one of the
+causes above applies.
+`untracked-reason` names the first cause in this order: `foreign-declaration`,
+`trait-signature`, `unmounted`, `file-cfg-inactive`, `cfg-inactive`,
+`out-of-scope-translation`, `non-library-target`, `config-out-of-scope`.
+
+So only `@[out_of_scope]` can untrack a matched translation. The
+`non-library-target` and `config-out-of-scope` causes apply only to functions
+without a matched translation: they exist for functions that Aeneas never
+translates. The policy reason is that a match is strong evidence that Aeneas
+compiled the function. A heuristic match can be wrong (#69), and the wrong
+function then stays tracked. The in-scope rule also keeps the trait *declarations*
+that Aeneas translates as interface records tracked, even though they carry
+`trait-required`. If an atom that the in-scope rule keeps also carries `is-foreign`, `is-unmounted`
+or a false `cfg`, `extract` counts it and prints a warning, because the source
+facts or the match can be stale.
+
+The active feature set is resolved via `cargo metadata` (default features
+overlaid by `charon.cargo_args`). Only the positional `PROJECT` form applies
+`charon.cargo_args`. Pre-generated `--rust` input has no Rust project, so cfg
+classification is skipped (see [USAGE.md](USAGE.md)). When the feature set
+cannot be resolved, cfg
+classification is skipped entirely (conservative: a backlog atom is never
+disabled on a guess). The configuration-independent
+`is-unmounted`/`is-foreign`/`trait-required` facts still apply.
 
 **Consumer guidance:** partition the Rust call graph into in-scope (`false`) and
-out-of-scope (`true`). The verification backlog is exactly the in-scope,
-unspecified functions: `untracked: false` with no/`"unverified"` status.
+out-of-scope (`true`). The verification backlog is exactly the in-scope
+functions without a proved spec: `untracked: false` with no status, or with
+`"unverified"` or `"failed"`.
 
 ### `is-public` -- Rust Visibility Indicator
 
@@ -414,8 +506,8 @@ needed for each field.
 
 #### Aeneas Config File
 
-An optional configuration file for the manual tail of `is-hidden` and all of
-`is-ignored`. Specified via `--aeneas-config` CLI flag or auto-discovered at
+An optional configuration file for the manual tail of `is-hidden`, all of
+`is-ignored`, and the curated `out-of-scope` globs. Specified via `--aeneas-config` CLI flag or auto-discovered at
 `.verilib/aeneas.json` in the Lean project directory.
 
 ```json
@@ -434,13 +526,17 @@ An optional configuration file for the manual tail of `is-hidden` and all of
 |-------|------|-------------|
 | `is-hidden` | array of strings | Lean declaration names (without `probe:` prefix) to mark as hidden |
 | `is-ignored` | array of strings | Lean declaration names (without `probe:` prefix) to mark as ignored |
+| `out-of-scope` | array of strings | Glob patterns (`*` matches any text) matched against the `rust-qualified-name` and the `display-name` of each Rust atom. A pattern must match the whole name. A match sets `untracked: true`, unless the atom has a status or a matched translation. The reason is `config-out-of-scope` only if no earlier cause in the reason order applies. Use it for functions that Aeneas structurally does not translate (for example `Debug` `fmt`). |
 
-Both fields are optional. Omitted lists default to empty.
+All fields are optional. Omitted lists default to empty.
 
 ### Translation Metadata
 
 When a Rust atom has a matching Lean translation, the merged output enriches
-the Rust atom with explicit translation metadata:
+the Rust atom with explicit translation metadata. A Rust atom has a *matched
+translation* when `extract` wrote a string `translation-name` on it.
+`extract` writes one for each mapping from the translate step whose Lean
+target is in the Lean input.
 
 ```json
 {
@@ -461,22 +557,21 @@ Aeneas loop decompositions (e.g. `add_assign_loop`, `add_assign_loop.mutual`)
 are reachable via the Lean definition's own dependency graph, not listed as
 separate translations.
 
-### Cross-Language Edges
+### Correspondence Records
 
-In addition to the translation metadata fields above, `extract` adds
-cross-language dependency edges via transitive expansion. For each atom
-in the merged graph, every dependency that has a known translation gains
-the translated code-name as an additional dependency:
+Since 0.21.0 (hub 0.5.0, ADR-006), the merge step turns each translation
+into two correspondence records and never adds `dependencies` entries:
 
-- Rust atom A calls Rust atom B; B has Lean translation B' →
-  A gains a dependency on B'.
-- Lean atom X calls Lean atom Y; Y has Rust translation Y' →
-  X gains a dependency on Y'.
+- The Rust atom gets a `maps-to` record whose `target` is the Lean code-name.
+- The Lean atom gets a `mapped-from` record whose `target` is the Rust code-name.
 
-This creates cross-language edges wherever a call site crosses the
-Rust/Lean boundary through translated functions. The edges are
-bidirectional in aggregate (Rust callers reach into the Lean graph and
-vice versa) but each individual edge follows the call direction.
+Both records carry the translation's `confidence` and, when present, its
+`method` from the `translate` step, in canonical form: endpoints have
+trailing `.` stripped and an empty `method` is omitted. The records do not take part
+in enrichment. Earlier releases instead added cross-language dependency
+edges, which let enrichment combine evidence across the two graphs. The
+normative definition is the hub's
+[correspondence records](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/engineering/schema.md#correspondence-records-maps-to-mapped-from).
 
 ### External Stubs
 
@@ -501,7 +596,7 @@ entries with:
   "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.9.0",
+    "version": "0.21.0",
     "command": "translate"
   },
   "timestamp": "2026-03-16T12:00:00Z",
@@ -676,19 +771,30 @@ The `listfuns` command has three modes:
 
 ## Schema Evolution
 
-When adding new optional fields, increment the minor version (`2.0` -> `2.1`).
-When changing required fields or their semantics, increment the major version
-(`2.0` -> `3.0`).
+The hub owns the interchange schema number
+([version history](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/engineering/schema.md#version-history)).
+probe-aeneas changes its stamp only when that history says producers do:
+a hub minor (`3.0` -> `3.1`) adds optional fields and producers may keep
+stamping `3.0`; a major (`2.0` -> `3.0`) changes required fields or their
+semantics and lands in lockstep across all producers.
 
 Consumers should check `schema-version` and reject files with an unsupported
-major version. A minor bump is backward-compatible: a `2.0` consumer can read a
-`2.1` file (the new fields are optional).
+major version. A minor bump is backward-compatible for reading: a `3.0`
+consumer can parse a `3.1` file (the new fields are optional).
 
-The `probe-aeneas/extract` envelope is at `2.1`: it carries the optional
-`charon-def-id`/`charon-version` atom fields (passed through from probe-rust).
-The `probe/mappings` (`translate`) envelope remains `2.0` — it gained no new
-fields (the `charon-def-id` `method` value is a backward-compatible addition to
-an existing field).
+Both envelopes stamp `3.0`. Since 0.21.0 the `probe-aeneas/extract` data
+carries the hub 3.1 `maps-to`/`mapped-from` correspondence records and the
+`status-origin` marker, but the hub defines 3.1 as a hub-side minor:
+producers keep stamping `3.0`. The change that matters to consumers, no
+cross-language edges in `dependencies`, is identified by `tool.version`
+(>= 0.21.0, the hub's ADR-006 version gate), not by the schema number.
+
+Parsing is not enough for a consumer that re-merges or re-enriches this
+output. It must use the probe hub 0.5.0 or later. Hub 0.4.0 ignores
+`status-origin`, so its enrichment treats a copied `verified` as local
+evidence. For example, a Rust atom with `verification-status: "verified"`,
+`status-origin: "translation"` and no dependencies stays `verified` under hub
+0.5.0, but hub 0.4.0 promotes it to `transitively-verified`.
 
 ---
 
@@ -696,7 +802,7 @@ an existing field).
 
 ### With probe-rust
 
-probe-aeneas consumes `probe-rust/extract` (Schema 2.x — probe-rust emits `2.1`)
+probe-aeneas consumes `probe-rust/extract` (Schema 3.x — probe-rust emits `3.0`)
 files as input. Charon enrichment on `probe-rust extract` is recommended for best
 translation accuracy: `--with-charon` (or `--translation <manifest>`, which reads
 charon `def_id`s from an Aeneas `translation.json`) enables the `charon-def-id`
@@ -705,15 +811,19 @@ join (strategy 0) and `rust-qualified-name` (strategy 1).
 ### With probe-lean
 
 probe-aeneas consumes `probe-lean/extract` files as input. These follow a
-similar Schema 3.0 envelope with `"lean"` language atoms.
+similar Schema 3.0 envelope with `"lean"` language atoms. Since 0.21.0 the
+input must come from probe-lean >= 0.16.0: the hub's version gate (ADR-006
+Decision 7) rejects older output, because it lacks the `kernel-taint` marker.
 
 ### With probe (shared crate)
 
 probe-aeneas is an instantiation of the generic `probe merge` engine for
 the Aeneas Rust-to-Lean case. The `extract` command generates
-Aeneas-specific translations, calls `merge_atom_maps` from
-`probe::commands::merge` for the combine + cross-language-edge step, then
-enriches the result with Aeneas metadata (`translation-*`, `untracked`).
+Aeneas-specific translations, calls `merge_atom_files_raw` from
+`probe::commands::merge` for the combine + correspondence-record step (no
+enrichment), adds Aeneas metadata (`translation-*`, the copied
+`verification-status` with `status-origin`, `untracked`), and then runs the
+hub's enrichment once.
 Shared types (`Atom`, `Mapping`, `MergedAtomEnvelope`,
 `InputProvenance`, `Tool`, `load_atom_file`) come from `probe::types`.
 See [architecture.md](architecture.md) for the full architectural

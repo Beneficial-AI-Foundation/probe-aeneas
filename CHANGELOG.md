@@ -6,6 +6,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-06
+
+The hub ADR-006 contract release (closes #70, #71 and #73). 0.21.0 is the version
+the hub 0.5.0 version gate requires of `probe-aeneas/extract` envelopes.
+
+### Changed
+- **Breaking**: requires the probe hub 0.5.0. Translations no longer add
+  cross-language `dependencies` edges. The merge step now attaches a
+  `maps-to` record on the Rust atom and a `mapped-from` record on the Lean
+  atom, each carrying the mapping's `confidence` and `method`. Consumers that
+  followed `dependencies` across the Rust/Lean boundary must read the
+  records (or `translation-name`) instead.
+- **Breaking**: the Lean input must come from probe-lean >= 0.16.0. The hub's
+  version gate rejects older output because it lacks the `kernel-taint`
+  marker. Projections are also rejected. `extract` applies the same check
+  to both inputs before translation and before writing `functions.json`, so
+  an old input fails before any other work.
+- **Breaking**: a consumer that re-merges or re-enriches `extract` output
+  must use the probe hub 0.5.0 or later. Hub 0.4.0 ignores `status-origin`
+  and would promote a copied `verified` to `transitively-verified`.
+- probe-lean auto-install no longer reuses a cached binary older than
+  0.16.0 (read from `probe-lean --version`). It installs a newer one, or
+  fails before extraction. If it rejected a binary, the error names that
+  binary and the reason, unless the source build fails. The pre-built download uses only releases tagged
+  0.16.0 or later, and checks the binary before it installs it, so a binary
+  below 0.16.0 is never installed from a download. The version check retries
+  a few times when the binary is briefly busy (`ETXTBSY`) before it rejects
+  it.
+- Every `verification-status` copied from Lean onto a Rust atom carries
+  `status-origin: "translation"`, and a copied `transitively-verified` is
+  copied as `verified`. Enrichment treats the atom as a blocker seed, so
+  imported evidence can no longer turn into `transitively-verified` on the
+  Rust side, on the atom or on a locally verified caller, and a copied
+  `trusted` no longer shields its callers.
+- **Breaking**: a translated Rust function for whose Lean def no primary spec
+  is found gets no `verification-status` and no `status-origin` (#73). See
+  the note on spec discovery in docs/SCHEMA.md. Before, it got
+  `"unverified"`. A Lean def that is `"trusted"` or `"failed"` still gives
+  that status, with or without a spec. A spec without a status still gives
+  `"unverified"`.
+- Every Rust function with a matched translation stays `untracked: false`,
+  unless its translation carries `@[out_of_scope]`. Before, only the copied
+  status kept it tracked, and #73 removes that status for spec-less
+  functions. `non-library-target` and `config-out-of-scope` are now excluded
+  for a matched translation by rule, not only through the copied status. For
+  valid input no `untracked` value changes, because every such function had
+  a status before. The stale-fact warning
+  now counts atoms with a status or a matched translation.
+- **Breaking**: `extract` rejects a `--rust` input unless every provenance
+  entry has schema `probe-rust/extract`, and a `--lean` input unless every
+  entry has schema `probe-lean/extract`. A probe-aeneas output fed back as
+  `--rust` fails before any other work. A `probe merge` of probe-rust files
+  is accepted.
+- `extract` prints a warning when a Lean atom's `primary-spec` names an atom
+  that is not in the Lean input.
+- `extract` stages on the hub's raw merge (`merge_atom_files_raw`), because
+  the hub 0.5.0 `merge_atom_files` enriches. Enrichment runs exactly once,
+  after the Aeneas metadata phase, and `--skip-enrich` keeps meaning no
+  enrichment at all.
+- The generated mapping records stay authoritative through the pipeline.
+  Endpoints are normalized by the hub's P8 rule and the endpoint lookup map
+  is derived from the records, so `confidence`/`method` reach the output
+  instead of being dropped before merge.
+- The `extract` envelope stays `schema-version: "3.0"` (the hub's 3.1 is a
+  hub-side minor; consumers key the new behavior on `tool.version`). The
+  CLI summary reports `Correspondence records added` instead of
+  `Cross-lang edges`.
+- README, USAGE, SCHEMA and architecture docs describe correspondence
+  records instead of cross-language dependency edges.
+- The `examples/` fixtures and `docs/validation-merged-json.md` are
+  removed. A small synthetic fixture in `tests/fixtures/mini/` replaces them
+  in the integration test. Real-data checks run on the canonical test
+  projects (see docs/testing.md).
+
 ## [0.20.0] - 2026-09-09
 
 ### Added

@@ -1,0 +1,111 @@
+{
+  "schema": "probe-rust/extract",
+  "schema-version": "3.0",
+  "tool": {
+    "name": "probe-rust",
+    "version": "0.12.0",
+    "command": "extract"
+  },
+  "source": {
+    "repo": "",
+    "commit": "",
+    "language": "rust",
+    "package": "mini",
+    "package-version": "0.1.0"
+  },
+  "timestamp": "2026-10-07T00:00:00Z",
+  "data": {
+    "probe:mini/0.1.0/add()": {
+      "display-name": "add",
+      "dependencies": [],
+      "code-module": "mini",
+      "code-path": "src/lib.rs",
+      "code-text": {
+        "lines-start": 1,
+        "lines-end": 5
+      },
+      "kind": "exec",
+      "language": "rust",
+      "rust-qualified-name": "mini::add",
+      "is-public-api": true
+    },
+    "probe:mini/0.1.0/point/Point#scale()": {
+      "display-name": "Point::scale",
+      "dependencies": [
+        "probe:mini/0.1.0/add()"
+      ],
+      "code-module": "mini::point",
+      "code-path": "src/point.rs",
+      "code-text": {
+        "lines-start": 10,
+        "lines-end": 20
+      },
+      "kind": "exec",
+      "language": "rust"
+    },
+    "probe:mini/0.1.0/point/helper()": {
+      "display-name": "helper",
+      "dependencies": [],
+      "code-module": "mini::point",
+      "code-path": "src/point.rs",
+      "code-text": {
+        "lines-start": 30,
+        "lines-end": 40
+      },
+      "kind": "exec",
+      "language": "rust"
+    },
+    "probe:mini/0.1.0/untranslated()": {
+      "display-name": "untranslated",
+      "dependencies": [],
+      "code-module": "mini",
+      "code-path": "src/lib.rs",
+      "code-text": {
+        "lines-start": 50,
+        "lines-end": 60
+      },
+      "kind": "exec",
+      "language": "rust",
+      "rust-qualified-name": "mini::untranslated"
+    },
+    "probe:mini/0.1.0/point/Point#new()": {
+      "display-name": "Point::new",
+      "dependencies": [],
+      "code-module": "mini::point",
+      "code-path": "src/point.rs",
+      "code-text": {
+        "lines-start": 50,
+        "lines-end": 55
+      },
+      "kind": "exec",
+      "language": "rust",
+      "rust-qualified-name": "mini::Point::new"
+    },
+    "probe:mini/0.1.0/other/Point#new()": {
+      "display-name": "Point::new",
+      "dependencies": [],
+      "code-module": "mini::other",
+      "code-path": "src/other.rs",
+      "code-text": {
+        "lines-start": 1,
+        "lines-end": 6
+      },
+      "kind": "exec",
+      "language": "rust",
+      "rust-qualified-name": "mini::Point::new"
+    },
+    "probe:mini/0.1.0/shadow/Point#new()": {
+      "display-name": "Point::new",
+      "dependencies": [],
+      "code-module": "mini::shadow",
+      "code-path": "src/shadow.rs",
+      "code-text": {
+        "lines-start": 1,
+        "lines-end": 6
+      },
+      "kind": "exec",
+      "language": "rust",
+      "rust-qualified-name": "mini::Point::new"
+    }
+  }
+}
