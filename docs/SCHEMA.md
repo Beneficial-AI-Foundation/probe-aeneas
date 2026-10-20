@@ -41,7 +41,7 @@ sections below), but share this structure:
   "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.21.0",
+    "version": "0.22.0",
     "command": "extract"
   },
   "inputs": [
@@ -298,8 +298,8 @@ Trusted atoms represent the verification trust base: axioms (`trusted-reason:
 | `untracked-reason` | string | no | Emitted by probe-aeneas >= 0.19.0 (older outputs carry `untracked` without it): present exactly when `untracked` is `true`, naming the most intrinsic applicable cause. One of `foreign-declaration`, `trait-signature` (>= 0.20.0), `unmounted`, `file-cfg-inactive`, `cfg-inactive`, `out-of-scope-translation`, `non-library-target`, `config-out-of-scope`. |
 | `is-public` | bool | yes | `true` if the Rust function is declared `pub` (from Charon LLBC `AttrInfo.public`). `false` for non-`pub` functions or when Charon data is unavailable. |
 | `is-public-api` | bool | no | `true` if the function is part of the crate's public API (reachable by external consumers). Set by probe-rust; absent on external stubs. More selective than `is-public` — a `pub fn` inside a private module has `is-public: true` but `is-public-api: false`. |
-| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Copied from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is copied directly. Otherwise, if a primary spec is found, the spec's status is used (a `"transitively-verified"` spec is copied as `"verified"`, and a spec without a status gives `"unverified"`). If no spec is found, the atom gets no `verification-status` and no `status-origin` (since 0.21.0; before, it got `"unverified"`). No status is copied when the translation carries `@[out_of_scope]`. See the note on spec discovery below. Every copied status carries `status-origin: "translation"`, so enrichment never labels a Rust atom with a translation `"transitively-verified"`, and neither does it promote a caller that reaches the atom along a path without a trusted boundary. |
-| `status-origin` | string | no | `"translation"` on every Rust atom whose `verification-status` was copied from Lean (since 0.21.0): the status is imported evidence. Enrichment treats the atom as a blocker seed, so it is never promoted (it keeps its copied status), and a `"verified"` caller that reaches it along a path without a trusted boundary (an unmarked `"trusted"` atom) stays `"verified"` instead of becoming `"transitively-verified"`, and a copied `"trusted"` does not shield its callers. See the hub's [ADR-006 Decision 2](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/decisions/006-correspondence-records.md#decision-2-the-status-origin-marker). |
+| `verification-status` | string | no | `"transitively-verified"`, `"verified"`, `"failed"`, `"unverified"`, or `"trusted"`. Copied from the Lean translation's primary spec theorem. When the Lean definition is `"trusted"` or `"failed"`, that status is copied directly. Otherwise, if a primary spec is found, the spec's status is copied verbatim, and a spec without a status gives `"unverified"`. After enrichment, a copied `"verified"`/`"transitively-verified"` is refreshed from the final spec label (since 0.22.0; 0.21.0 copied a `"transitively-verified"` spec as `"verified"`). If no spec is found, the atom gets no `verification-status` and no `status-origin` (since 0.21.0; before, it got `"unverified"`). No status is copied when the translation carries `@[out_of_scope]`. See the note on spec discovery below. Every copied status carries `status-origin: "translation"`. A copied `"transitively-verified"` means the Lean spec was clean when probe-aeneas copied it. A copied `"verified"` means no clean assertion was kept, not that a sorry exists. Enrichment never promotes a caller that reaches the atom along a path without a trusted boundary. |
+| `status-origin` | string | no | `"translation"` on every Rust atom whose `verification-status` was copied from Lean (since 0.21.0): the status is imported evidence. Enrichment treats the atom as a blocker seed. A `"verified"` caller that reaches it along a path without a trusted boundary (an unmarked `"trusted"` atom) stays `"verified"` instead of becoming `"transitively-verified"`, and a copied `"trusted"` does not shield its callers. Hub 0.6.0 keeps the copied label as a snapshot. Hub 0.5.0 demotes a copied `"transitively-verified"` to `"verified"`, and probe-aeneas restores it after enrichment in its own output. See the hub's [ADR-006 Decision 2](https://github.com/Beneficial-AI-Foundation/probe/blob/main/kb/decisions/006-correspondence-records.md#decision-2-the-status-origin-marker). |
 | `maps-to` | array of objects | no | Correspondence records written by the merge step (since 0.21.0), one per translation: `{"target": <Lean code-name>, "confidence": ..., "method": ...}` (`method` omitted when absent). See [Correspondence Records](#correspondence-records). |
 | `translation-name` | string | no | Code-name of the primary Lean translation (added by extract) |
 | `translation-path` | string | no | Relative source file path of the Lean translation |
@@ -344,7 +344,7 @@ the Aeneas metadata pass:
 >
 > So a def with two or more specs gets no `primary-spec` when no theorem carries `@[primary_spec]`, no single spec has a known attribute, and no spec has the name `<name>_spec`. Its Rust function shows as backlog, unless the def is `"trusted"` or `"failed"`. A theorem that names the def only in its proof is not a spec. The `<name>_spec` fallback of probe-aeneas adds one case only: a theorem with that name that probe-lean does not count as a spec (its statement does not name the def, or it is generated).
 >
-> If the Lean def of a translation with no primary spec contains a `sorry`, the Rust function still shows as backlog. Once a spec exists, the `sorry` shows only on the Lean side: the Lean spec stays `"verified"` instead of `"transitively-verified"`. The Rust atom gets `"verified"` in both cases, because a copied `"transitively-verified"` becomes `"verified"`.
+> If the Lean def of a translation with no primary spec contains a `sorry`, the Rust function still shows as backlog. Once a spec exists, the Lean spec stays `"verified"` instead of `"transitively-verified"`, and the Rust atom copies that label. So a Rust `"transitively-verified"` with `status-origin: "translation"` means the Lean spec was clean when probe-aeneas copied it.
 >
 > probe-lean computes `primary-spec` over the atoms that it writes, so every value names an atom in the same file. If a value names no atom, `extract` prints a warning with the count and up to five Lean atom keys.
 
@@ -596,7 +596,7 @@ entries with:
   "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.21.0",
+    "version": "0.22.0",
     "command": "translate"
   },
   "timestamp": "2026-03-16T12:00:00Z",

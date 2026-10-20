@@ -97,8 +97,9 @@ fn library_extract_on_synthetic_fixture() {
         assert!(data[key].get("translation-name").is_none(), "{key}");
     }
 
-    // A verified primary spec gives a copied, marked `verified`.
-    assert_eq!(add["verification-status"], "verified");
+    // A clean, unmarked `verified` primary spec is promoted by enrichment, and
+    // the copy is refreshed from the final label (probe#92).
+    assert_eq!(add["verification-status"], "transitively-verified");
     assert_eq!(add["status-origin"], "translation");
     // The kernel-taint marker survives on the Lean spec, and the copy of its
     // status is marked as a translation like any other copy.
