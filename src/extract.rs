@@ -1539,6 +1539,7 @@ fn write_aeneas_envelope(
 /// [`public_api_coverage`]).
 #[derive(Debug, Default, PartialEq, Eq)]
 struct PublicApiCoverage {
+    /// `verified` or `transitively-verified`.
     verified: u32,
     unverified: u32,
     trusted: u32,
@@ -1584,7 +1585,7 @@ fn public_api_coverage(merged: &std::collections::BTreeMap<String, Atom>) -> Pub
             .is_some();
         match status {
             _ if untracked => c.out_of_scope += 1,
-            Some("verified") => c.verified += 1,
+            Some("verified" | "transitively-verified") => c.verified += 1,
             Some("unverified") => c.unverified += 1,
             Some("trusted") => c.trusted += 1,
             Some(_) => c.other_status += 1,
@@ -3019,6 +3020,16 @@ charon:
                 "verified",
                 &[tn(), ("verification-status", serde_json::json!("verified"))],
             ),
+            public(
+                "clean",
+                &[
+                    tn(),
+                    (
+                        "verification-status",
+                        serde_json::json!("transitively-verified"),
+                    ),
+                ],
+            ),
             public("no_spec", &[tn()]),
             public("untranslated", &[]),
             public(
@@ -3050,7 +3061,7 @@ charon:
         assert_eq!(
             public_api_coverage(&merged),
             PublicApiCoverage {
-                verified: 1,
+                verified: 2,
                 unverified: 1,
                 trusted: 1,
                 other_status: 1,
