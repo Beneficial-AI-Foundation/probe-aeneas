@@ -120,7 +120,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 {
   "schema": "probe-aeneas/extract",
   "schema-version": "3.0",
-  "tool": { "name": "probe-aeneas", "version": "0.21.0", "command": "extract" },
+  "tool": { "name": "probe-aeneas", "version": "0.22.0", "command": "extract" },
   "inputs": [
     { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
     { "schema": "probe-lean/extract", "package": "Curve25519Dalek", "package-version": "0.1.0" }
@@ -160,7 +160,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
    3. `file+line-overlap` -- same source file + overlapping line ranges
 5. **Merge** -- combines Rust and Lean atom maps with the hub's raw merge (no enrichment yet) and attaches a `maps-to`/`mapped-from` correspondence record pair, with the mapping's confidence and method, for each translation. Dependency edges are never added.
 6. **Aeneas metadata** -- adds `translation-name`, `translation-path`, `translation-text`, the copied `verification-status` (marked `status-origin: "translation"`; none when no spec is found and the Lean def is neither `trusted` nor `failed`), and `untracked` to Rust atoms. A Rust atom with a matched translation stays tracked unless the translation carries `@[out_of_scope]`. Scope (`untracked`) evaluates the source facts probe-rust (>= 0.10.0) puts on each atom: the `cfg` predicate (parent-file mod-chain gates included; deliberately under-gating where probe-rust's walk cannot see) against the Aeneas build's feature set, plus the `is-unmounted`, `is-foreign` and `trait-required` declaration facts; `untracked-reason` records the cause.
-7. **Verification enrichment** -- runs the hub's enrichment once over the merged graph (skipped by `--skip-enrich`). A translation-marked status is imported evidence: neither the atom nor a caller that reaches it along a path without a trusted boundary becomes `transitively-verified`.
+7. **Verification enrichment** -- runs the hub's enrichment once over the merged graph (skipped by `--skip-enrich`). A translation-marked status is imported evidence: the atom is a blocker seed, so a caller that reaches it along a path without a trusted boundary never becomes `transitively-verified`. Afterwards, each copied `verified`/`transitively-verified` is refreshed from the final Lean spec label, so a clean spec gives a Rust `transitively-verified`.
 8. **Schema 3.0 output** -- wraps the merged call graph in a metadata envelope containing input provenance, tool info, and timestamps.
 
 ## How probe-aeneas decides what to analyze

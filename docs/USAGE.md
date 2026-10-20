@@ -185,7 +185,7 @@ At least one of `--lean` or `--lean-project` is required (when not using `PROJEC
 | `--aeneas-config <PATH>` | | Path to Aeneas config JSON for manual overrides (`is-hidden`, `is-ignored`) and the curated `out-of-scope` globs (see [SCHEMA.md](SCHEMA.md#aeneas-config-file)). Defaults to `.verilib/aeneas.json` in the Lean project. |
 | `--lake` | | Use `lake exe listfuns` to generate `functions.json` instead of parsing Aeneas-generated Lean files directly. |
 | `--with-public-api` | | Use `cargo public-api` to compute accurate `is-public-api` on Rust atoms (requires `cargo-public-api`; see below). |
-| `--skip-enrich` | | Skip the hub's verification enrichment, the only enrichment pass in the pipeline. Derived labels (`verified`/`transitively-verified`) then stay as the inputs and the status copy left them until a later `probe enrich` or `probe merge` recomputes them. |
+| `--skip-enrich` | | Skip the hub's verification enrichment, the only enrichment pass in the pipeline. Derived labels (`verified`/`transitively-verified`) then stay as the inputs and the status copy left them. A later `probe enrich` or `probe merge` recomputes the labels of atoms that are not copies. From hub 0.6.0, copied labels are kept as they are. Copied labels are not refreshed: a clean spec that the Lean input capped at `verified` is copied as `verified`. |
 
 #### Installing `cargo-public-api` (for `--with-public-api`)
 

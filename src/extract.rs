@@ -839,8 +839,9 @@ fn canonicalize_mappings(mappings: Vec<Mapping>) -> Vec<Mapping> {
 ///    but no enrichment (ADR-006).
 /// 2. **Aeneas metadata** — `translation-*`, copied `verification-status`
 ///    marked `status-origin: "translation"`, `untracked`.
-/// 3. **Enrich** — the single enrichment recomputation (P23), skipped by
-///    `--skip-enrich`.
+/// 3. **Enrich** — the single enrichment recomputation (P23), then the
+///    refresh of copied labels from the final Lean labels
+///    ([`refresh_copied_statuses`]); `--skip-enrich` skips both.
 /// 4. **Write** — envelope construction and output.
 ///
 /// Staging on the raw primitive is required: phase 2 writes statuses, so an
@@ -908,13 +909,83 @@ fn run_extract_with_translations(
     // Phase 3: Enrich verification status — the pipeline's only enrichment
     // pass (P23). Translation-marked statuses are blocker seeds here.
     if !skip_enrich {
-        let (transitive, local, _) =
-            probe::commands::propagate::enrich_verification_status(&mut merged);
-        println!("  enrich: ✓ {transitive} transitively-verified, {local} locally verified");
+        probe::commands::propagate::enrich_verification_status(&mut merged);
+        // Phase 3b: the copy in phase 2 read the Lean labels before
+        // enrichment. Refresh it from the final labels: a capped clean spec
+        // (probe-lean --skip-enrich) is copied as transitively-verified, and
+        // a stale clean spec that enrichment lowered is copied as verified.
+        let refreshed = refresh_copied_statuses(&mut merged);
+        // Count after the refresh: the counts from enrichment miss the
+        // refreshed copies.
+        let count = |label: &str| {
+            merged
+                .values()
+                .filter(|a| {
+                    a.extensions
+                        .get("verification-status")
+                        .and_then(|v| v.as_str())
+                        == Some(label)
+                })
+                .count()
+        };
+        println!(
+            "  enrich: ✓ {} transitively-verified, {} locally verified",
+            count("transitively-verified"),
+            count("verified")
+        );
+        if refreshed > 0 {
+            println!("  enrich: refreshed {refreshed} copied status(es) from final Lean labels");
+        }
     }
 
     // Phase 4: Write envelope
     write_aeneas_envelope(merged, provenance, output_path, &stats)
+}
+
+/// Refresh copied `verified`/`transitively-verified` statuses from the final
+/// Lean labels, after the enrichment pass. Returns how many changed.
+///
+/// Phase 2 copies statuses before enrichment and writes the
+/// `status-origin: "translation"` marker, so the copied atoms are blocker
+/// seeds during the pass. The pass can still change a Lean label in either
+/// direction (a clean spec from a probe-lean `--skip-enrich` extract arrives
+/// capped at `"verified"` and is promoted; a stale `"transitively-verified"`
+/// spec over a contaminated dependency is lowered), so the copy is resolved
+/// again here with the same rule, through the atom's own `translation-name`.
+/// Only verified-class copies are refreshed, and only to a verified-class
+/// label; the marker stays.
+// @kb: kb/decisions/006-correspondence-records.md#amendment-2026-10-20-probe92-copied-labels-are-kept
+fn refresh_copied_statuses(merged: &mut std::collections::BTreeMap<String, Atom>) -> usize {
+    let is_verified_class =
+        |v: &serde_json::Value| matches!(v.as_str(), Some("verified" | "transitively-verified"));
+    let updates: Vec<(String, serde_json::Value)> = merged
+        .iter()
+        .filter(|(_, atom)| {
+            atom.extensions
+                .get("status-origin")
+                .and_then(|v| v.as_str())
+                == Some("translation")
+                && atom
+                    .extensions
+                    .get("verification-status")
+                    .is_some_and(is_verified_class)
+        })
+        .filter_map(|(key, atom)| {
+            let lean_name = atom.extensions.get("translation-name")?.as_str()?;
+            let lean_atom = merged.get(lean_name)?;
+            let vs = resolve_verification_status(lean_name, lean_atom, merged)?;
+            (is_verified_class(&vs) && atom.extensions.get("verification-status") != Some(&vs))
+                .then(|| (key.clone(), vs))
+        })
+        .collect();
+    let count = updates.len();
+    for (key, vs) in updates {
+        if let Some(atom) = merged.get_mut(&key) {
+            atom.extensions
+                .insert("verification-status".to_string(), vs);
+        }
+    }
+    count
 }
 
 /// Prefix `code-path` on Rust atoms so paths are relative to the repository
@@ -941,12 +1012,14 @@ fn prefix_rust_code_paths(merged: &mut std::collections::BTreeMap<String, Atom>,
 /// - Otherwise, the primary spec theorem is looked up. No spec found: `None`
 ///   (no status, hub P16/P24). A spec with a status: that status. A spec
 ///   without a status: `"unverified"`.
-/// - A copied `"transitively-verified"` is normalized to `"verified"`
-///   (ADR-006 Decision 2): the label was computed over the Lean graph, and
-///   the copy is imported evidence, which is never a transitive result on
-///   the Rust side.
+/// - The spec label is copied verbatim, `"transitively-verified"` included
+///   (ADR-006 Decision 2 amendment, probe#92): the hub keeps a
+///   translation-marked label as a snapshot of the Lean source label.
 ///
-/// The caller marks a copied status `status-origin: "translation"`.
+/// The caller marks a copied status `status-origin: "translation"`. The
+/// pipeline calls this function again after enrichment to refresh copied
+/// `verified`/`transitively-verified` labels
+/// ([`refresh_copied_statuses`]).
 fn resolve_verification_status(
     lean_name: &str,
     lean_atom: &Atom,
@@ -966,9 +1039,6 @@ fn resolve_verification_status(
             let (_, spec_atom) = enrich::find_primary_spec(stripped, atoms);
             let spec_atom = spec_atom?;
             match spec_atom.extensions.get("verification-status") {
-                Some(vs) if vs.as_str() == Some("transitively-verified") => {
-                    Some(serde_json::json!("verified"))
-                }
                 Some(vs) => Some(vs.clone()),
                 None => Some(serde_json::json!("unverified")),
             }
@@ -1118,9 +1188,10 @@ fn enrich_with_aeneas_metadata(
                 atom.extensions
                     .insert("verification-status".to_string(), vs);
                 // Every copied status is imported evidence: enrichment treats
-                // it as a blocker seed, never promoting the atom or its
-                // callers to transitively-verified, and a copied `trusted`
-                // does not shield its callers (ADR-006 Decision 2, P23).
+                // it as a blocker seed, so its callers are never promoted
+                // through it and a copied `trusted` does not shield them.
+                // The hub keeps the copied label itself (ADR-006 Decision 2
+                // amendment, P23).
                 atom.extensions.insert(
                     "status-origin".to_string(),
                     serde_json::json!("translation"),
@@ -1468,6 +1539,7 @@ fn write_aeneas_envelope(
 /// [`public_api_coverage`]).
 #[derive(Debug, Default, PartialEq, Eq)]
 struct PublicApiCoverage {
+    /// `verified` or `transitively-verified`.
     verified: u32,
     unverified: u32,
     trusted: u32,
@@ -1513,7 +1585,7 @@ fn public_api_coverage(merged: &std::collections::BTreeMap<String, Atom>) -> Pub
             .is_some();
         match status {
             _ if untracked => c.out_of_scope += 1,
-            Some("verified") => c.verified += 1,
+            Some("verified" | "transitively-verified") => c.verified += 1,
             Some("unverified") => c.unverified += 1,
             Some("trusted") => c.trusted += 1,
             Some(_) => c.other_status += 1,
@@ -2948,6 +3020,16 @@ charon:
                 "verified",
                 &[tn(), ("verification-status", serde_json::json!("verified"))],
             ),
+            public(
+                "clean",
+                &[
+                    tn(),
+                    (
+                        "verification-status",
+                        serde_json::json!("transitively-verified"),
+                    ),
+                ],
+            ),
             public("no_spec", &[tn()]),
             public("untranslated", &[]),
             public(
@@ -2979,7 +3061,7 @@ charon:
         assert_eq!(
             public_api_coverage(&merged),
             PublicApiCoverage {
-                verified: 1,
+                verified: 2,
                 unverified: 1,
                 trusted: 1,
                 other_status: 1,
@@ -3592,6 +3674,93 @@ charon:
     }
 
     #[test]
+    fn stale_clean_spec_copy_ends_verified() {
+        // The Lean spec arrives transitively-verified but rests on an
+        // unverified lemma. Phase 2 copies the stale clean label, and
+        // enrichment lowers the spec. A leaf Rust atom must not keep a clean
+        // label over a sorry. Hub 0.5.0 enrichment lowers the copy itself;
+        // `refresh_lowers_a_stale_clean_copy` covers the refresh alone.
+        let lean = std::collections::BTreeMap::from([
+            (LEAN_FN.to_string(), make_lean_atom("my_fn")),
+            (
+                LEAN_SPEC.to_string(),
+                with_deps(
+                    make_spec_atom("my_crate.my_fn", "transitively-verified"),
+                    &[LEAN_LEMMA],
+                ),
+            ),
+            (
+                LEAN_LEMMA.to_string(),
+                with_status(make_lean_atom("lemma"), "unverified"),
+            ),
+        ]);
+        let rust =
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]);
+        let data = run_pipeline(rust, lean, &[exact_mapping()], false);
+
+        assert_eq!(status(&data, LEAN_SPEC), "verified");
+        assert_eq!(status(&data, RUST_FN), "verified");
+        assert_eq!(data[RUST_FN]["status-origin"], "translation");
+    }
+
+    #[test]
+    fn refresh_lowers_a_stale_clean_copy() {
+        // The state a hub that keeps copied labels leaves after enrichment:
+        // the Lean spec is lowered, the copy is still transitively-verified.
+        let mut copy = with_status(make_rust_atom("my_fn"), "transitively-verified");
+        copy.extensions.insert(
+            "status-origin".to_string(),
+            serde_json::json!("translation"),
+        );
+        copy.extensions
+            .insert("translation-name".to_string(), serde_json::json!(LEAN_FN));
+        let mut merged = std::collections::BTreeMap::from([
+            (RUST_FN.to_string(), copy),
+            (LEAN_FN.to_string(), make_lean_atom("my_fn")),
+            (
+                LEAN_SPEC.to_string(),
+                make_spec_atom("my_crate.my_fn", "verified"),
+            ),
+        ]);
+
+        assert_eq!(refresh_copied_statuses(&mut merged), 1);
+        let rust = &merged[RUST_FN].extensions;
+        assert_eq!(rust["verification-status"], "verified");
+        assert_eq!(rust["status-origin"], "translation");
+        assert_eq!(refresh_copied_statuses(&mut merged), 0, "idempotent");
+    }
+
+    #[test]
+    fn copied_trusted_spec_is_kept_and_does_not_shield_callers() {
+        // The Lean def has no status; its primary spec is trusted (e.g. an
+        // axiom). The copy is a marked `trusted`, which the refresh leaves
+        // alone and which is a blocker seed, not a trusted boundary.
+        let lean = std::collections::BTreeMap::from([
+            (LEAN_FN.to_string(), make_lean_atom("my_fn")),
+            (
+                LEAN_SPEC.to_string(),
+                make_spec_atom("my_crate.my_fn", "trusted"),
+            ),
+        ]);
+        let rust = std::collections::BTreeMap::from([
+            (RUST_FN.to_string(), make_rust_atom("my_fn")),
+            (
+                RUST_CALLER.to_string(),
+                with_deps(
+                    with_status(make_rust_atom("caller"), "verified"),
+                    &[RUST_FN],
+                ),
+            ),
+        ]);
+        let data = run_pipeline(rust, lean, &[exact_mapping()], false);
+
+        assert_eq!(status(&data, LEAN_SPEC), "trusted");
+        assert_eq!(status(&data, RUST_FN), "trusted");
+        assert_eq!(data[RUST_FN]["status-origin"], "translation");
+        assert_eq!(status(&data, RUST_CALLER), "verified");
+    }
+
+    #[test]
     fn locally_verified_caller_of_copied_status_is_not_promoted() {
         let rust = std::collections::BTreeMap::from([
             (RUST_FN.to_string(), make_rust_atom("my_fn")),
@@ -3619,30 +3788,90 @@ charon:
         );
     }
 
-    #[test]
-    fn imported_transitively_verified_is_demoted() {
-        // A clean Lean graph whose spec was already enriched upstream.
-        let lean = std::collections::BTreeMap::from([
+    fn clean_lean(spec_status: &str) -> std::collections::BTreeMap<String, Atom> {
+        std::collections::BTreeMap::from([
             (LEAN_FN.to_string(), make_lean_atom("my_fn")),
             (
                 LEAN_SPEC.to_string(),
-                make_spec_atom("my_crate.my_fn", "transitively-verified"),
+                make_spec_atom("my_crate.my_fn", spec_status),
             ),
-        ]);
+        ])
+    }
+
+    #[test]
+    fn imported_transitively_verified_is_kept() {
+        // A clean Lean graph whose spec was already enriched upstream
+        // (probe#92: the copied label is kept verbatim).
         let rust =
             std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]);
 
-        // Copy-time normalization alone, before any enrichment.
-        let raw = run_pipeline(rust.clone(), lean.clone(), &[exact_mapping()], true);
-        assert_eq!(status(&raw, RUST_FN), "verified");
+        let raw = run_pipeline(
+            rust.clone(),
+            clean_lean("transitively-verified"),
+            &[exact_mapping()],
+            true,
+        );
+        assert_eq!(status(&raw, RUST_FN), "transitively-verified");
         assert_eq!(raw[RUST_FN]["status-origin"], "translation");
 
-        let data = run_pipeline(rust, lean, &[exact_mapping()], false);
-        assert_eq!(status(&data, RUST_FN), "verified");
+        let data = run_pipeline(
+            rust,
+            clean_lean("transitively-verified"),
+            &[exact_mapping()],
+            false,
+        );
+        assert_eq!(status(&data, RUST_FN), "transitively-verified");
+        assert_eq!(data[RUST_FN]["status-origin"], "translation");
+        assert_eq!(status(&data, LEAN_SPEC), "transitively-verified");
+    }
+
+    #[test]
+    fn capped_clean_spec_is_refreshed_after_enrichment() {
+        // A probe-lean --skip-enrich extract caps a clean spec at "verified"
+        // (no kernel-taint marker). Phase 3 promotes it; the refresh copies
+        // the final label. Without enrichment there is nothing to refresh.
+        let rust =
+            std::collections::BTreeMap::from([(RUST_FN.to_string(), make_rust_atom("my_fn"))]);
+
+        let raw = run_pipeline(
+            rust.clone(),
+            clean_lean("verified"),
+            &[exact_mapping()],
+            true,
+        );
+        assert_eq!(status(&raw, RUST_FN), "verified");
+
+        let data = run_pipeline(rust, clean_lean("verified"), &[exact_mapping()], false);
+        assert_eq!(status(&data, LEAN_SPEC), "transitively-verified");
+        assert_eq!(status(&data, RUST_FN), "transitively-verified");
+        assert_eq!(data[RUST_FN]["status-origin"], "translation");
+    }
+
+    #[test]
+    fn caller_of_clean_copied_status_is_not_promoted() {
+        let rust = std::collections::BTreeMap::from([
+            (RUST_FN.to_string(), make_rust_atom("my_fn")),
+            (
+                RUST_CALLER.to_string(),
+                with_deps(
+                    with_status(make_rust_atom("caller"), "verified"),
+                    &[RUST_FN],
+                ),
+            ),
+        ]);
+        let data = run_pipeline(
+            rust,
+            clean_lean("transitively-verified"),
+            &[exact_mapping()],
+            false,
+        );
+
+        assert_eq!(status(&data, RUST_FN), "transitively-verified");
         assert_eq!(
-            status(&data, LEAN_SPEC),
-            "transitively-verified",
-            "the Lean side's own clean label is unaffected"
+            status(&data, RUST_CALLER),
+            "verified",
+            "a translated atom stays a blocker seed even when its copied \
+             label is clean"
         );
     }
 

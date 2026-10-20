@@ -16,7 +16,7 @@ specific case of Rust and Lean projects transpiled by
 [Aeneas](https://github.com/AeneasVerif/aeneas). It generates the
 translations the merge needs, calls the generic merge, layers on
 Aeneas-specific metadata that the generic engine does not know about, and
-then runs the hub's enrichment once.
+then runs the hub's enrichment once and refreshes the copied labels.
 
 ## The extract pipeline
 
@@ -34,7 +34,7 @@ runs, extracted inputs right after extraction.
                ┌──────────────────┐  ┌──────────────────────┐  ┌──────────────────┐  ┌──────────────┐
  Rust atoms ──▶│                  │  │                      │  │                  │  │              │
  Lean atoms ──▶│ 1. Generate      │─▶│ 2. merge_atom_files_ │─▶│ 3. Aeneas        │─▶│ 4. Enrich    │──▶ Output
- functions  ──▶│    translations  │  │    raw (probe crate) │  │    metadata      │  │    (once)    │
+ functions  ──▶│    translations  │  │    raw (probe crate) │  │    metadata      │  │  + refresh   │
  .json         │                  │  │                      │  │                  │  │              │
                └──────────────────┘  └──────────────────────┘  └──────────────────┘  └──────────────┘
 ```
@@ -132,14 +132,19 @@ atom map:
    `verification-status` from the Lean definition's primary spec
    theorem (via `primary-spec` extension or `_spec` naming convention).
    If the Lean def is `"trusted"` or `"failed"`, that status is
-   copied directly. Otherwise, the spec's status is used (a
-   `"transitively-verified"` spec is copied as `"verified"`, and a spec
-   without a status gives `"unverified"`). If no spec is found, the atom
-   gets no status and no marker (#73). Every copied status is marked
+   copied directly. Otherwise, the spec's status is copied verbatim
+   (`"transitively-verified"` included), and a spec without a status
+   gives `"unverified"`. If no spec is found, the atom gets no status and
+   no marker (#73). Every copied status is marked
    `status-origin: "translation"` (hub ADR-006 Decision 2): it is
-   imported evidence, so phase 4 never promotes the atom, or a caller that
-   reaches it along a path without a trusted boundary, to
-   `"transitively-verified"`.
+   imported evidence, so in phase 4 the atom is a blocker seed, and a
+   caller that reaches it along a path without a trusted boundary never
+   becomes `"transitively-verified"`. After phase 4, each copied
+   `"verified"`/`"transitively-verified"` is refreshed from the final
+   label of its Lean primary spec (#78), so the copy matches the final
+   Lean label even when phase 4 promoted or lowered the spec. The hub keeps a
+   copied label as a snapshot (hub 0.6.0, ADR-006 Decision 2
+   amendment).
 
 3. **`untracked` flag**: every Rust atom is tracked backlog by default
    (`untracked: false`); membership in `functions.json` does **not** decide
@@ -170,8 +175,12 @@ also prefixes Rust `code-path`s with the crate directory
 
 Calls `probe::commands::propagate::enrich_verification_status` once over
 the whole merged graph (hub P23). Translation-marked atoms and probe-lean's
-`kernel-taint` atoms are blocker seeds. `--skip-enrich` skips this phase,
-and with it all enrichment in the pipeline.
+`kernel-taint` atoms are blocker seeds. After the pass,
+`refresh_copied_statuses` refreshes each copied
+`verified`/`transitively-verified` from the final label of its Lean
+primary spec, so the copy matches the final Lean label (#78).
+`--skip-enrich` skips this phase and the refresh, and with them all
+enrichment in the pipeline.
 
 ## Why probe-aeneas uses its own schema
 
@@ -213,6 +222,8 @@ code-name mapping can follow the same architecture:
 3. Add domain-specific metadata to the merged output, marking any status
    copied across languages with `status-origin: "translation"`.
 4. Run `enrich_verification_status` once.
+5. Refresh each copied status from the final label of its source, so the
+   copy matches the label that enrichment settled on.
 
 Future tools bridging other language pairs (e.g., Rust + Dafny,
 Rust + Verus specs) could reuse the same generic merge step.

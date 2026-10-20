@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-20
+
+### Changed
+- **Breaking for consumers of copied statuses** (#78, hub ADR-006 Decision 2 amendment, probe#92): a copied Lean primary spec label is kept verbatim. A clean spec gives a Rust `transitively-verified` again. A spec that rests on a `sorry` below it (a contaminated dependency or a kernel-taint finding) gives `verified`. A spec with its own `sorry` is `unverified` in probe-lean and is copied as `unverified`. Every copied status still carries `status-origin: "translation"`, the atom is still a blocker seed in enrichment, and its callers are still never promoted through it.
+- After the enrichment pass, each copied `verified`/`transitively-verified` is refreshed from the final label of its Lean primary spec. A clean spec from a probe-lean `--skip-enrich` extract (capped at `verified`) is then copied as `transitively-verified`. With `--skip-enrich`, there is no refresh.
+- With hub 0.5.0, enrichment still demotes the copied labels, and the refresh restores them in the `extract` output. Re-merging or re-enriching that output keeps the labels only with hub 0.6.0 or later.
+
+### Fixed
+- The 0.21.0 entry below did not mark the normalization of a copied `transitively-verified` to `verified` as breaking. It was: a translated Rust atom no longer showed whether its Lean spec was clean.
+
 ## [0.21.0] - 2026-10-06
 
 The hub ADR-006 contract release (closes #70, #71 and #73). 0.21.0 is the version
