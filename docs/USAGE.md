@@ -402,10 +402,14 @@ matches (exactly one candidate) are accepted.
 Matches when a Rust atom's `code-path` matches a `functions.json` entry's
 `source` field, and the Rust atom's line range overlaps with the function
 record's line range (with a 10-line tolerance). When the entry carries a
-`rust_name`, its last segment must equal the atom's base method name: the
-entry's lines come from the source Charon compiled, which a project may patch
-for the Charon run, so they can point at a neighbouring item. When multiple
-candidates overlap, the one with the greatest overlap is chosen.
+`rust_name`, it must name the atom's item: the entry's lines come from the
+source Charon compiled, which a project may patch for the Charon run, so they
+can point at a neighbouring item. A function entry's last segment must equal
+the atom's base method name. A trait-impl instance entry
+(`...::{impl Trait for Type}`) binds only a method of the same self type, and
+only when no entry exists for a method of that impl (then the instance is the
+method's only translation, as for an opaque method). When multiple candidates
+overlap, the one with the greatest overlap is chosen.
 
 ---
 

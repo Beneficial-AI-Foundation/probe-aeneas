@@ -189,10 +189,12 @@ pub fn generate_translations(
     );
 
     // Strategy 3: file + line overlap matching
+    let impls_with_methods = impls_with_method_records(functions);
     strategy_file_line_overlap(
         rust_data,
         lean_data,
         &file_to_funcs,
+        &impls_with_methods,
         &mut mappings,
         &mut matched_rust,
         &mut matched_lean,
@@ -242,11 +244,76 @@ fn extract_base_name(display_name: &str) -> &str {
     display_name.rsplit("::").next().unwrap_or(display_name)
 }
 
-/// The last path segment of a record's `rust_name` (`from` for
-/// `spqr::{impl core::convert::From<..> for spqr::Error}::from`), or `None`
-/// when the record carries no `rust_name`.
-fn rust_base_name(func: &FunctionRecord) -> Option<&str> {
-    func.rust_name.as_deref().map(extract_base_name)
+/// Whether the item that a record's `rust_name` names can be the Rust atom
+/// with `display_name` (base name `base_name`), so that a line overlap may
+/// bind them. Without a `rust_name` there is nothing to compare: `true`.
+///
+/// - A function record (`spqr::{impl From<..> for spqr::Error}::from`) names
+///   a function: its last segment must equal the atom's base name.
+/// - An instance record (`symcrust::mlkem::key::{impl BoxDefault for
+///   symcrust::mlkem::key::Key}`) names a trait impl. When Aeneas translates
+///   no method of that impl as its own def (SymCRust's `Key::box_default` is
+///   an opaque axiom), the instance is the method's only translation, so it
+///   may bind: its self type must equal the atom's (`Key::box_default`), and
+///   no record may exist for a method of the impl (`impls_with_methods`).
+///   Otherwise the instance is a wrapper and the method record is the target.
+fn record_may_name_atom(
+    func: &FunctionRecord,
+    display_name: &str,
+    base_name: &str,
+    impls_with_methods: &HashSet<&str>,
+) -> bool {
+    let Some(rust_name) = func.rust_name.as_deref() else {
+        return true;
+    };
+    if rust_name.ends_with('}') {
+        if impls_with_methods.contains(rust_name) {
+            return false;
+        }
+        return match (impl_self_type(rust_name), display_self_type(display_name)) {
+            (Some(record_self), Some(atom_self)) => record_self == atom_self,
+            _ => false,
+        };
+    }
+    extract_base_name(rust_name) == base_name
+}
+
+/// The impl blocks (`a::{impl T for a::S}`) that some record names a method
+/// of (`a::{impl T for a::S}::m`), whatever the record's flags.
+fn impls_with_method_records(functions: &[FunctionRecord]) -> HashSet<&str> {
+    functions
+        .iter()
+        .filter_map(|f| f.rust_name.as_deref())
+        .filter(|name| !name.ends_with('}'))
+        .filter_map(|name| name.rfind('}').map(|end| &name[..=end]))
+        .collect()
+}
+
+/// The bare self type of the last impl block of a Rust name:
+/// `a::{impl T<u8> for a::b::Key<N>}` -> `Key`, `a::{a::b::Key}` -> `Key`.
+fn impl_self_type(rust_name: &str) -> Option<&str> {
+    let block = rust_name.strip_suffix('}')?;
+    let block = &block[block.rfind('{')? + 1..];
+    let self_part = match block.rfind(" for ") {
+        Some(idx) => &block[idx + 5..],
+        None => block.strip_prefix("impl ").unwrap_or(block),
+    };
+    bare_type(self_part)
+}
+
+/// The bare self type of an atom display name: `Key<N>::box_default` -> `Key`;
+/// `None` for a free function (`box_default`).
+fn display_self_type(display_name: &str) -> Option<&str> {
+    let (prefix, _) = display_name.rsplit_once("::")?;
+    bare_type(prefix)
+}
+
+/// Strip references, generic arguments and the module path from a type.
+fn bare_type(ty: &str) -> Option<&str> {
+    let ty = ty.trim().trim_start_matches('&').trim();
+    let ty = ty.split('<').next().unwrap_or(ty);
+    let bare = ty.rsplit("::").next().unwrap_or(ty).trim();
+    (!bare.is_empty()).then_some(bare)
 }
 
 /// Classify a `functions.json` entry as deferred for RQN matching.
@@ -603,6 +670,7 @@ fn strategy_file_line_overlap(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     file_to_funcs: &HashMap<String, Vec<&FunctionRecord>>,
+    impls_with_methods: &HashSet<&str>,
     mappings: &mut Vec<Mapping>,
     matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
@@ -641,8 +709,8 @@ fn strategy_file_line_overlap(
             // project may patch for the Charon run (SPQR's translation
             // patches), so they can point at a neighbouring item. When the
             // record names its Rust item, the overlap may only decide between
-            // same-named functions (issue #80).
-            if rust_base_name(func).is_some_and(|name| name != base_name) {
+            // records of that same item (issue #80).
+            if !record_may_name_atom(func, &atom.display_name, base_name, impls_with_methods) {
                 continue;
             }
 
@@ -1139,6 +1207,139 @@ mod tests {
             "probe:c.Foo.Insts.CoreConvertFromU8.from_u8"
         );
         assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    /// SPQR's untranslated `impl From<serialize::Error> for Error` (139-141)
+    /// overlaps the instance record of `impl From<EncodingError> for Error`
+    /// (140-144). Same self type, but that impl has its own `from` record, so
+    /// the instance is a wrapper and must not bind.
+    #[test]
+    fn test_strategy_file_line_overlap_wrapper_instance_does_not_bind() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:spqr/1.6.0/impl<serialize::Error>#[Error][`From<SerializationError>`]from()"
+                .to_string(),
+            make_rust_atom("Error::from", "src/lib.rs", 139, 141),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:spqr.Error.Insts.CoreConvertFromEncodingError".to_string(),
+            make_lean_atom("CoreConvertFromEncodingError", "Funs.lean"),
+        );
+
+        let encoding_impl =
+            "spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}";
+        let funcs = vec![
+            make_func(
+                "spqr.Error.Insts.CoreConvertFromEncodingError",
+                Some(encoding_impl),
+                "src/lib.rs",
+                "L140-L144",
+            ),
+            make_func(
+                "spqr.Error.Insts.CoreConvertFromEncodingError.from",
+                Some(&format!("{encoding_impl}::from")),
+                "src/lib.rs",
+                "L141-L143",
+            ),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        assert!(mappings.is_empty(), "{mappings:?}");
+    }
+
+    /// An instance record of the atom's own impl may bind by line overlap:
+    /// Aeneas translates SymCRust's `impl BoxDefault for Key` as the instance
+    /// `Key.Insts.SymcrustCommonBoxDefault` alone (its `box_default` is an
+    /// opaque axiom with no record), so the instance is the method's
+    /// translation.
+    #[test]
+    fn test_strategy_file_line_overlap_instance_of_own_impl_binds() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:symcrust/0.1.0/mlkem/key/impl<*mut/Self>#[Key][BoxDefault]box_default()"
+                .to_string(),
+            make_rust_atom("Key::box_default", "src/mlkem/key.rs", 222, 229),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault".to_string(),
+            make_lean_atom("SymcrustCommonBoxDefault", "Funs.lean"),
+        );
+
+        let funcs = vec![make_func(
+            "symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault",
+            Some("symcrust::mlkem::key::{impl symcrust::common::BoxDefault for symcrust::mlkem::key::Key}"),
+            "src/mlkem/key.rs",
+            "L221-L230",
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(
+            mappings[0].to,
+            "probe:symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault"
+        );
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    #[test]
+    fn test_record_may_name_atom() {
+        let none = HashSet::new();
+        let func = |rust_name: Option<&str>| make_func("x", rust_name, "src/lib.rs", "L1-L2");
+        assert!(record_may_name_atom(
+            &func(None),
+            "anything",
+            "anything",
+            &none
+        ));
+        let from = func(Some("c::{impl core::convert::From<u8> for c::Foo}::from"));
+        assert!(record_may_name_atom(&from, "Foo::from", "from", &none));
+        assert!(!record_may_name_atom(&from, "Foo::into", "into", &none));
+        let instance_name = "spqr::{impl core::convert::TryFrom<u8, alloc::string::String> for spqr::proto::pq_ratchet::Version}";
+        let instance = func(Some(instance_name));
+        assert!(record_may_name_atom(
+            &instance,
+            "Version::try_from",
+            "try_from",
+            &none
+        ));
+        assert!(!record_may_name_atom(&instance, "u8::from", "from", &none));
+        assert!(!record_may_name_atom(
+            &instance, "free_fn", "free_fn", &none
+        ));
+        // With a record for one of its methods, the instance is a wrapper.
+        let with_method = HashSet::from([instance_name]);
+        assert!(!record_may_name_atom(
+            &instance,
+            "Version::try_from",
+            "try_from",
+            &with_method
+        ));
+        let inherent = func(Some("c::{c::m::Poly<N>}"));
+        assert!(record_may_name_atom(
+            &inherent,
+            "Poly<N>::eval",
+            "eval",
+            &none
+        ));
+    }
+
+    #[test]
+    fn test_impls_with_method_records() {
+        let funcs = vec![
+            make_func("a", Some("c::{impl T for c::S}::m"), "src/lib.rs", "L1-L2"),
+            make_func("b", Some("c::{impl T for c::S}"), "src/lib.rs", "L1-L3"),
+            make_func("d", Some("c::{impl T for c::R}"), "src/lib.rs", "L5-L6"),
+            make_func("e", Some("c::free"), "src/lib.rs", "L8-L9"),
+            make_func("f", None, "src/lib.rs", "L8-L9"),
+        ];
+        assert_eq!(
+            impls_with_method_records(&funcs),
+            HashSet::from(["c::{impl T for c::S}"])
+        );
     }
 
     #[test]

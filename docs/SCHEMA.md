@@ -657,7 +657,7 @@ entries with:
 | `"exact"` | `charon-def-id` | Matched by charon `FunDeclId` integer equality (atom `charon-def-id` == manifest `def_id`), provenance-gated on matching `charon-version` |
 | `"exact"` | `rust-qualified-name` | Matched via Charon-derived `rust-qualified-name` joined with `functions.json` `rust_name` |
 | `"file-and-name"` | `file+display-name` | Same source file + matching base method name (unambiguous) |
-| `"file-and-lines"` | `file+line-overlap` | Same source file + overlapping line ranges; same base name when the record has a `rust_name` |
+| `"file-and-lines"` | `file+line-overlap` | Same source file + overlapping line ranges; a record with a `rust_name` must name the same function, or the instance of its impl when that impl has no method record |
 
 ### Strategy Priority
 
