@@ -401,8 +401,11 @@ matches (exactly one candidate) are accepted.
 
 Matches when a Rust atom's `code-path` matches a `functions.json` entry's
 `source` field, and the Rust atom's line range overlaps with the function
-record's line range (with a 10-line tolerance). When multiple candidates
-overlap, the one with the greatest overlap is chosen.
+record's line range (with a 10-line tolerance). When the entry carries a
+`rust_name`, its last segment must equal the atom's base method name: the
+entry's lines come from the source Charon compiled, which a project may patch
+for the Charon run, so they can point at a neighbouring item. When multiple
+candidates overlap, the one with the greatest overlap is chosen.
 
 ---
 

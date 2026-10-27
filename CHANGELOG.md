@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-10-27
+
+### Fixed
+- The `file+line-overlap` fallback no longer binds a Rust function to a record that names a different Rust item (#80). A `functions.json` record's lines come from the source Charon compiled, and SPQR patches its sources for the Charon run, so the lines can point at a neighbouring item. On SPQR, `impl From<Version> for u8`'s `from` was bound to the instance record of `impl TryFrom<u8> for Version`. When a record carries a `rust_name`, its last segment must now equal the atom's base method name. Records without a `rust_name` keep the previous behavior.
+
 ## [0.22.0] - 2026-10-20
 
 ### Changed

@@ -242,6 +242,15 @@ fn extract_base_name(display_name: &str) -> &str {
     display_name.rsplit("::").next().unwrap_or(display_name)
 }
 
+/// The last path segment of a record's `rust_name` (`from` for
+/// `spqr::{impl core::convert::From<..> for spqr::Error}::from`), or `None`
+/// when the record carries no `rust_name`.
+fn rust_base_name(func: &FunctionRecord) -> Option<&str> {
+    func.rust_name
+        .as_deref()
+        .map(|name| name.rsplit("::").next().unwrap_or(name))
+}
+
 /// Classify a `functions.json` entry as deferred for RQN matching.
 ///
 /// Hidden entries (macro-generated trait-impl variants, `.mutual`, closures)
@@ -620,6 +629,7 @@ fn strategy_file_line_overlap(
             Some(c) => c,
             None => continue,
         };
+        let base_name = extract_base_name(&atom.display_name);
 
         let mut best_match: Option<&FunctionRecord> = None;
         let mut best_overlap: i64 = -1;
@@ -627,6 +637,14 @@ fn strategy_file_line_overlap(
         for func in candidates {
             let lean_code_name = format!("probe:{}", func.lean_name);
             if matched_lean.contains(&lean_code_name) {
+                continue;
+            }
+            // The record's lines come from the source Charon compiled, which a
+            // project may patch for the Charon run (SPQR's translation
+            // patches), so they can point at a neighbouring item. When the
+            // record names its Rust item, the overlap may only decide between
+            // same-named functions (issue #80).
+            if rust_base_name(func).is_some_and(|name| name != base_name) {
                 continue;
             }
 
@@ -1045,6 +1063,51 @@ mod tests {
         let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "file-and-lines");
+    }
+
+    /// Issue #80: on SPQR, `impl From<Version> for u8`'s `from` (189-194)
+    /// was bound by line overlap to the instance record of
+    /// `impl TryFrom<u8> for Version` (186-194), whose lines Charon took from
+    /// a patched `lib.rs`. A record that names a different Rust function must
+    /// not bind, however close its lines. A record without `rust_name` keeps
+    /// the plain overlap behavior.
+    #[test]
+    fn test_strategy_file_line_overlap_requires_same_rust_name() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:spqr/1.6.0/impl<Version>#[u8][`From<Version>`]from()".to_string(),
+            make_rust_atom("u8::from", "src/lib.rs", 189, 194),
+        );
+        rust_atoms.insert(
+            "probe:spqr/1.6.0/mystery()".to_string(),
+            make_rust_atom("mystery_fn", "src/lib.rs", 570, 590),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:spqr.proto.pq_ratchet.Version.Insts.CoreConvertTryFromU8String".to_string(),
+            make_lean_atom("CoreConvertTryFromU8String", "Funs.lean"),
+        );
+        lean.insert(
+            "probe:spqr.some_fn".to_string(),
+            make_lean_atom("some_fn", "Funs.lean"),
+        );
+
+        let funcs = vec![
+            make_func(
+                "spqr.proto.pq_ratchet.Version.Insts.CoreConvertTryFromU8String",
+                Some("spqr::{impl core::convert::TryFrom<u8, alloc::string::String> for spqr::proto::pq_ratchet::Version}"),
+                "src/lib.rs",
+                "L186-L194",
+            ),
+            make_func("spqr.some_fn", None, "src/lib.rs", "L575-L588"),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].from, "probe:spqr/1.6.0/mystery()");
+        assert_eq!(mappings[0].to, "probe:spqr.some_fn");
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
     }
 
     #[test]

@@ -62,7 +62,8 @@ priority order, produce `Mapping` entries:
 2. **`file+display-name`** -- same source file path + matching base
    method name (unambiguous only). Confidence: `file-and-name`.
 3. **`file+line-overlap`** -- same source file + overlapping line
-   ranges (best overlap wins). Confidence: `file-and-lines`.
+   ranges (best overlap wins); a record with a `rust_name` must name the
+   same base method. Confidence: `file-and-lines`.
 
 Each Rust function maps to at most one Lean definition (1-to-1). Once a
 Rust or Lean atom is claimed by an earlier strategy it is excluded from

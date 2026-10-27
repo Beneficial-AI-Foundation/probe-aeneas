@@ -68,7 +68,9 @@ fn library_extract_on_synthetic_fixture() {
     let data = json["data"].as_object().unwrap();
 
     // One match per strategy that runs without `translation.json`, with the
-    // confidence and method of the generated record.
+    // confidence and method of the generated record. The `helper_inner`
+    // record has no `rust_name`, like a legacy record: a record that names a
+    // different Rust function never binds by line overlap (#80).
     let add = &data[ADD];
     assert_eq!(add["translation-name"], "probe:Mini.add");
     assert_eq!(record(add)["confidence"], "exact");
