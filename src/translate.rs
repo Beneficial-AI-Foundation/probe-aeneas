@@ -677,8 +677,8 @@ fn strategy_file_line_overlap(
 ) {
     // Rust atoms per (file, display name). Several atoms with one display
     // name in a file (SPQR's three `From<_> for Error` impls, all
-    // `Error::from`) are siblings that a named record cannot tell apart by
-    // lines, because the lines may be shifted (issue #80).
+    // `Error::from`) are siblings, which a named record tells apart only by
+    // its lines.
     let mut siblings: HashMap<(&str, &str), usize> = HashMap::new();
     for atom in rust_data.values() {
         *siblings
@@ -725,14 +725,6 @@ fn strategy_file_line_overlap(
             if matched_lean.contains(&lean_code_name) {
                 continue;
             }
-            // The record's lines come from the source Charon compiled, which a
-            // project may patch for the Charon run (SPQR's translation
-            // patches), so they can point at a neighbouring item (issue #80).
-            // A named record binds only an atom without same-named siblings
-            // in the file, like `file+display-name` (unambiguous only).
-            if func.rust_name.is_some() && has_siblings {
-                continue;
-            }
             // When the record names its Rust item, the overlap may only decide
             // between records of that same item.
             if !record_may_name_atom(func, &atom.display_name, base_name, impls_with_methods) {
@@ -743,6 +735,15 @@ fn strategy_file_line_overlap(
                 Some(r) => r,
                 None => continue,
             };
+            // The record's lines come from the source Charon compiled, which a
+            // project may patch for the Charon run (SPQR's translation
+            // patches), so they can point at a neighbouring item (issue #80).
+            // A named record binds an atom with same-named siblings only when
+            // its range contains the atom's range: a shifted record that
+            // overlaps a sibling only in part does not bind it.
+            if func.rust_name.is_some() && has_siblings && !func_range.contains(&rust_range) {
+                continue;
+            }
 
             if rust_range.overlaps(&func_range, 10) {
                 let overlap = rust_range.overlap_amount(&func_range);
@@ -1235,29 +1236,29 @@ mod tests {
     }
 
     /// SPQR without `charon-def-id`s: three `From<_> for Error` atoms, all
-    /// `Error::from`, and records shifted by the translation patches. The
-    /// untranslated `From<serialize::Error>` (139-141) overlaps both the
-    /// instance (140-144) and the `from` (141-143) of
-    /// `impl From<EncodingError> for Error`. Lines cannot tell the siblings
-    /// apart, so no named record binds any of them: the instance is a wrapper
-    /// (its impl has a `from` record), and the `from` record has same-named
-    /// siblings to choose from.
+    /// `Error::from`. The records of `impl From<EncodingError> for Error` are
+    /// shifted by the translation patches: its instance (140-144) and its
+    /// `from` (141-143) overlap the untranslated `From<serialize::Error>`
+    /// (139-141), not their own atom (133-135). Two `from` records in the
+    /// file keep `file+display-name` from claiming either one, as on SPQR.
+    ///
+    /// A named record binds a sibling only when its range contains the
+    /// atom's range. The unshifted `AuthenticatorError` record (145-147)
+    /// binds its atom. The shifted `from` record contains no atom, and the
+    /// instance is a wrapper (its impl has a `from` record), so neither binds.
     #[test]
-    fn test_strategy_file_line_overlap_siblings_do_not_bind() {
+    fn test_strategy_file_line_overlap_siblings_bind_only_contained() {
+        let encoding_atom =
+            "probe:spqr/1.6.0/impl<encoding::EncodingError>#[Error][`From<EncodingError>`]from()";
+        let serialization_atom =
+            "probe:spqr/1.6.0/impl<serialize::Error>#[Error][`From<SerializationError>`]from()";
+        let authenticator_atom =
+            "probe:spqr/1.6.0/impl<authenticator::Error>#[Error][`From<AuthenticatorError>`]from()";
         let mut rust_atoms = BTreeMap::new();
         for (key, lines) in [
-            (
-                "probe:spqr/1.6.0/impl<encoding::EncodingError>#[Error][`From<EncodingError>`]from()",
-                (133, 135),
-            ),
-            (
-                "probe:spqr/1.6.0/impl<serialize::Error>#[Error][`From<SerializationError>`]from()",
-                (139, 141),
-            ),
-            (
-                "probe:spqr/1.6.0/impl<authenticator::Error>#[Error][`From<AuthenticatorError>`]from()",
-                (145, 147),
-            ),
+            (encoding_atom, (133, 135)),
+            (serialization_atom, (139, 141)),
+            (authenticator_atom, (145, 147)),
         ] {
             rust_atoms.insert(
                 key.to_string(),
@@ -1269,12 +1270,15 @@ mod tests {
         for name in [
             "spqr.Error.Insts.CoreConvertFromEncodingError",
             "spqr.Error.Insts.CoreConvertFromEncodingError.from",
+            "spqr.Error.Insts.CoreConvertFromAuthenticatorError.from",
         ] {
             lean.insert(format!("probe:{name}"), make_lean_atom(name, "Funs.lean"));
         }
 
         let encoding_impl =
             "spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}";
+        let authenticator_impl =
+            "spqr::{impl core::convert::From<spqr::authenticator::Error> for spqr::Error}";
         let funcs = vec![
             make_func(
                 "spqr.Error.Insts.CoreConvertFromEncodingError",
@@ -1288,18 +1292,25 @@ mod tests {
                 "src/lib.rs",
                 "L141-L143",
             ),
+            make_func(
+                "spqr.Error.Insts.CoreConvertFromAuthenticatorError.from",
+                Some(&format!("{authenticator_impl}::from")),
+                "src/lib.rs",
+                "L145-L147",
+            ),
         ];
 
         let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
-        assert!(
-            mappings
-                .iter()
-                .all(|m| m.method.as_deref() != Some("file+line-overlap")),
-            "{mappings:?}"
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].from, authenticator_atom);
+        assert_eq!(
+            mappings[0].to,
+            "probe:spqr.Error.Insts.CoreConvertFromAuthenticatorError.from"
         );
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
 
         // A record without a `rust_name` names nothing to compare, so the
-        // sibling rule does not apply: it still binds by line overlap.
+        // sibling rule does not apply: it binds by plain line overlap.
         lean.insert(
             "probe:spqr.legacy_from".to_string(),
             make_lean_atom("legacy_from", "Funs.lean"),
@@ -1308,20 +1319,15 @@ mod tests {
             "spqr.legacy_from",
             None,
             "src/lib.rs",
-            "L145-L147",
+            "L141-L143",
         )];
         let (legacy_mappings, _) = generate_translations(&rust_atoms, &lean, &legacy, None);
         assert_eq!(legacy_mappings.len(), 1, "{legacy_mappings:?}");
+        assert_eq!(legacy_mappings[0].from, serialization_atom);
         assert_eq!(legacy_mappings[0].to, "probe:spqr.legacy_from");
         assert_eq!(
             legacy_mappings[0].method.as_deref(),
             Some("file+line-overlap")
-        );
-        assert!(
-            mappings
-                .iter()
-                .all(|m| !m.from.contains("SerializationError")),
-            "{mappings:?}"
         );
     }
 

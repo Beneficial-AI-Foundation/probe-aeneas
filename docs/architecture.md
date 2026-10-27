@@ -64,8 +64,8 @@ priority order, produce `Mapping` entries:
 3. **`file+line-overlap`** -- same source file + overlapping line
    ranges (best overlap wins); a record with a `rust_name` must have the
    same base name, or be the instance of an impl with the same self type
-   that has no method record, and binds no atom with a same-named sibling
-   in its file. Confidence: `file-and-lines`.
+   that has no method record, and binds an atom with a same-named sibling
+   in its file only when its range contains the atom's range. Confidence: `file-and-lines`.
 
 Each Rust function maps to at most one Lean definition (1-to-1). Once a
 Rust or Lean atom is claimed by an earlier strategy it is excluded from

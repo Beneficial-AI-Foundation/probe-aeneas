@@ -108,6 +108,11 @@ impl LineRange {
         let start = std::cmp::max(self.start, other.start) as i64;
         end - start
     }
+
+    /// Whether `other` lies within this range, endpoints included.
+    pub fn contains(&self, other: &LineRange) -> bool {
+        self.start <= other.start && other.end <= self.end
+    }
 }
 
 #[cfg(test)]
@@ -124,5 +129,14 @@ mod tests {
         let r = LineRange::parse("L50-L100").expect("valid range");
         assert_eq!(r.start, 50);
         assert_eq!(r.end, 100);
+    }
+
+    #[test]
+    fn line_range_contains() {
+        let outer = LineRange { start: 10, end: 20 };
+        assert!(outer.contains(&LineRange { start: 10, end: 20 }));
+        assert!(outer.contains(&LineRange { start: 12, end: 18 }));
+        assert!(!outer.contains(&LineRange { start: 9, end: 18 }));
+        assert!(!outer.contains(&LineRange { start: 12, end: 21 }));
     }
 }

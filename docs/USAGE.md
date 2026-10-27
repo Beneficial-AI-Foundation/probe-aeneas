@@ -409,9 +409,10 @@ the atom's base method name. A trait-impl instance entry
 (`...::{impl Trait for Type}`) binds only a method of the same self type, and
 only when no entry exists for a method of that impl (then the instance is the
 method's only translation, as for an opaque method). An entry with a
-`rust_name` never binds an atom that shares its display name with another
-Rust function in the same file, because shifted lines cannot tell such
-siblings apart. When multiple candidates overlap, the one with the greatest
+`rust_name` binds an atom that shares its display name with another Rust
+function in the same file only when the entry's line range contains the
+atom's range: a shifted entry that only partly overlaps such a sibling does
+not bind it. When multiple candidates overlap, the one with the greatest
 overlap is chosen.
 
 ---
