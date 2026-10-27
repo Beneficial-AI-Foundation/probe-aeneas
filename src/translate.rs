@@ -675,10 +675,30 @@ fn strategy_file_line_overlap(
     matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
+    // Rust atoms per (file, display name). Several atoms with one display
+    // name in a file (SPQR's three `From<_> for Error` impls, all
+    // `Error::from`) are siblings that a named record cannot tell apart by
+    // lines, because the lines may be shifted (issue #80).
+    let mut siblings: HashMap<(&str, &str), usize> = HashMap::new();
+    for atom in rust_data.values() {
+        *siblings
+            .entry((
+                normalize_source_path(&atom.code_path),
+                atom.display_name.as_str(),
+            ))
+            .or_default() += 1;
+    }
+
     for (code_name, atom) in rust_data {
         if matched_rust.contains(code_name) || atom.code_path.is_empty() {
             continue;
         }
+        let has_siblings = siblings
+            .get(&(
+                normalize_source_path(&atom.code_path),
+                atom.display_name.as_str(),
+            ))
+            .is_some_and(|n| *n > 1);
         let v_start = atom.code_text.lines_start;
         let v_end = atom.code_text.lines_end;
         if v_start == 0 {
@@ -710,6 +730,11 @@ fn strategy_file_line_overlap(
             // patches), so they can point at a neighbouring item. When the
             // record names its Rust item, the overlap may only decide between
             // records of that same item (issue #80).
+            // A named record binds only an atom without same-named siblings
+            // in the file, like `file+display-name` (unambiguous only).
+            if func.rust_name.is_some() && has_siblings {
+                continue;
+            }
             if !record_may_name_atom(func, &atom.display_name, base_name, impls_with_methods) {
                 continue;
             }
@@ -1209,24 +1234,44 @@ mod tests {
         assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
     }
 
-    /// SPQR's untranslated `impl From<serialize::Error> for Error` (139-141)
-    /// overlaps the instance record of `impl From<EncodingError> for Error`
-    /// (140-144). Same self type, but that impl has its own `from` record, so
-    /// the instance is a wrapper and must not bind.
+    /// SPQR without `charon-def-id`s: three `From<_> for Error` atoms, all
+    /// `Error::from`, and records shifted by the translation patches. The
+    /// untranslated `From<serialize::Error>` (139-141) overlaps both the
+    /// instance (140-144) and the `from` (141-143) of
+    /// `impl From<EncodingError> for Error`. Lines cannot tell the siblings
+    /// apart, so no named record binds any of them: the instance is a wrapper
+    /// (its impl has a `from` record), and the `from` record has same-named
+    /// siblings to choose from.
     #[test]
-    fn test_strategy_file_line_overlap_wrapper_instance_does_not_bind() {
+    fn test_strategy_file_line_overlap_siblings_do_not_bind() {
         let mut rust_atoms = BTreeMap::new();
-        rust_atoms.insert(
-            "probe:spqr/1.6.0/impl<serialize::Error>#[Error][`From<SerializationError>`]from()"
-                .to_string(),
-            make_rust_atom("Error::from", "src/lib.rs", 139, 141),
-        );
+        for (key, lines) in [
+            (
+                "probe:spqr/1.6.0/impl<encoding::EncodingError>#[Error][`From<EncodingError>`]from()",
+                (133, 135),
+            ),
+            (
+                "probe:spqr/1.6.0/impl<serialize::Error>#[Error][`From<SerializationError>`]from()",
+                (139, 141),
+            ),
+            (
+                "probe:spqr/1.6.0/impl<authenticator::Error>#[Error][`From<AuthenticatorError>`]from()",
+                (145, 147),
+            ),
+        ] {
+            rust_atoms.insert(
+                key.to_string(),
+                make_rust_atom("Error::from", "src/lib.rs", lines.0, lines.1),
+            );
+        }
 
         let mut lean = BTreeMap::new();
-        lean.insert(
-            "probe:spqr.Error.Insts.CoreConvertFromEncodingError".to_string(),
-            make_lean_atom("CoreConvertFromEncodingError", "Funs.lean"),
-        );
+        for name in [
+            "spqr.Error.Insts.CoreConvertFromEncodingError",
+            "spqr.Error.Insts.CoreConvertFromEncodingError.from",
+        ] {
+            lean.insert(format!("probe:{name}"), make_lean_atom(name, "Funs.lean"));
+        }
 
         let encoding_impl =
             "spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}";
@@ -1246,7 +1291,18 @@ mod tests {
         ];
 
         let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
-        assert!(mappings.is_empty(), "{mappings:?}");
+        assert!(
+            mappings
+                .iter()
+                .all(|m| m.method.as_deref() != Some("file+line-overlap")),
+            "{mappings:?}"
+        );
+        assert!(
+            mappings
+                .iter()
+                .all(|m| !m.from.contains("SerializationError")),
+            "{mappings:?}"
+        );
     }
 
     /// An instance record of the atom's own impl may bind by line overlap:
