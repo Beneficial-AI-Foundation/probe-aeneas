@@ -727,14 +727,14 @@ fn strategy_file_line_overlap(
             }
             // The record's lines come from the source Charon compiled, which a
             // project may patch for the Charon run (SPQR's translation
-            // patches), so they can point at a neighbouring item. When the
-            // record names its Rust item, the overlap may only decide between
-            // records of that same item (issue #80).
+            // patches), so they can point at a neighbouring item (issue #80).
             // A named record binds only an atom without same-named siblings
             // in the file, like `file+display-name` (unambiguous only).
             if func.rust_name.is_some() && has_siblings {
                 continue;
             }
+            // When the record names its Rust item, the overlap may only decide
+            // between records of that same item.
             if !record_may_name_atom(func, &atom.display_name, base_name, impls_with_methods) {
                 continue;
             }
@@ -1296,6 +1296,26 @@ mod tests {
                 .iter()
                 .all(|m| m.method.as_deref() != Some("file+line-overlap")),
             "{mappings:?}"
+        );
+
+        // A record without a `rust_name` names nothing to compare, so the
+        // sibling rule does not apply: it still binds by line overlap.
+        lean.insert(
+            "probe:spqr.legacy_from".to_string(),
+            make_lean_atom("legacy_from", "Funs.lean"),
+        );
+        let legacy = vec![make_func(
+            "spqr.legacy_from",
+            None,
+            "src/lib.rs",
+            "L145-L147",
+        )];
+        let (legacy_mappings, _) = generate_translations(&rust_atoms, &lean, &legacy, None);
+        assert_eq!(legacy_mappings.len(), 1, "{legacy_mappings:?}");
+        assert_eq!(legacy_mappings[0].to, "probe:spqr.legacy_from");
+        assert_eq!(
+            legacy_mappings[0].method.as_deref(),
+            Some("file+line-overlap")
         );
         assert!(
             mappings
