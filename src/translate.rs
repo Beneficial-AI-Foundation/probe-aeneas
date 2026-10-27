@@ -246,9 +246,7 @@ fn extract_base_name(display_name: &str) -> &str {
 /// `spqr::{impl core::convert::From<..> for spqr::Error}::from`), or `None`
 /// when the record carries no `rust_name`.
 fn rust_base_name(func: &FunctionRecord) -> Option<&str> {
-    func.rust_name
-        .as_deref()
-        .map(|name| name.rsplit("::").next().unwrap_or(name))
+    func.rust_name.as_deref().map(extract_base_name)
 }
 
 /// Classify a `functions.json` entry as deferred for RQN matching.
@@ -1107,6 +1105,39 @@ mod tests {
         assert_eq!(mappings.len(), 1, "{mappings:?}");
         assert_eq!(mappings[0].from, "probe:spqr/1.6.0/mystery()");
         assert_eq!(mappings[0].to, "probe:spqr.some_fn");
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    /// A record whose `rust_name` names the atom's function still binds by
+    /// line overlap. Its Lean name (`CoreConvertFromU8.from_u8`) differs from
+    /// the Rust name, so `file+display-name` does not claim it first.
+    #[test]
+    fn test_strategy_file_line_overlap_same_rust_name_binds() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:c/1.0/impl<u8>#[Foo][`From<u8>`]from()".to_string(),
+            make_rust_atom("Foo::from", "src/lib.rs", 40, 44),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:c.Foo.Insts.CoreConvertFromU8.from_u8".to_string(),
+            make_lean_atom("from_u8", "Funs.lean"),
+        );
+
+        let funcs = vec![make_func(
+            "c.Foo.Insts.CoreConvertFromU8.from_u8",
+            Some("c::{impl core::convert::From<u8> for c::Foo}::from"),
+            "src/lib.rs",
+            "L42-L46",
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(
+            mappings[0].to,
+            "probe:c.Foo.Insts.CoreConvertFromU8.from_u8"
+        );
         assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
     }
 
