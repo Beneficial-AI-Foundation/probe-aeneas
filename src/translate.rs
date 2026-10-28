@@ -308,12 +308,32 @@ fn display_self_type(display_name: &str) -> Option<&str> {
     bare_type(prefix)
 }
 
-/// Strip references, generic arguments and the module path from a type.
+/// Strip references, generic arguments and the module path from a type:
+/// `&'_1 a::Key<N>`, `&0 (a::Key)` and `&mut Key` -> `Key`. A reference may
+/// carry a region (`'a`, `'_1`, or Charon's bare `0`) and wrap its target in
+/// parentheses. `None` for a compound type (tuple, slice, array, pointer),
+/// which never equals a bare type name.
 fn bare_type(ty: &str) -> Option<&str> {
-    let ty = ty.trim().trim_start_matches('&').trim();
-    let ty = ty.split('<').next().unwrap_or(ty);
-    let bare = ty.rsplit("::").next().unwrap_or(ty).trim();
-    (!bare.is_empty()).then_some(bare)
+    let mut ty = ty.trim();
+    while let Some(rest) = ty.strip_prefix('&') {
+        ty = rest.trim_start();
+        if let Some((region, target)) = ty.split_once(' ') {
+            if region.starts_with('\'') || region.bytes().all(|b| b.is_ascii_digit()) {
+                ty = target.trim_start();
+            }
+        }
+        ty = ty.strip_prefix("mut ").unwrap_or(ty).trim_start();
+    }
+    if let Some(inner) = ty.strip_prefix('(').and_then(|t| t.strip_suffix(')')) {
+        if !inner.contains(',') {
+            ty = inner.trim();
+        }
+    }
+    let path = ty.split('<').next().unwrap_or(ty).trim();
+    if path.is_empty() || path.contains(|c: char| "()[]*;, ".contains(c)) {
+        return None;
+    }
+    path.rsplit("::").next()
 }
 
 /// Classify a `functions.json` entry as deferred for RQN matching.
@@ -1483,6 +1503,63 @@ mod tests {
             "eval",
             &none
         ));
+    }
+
+    #[test]
+    fn test_bare_type() {
+        for (ty, bare) in [
+            ("a::b::Key<N>", Some("Key")),
+            ("&a::Key", Some("Key")),
+            ("&'_1 a::Key", Some("Key")),
+            ("&'_0 u8", Some("u8")),
+            ("&0 (a::Key)", Some("Key")),
+            ("&'0 (a::Key<u8>)", Some("Key")),
+            ("&mut a::Key", Some("Key")),
+            ("&'a mut a::Key", Some("Key")),
+            ("(a::Key)", Some("Key")),
+            ("(a::A, b::B)", None),
+            ("&0 (a::A, b::B)", None),
+            ("[u8]", None),
+            ("[u8; 32]", None),
+            ("*const a::Key", None),
+            ("", None),
+        ] {
+            assert_eq!(bare_type(ty), bare, "{ty}");
+        }
+    }
+
+    /// An instance-only translation of an impl on a borrowed self type binds
+    /// whichever way Charon spells the reference: `&'_0 c::Key` (current) or
+    /// `&0 (c::Key)` (older releases, see `tests/fixtures/rqn_pairs.json`).
+    #[test]
+    fn test_strategy_file_line_overlap_instance_of_borrowed_self_binds() {
+        for self_ty in ["&'_0 c::Key", "&0 (c::Key)"] {
+            let mut rust_atoms = BTreeMap::new();
+            rust_atoms.insert(
+                "probe:c/1.0/&Key#impl<Key>#[`&Key`][Neg]neg()".to_string(),
+                make_rust_atom("Key::neg", "src/lib.rs", 20, 24),
+            );
+            let mut lean = BTreeMap::new();
+            lean.insert(
+                "probe:c.Shared0Key.Insts.CoreOpsArithNegKey".to_string(),
+                make_lean_atom("CoreOpsArithNegKey", "Funs.lean"),
+            );
+            let rust_name = format!("c::{{impl core::ops::arith::Neg<c::Key> for {self_ty}}}");
+            let funcs = vec![make_func(
+                "c.Shared0Key.Insts.CoreOpsArithNegKey",
+                Some(&rust_name),
+                "src/lib.rs",
+                "L19-L25",
+            )];
+
+            let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+            assert_eq!(mappings.len(), 1, "{self_ty}: {mappings:?}");
+            assert_eq!(
+                mappings[0].to,
+                "probe:c.Shared0Key.Insts.CoreOpsArithNegKey"
+            );
+            assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+        }
     }
 
     #[test]
