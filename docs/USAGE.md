@@ -400,8 +400,8 @@ matches (exactly one candidate) are accepted.
 ### 3. `file+line-overlap` (confidence: `file-and-lines`)
 
 Matches when a Rust atom's `code-path` matches a `functions.json` entry's
-`source` field, and the Rust atom's line range overlaps with the function
-record's line range (with a 10-line tolerance). When the entry carries a
+`source` field, and the Rust atom's line range shares at least one line with
+the function record's line range. When the entry carries a
 `rust_name`, it must name the atom's item: the entry's lines come from the
 source Charon compiled, which a project may patch for the Charon run, so they
 can point at a neighbouring item. A function entry's last segment must equal
@@ -412,8 +412,10 @@ method's only translation, as for an opaque method). An entry with a
 `rust_name` binds an atom that shares its display name with another Rust
 function in the same file only when the entry's line range contains the
 atom's range: a shifted entry that only partly overlaps such a sibling does
-not bind it. When multiple candidates overlap, the one with the greatest
-overlap is chosen.
+not bind it. An entry shifted by exactly the spacing between two siblings
+still covers the wrong one and binds it. Only identity evidence, such as the
+def-id join, can tell them apart. When multiple candidates overlap, the one
+with the greatest overlap is chosen.
 
 ---
 

@@ -1243,9 +1243,10 @@ mod tests {
     /// file keep `file+display-name` from claiming either one, as on SPQR.
     ///
     /// A named record binds a sibling only when its range contains the
-    /// atom's range. The unshifted `AuthenticatorError` record (145-147)
-    /// binds its atom. The shifted `from` record contains no atom, and the
-    /// instance is a wrapper (its impl has a `from` record), so neither binds.
+    /// atom's range. The unshifted `AuthenticatorError` record (144-148)
+    /// contains its atom (145-147) and binds it. The shifted `from` record
+    /// contains no atom, and the instance is a wrapper (its impl has a `from`
+    /// record), so neither binds.
     #[test]
     fn test_strategy_file_line_overlap_siblings_bind_only_contained() {
         let encoding_atom =
@@ -1296,7 +1297,7 @@ mod tests {
                 "spqr.Error.Insts.CoreConvertFromAuthenticatorError.from",
                 Some(&format!("{authenticator_impl}::from")),
                 "src/lib.rs",
-                "L145-L147",
+                "L144-L148",
             ),
         ];
 
@@ -1329,6 +1330,81 @@ mod tests {
             legacy_mappings[0].method.as_deref(),
             Some("file+line-overlap")
         );
+    }
+
+    /// Known limit of the containment rule: a record shifted by exactly the
+    /// spacing between siblings covers the wrong sibling completely and binds
+    /// it. Here a patch adds 6 lines above `impl From<EncodingError>`, so its
+    /// `from` record (139-141) lands on the untranslated
+    /// `From<serialize::Error>` (139-141). Lines cannot detect this; only
+    /// identity evidence such as the impl header's trait arguments could. If
+    /// this test fails because the binding is gone, the limit is fixed:
+    /// update the test and the docs.
+    #[test]
+    fn test_strategy_file_line_overlap_exact_shift_binds_sibling() {
+        let serialization_atom =
+            "probe:spqr/1.6.0/impl<serialize::Error>#[Error][`From<SerializationError>`]from()";
+        let authenticator_atom =
+            "probe:spqr/1.6.0/impl<authenticator::Error>#[Error][`From<AuthenticatorError>`]from()";
+        let mut rust_atoms = BTreeMap::new();
+        for (key, lines) in [
+            (
+                "probe:spqr/1.6.0/impl<encoding::EncodingError>#[Error][`From<EncodingError>`]from()",
+                (133, 135),
+            ),
+            (serialization_atom, (139, 141)),
+            (authenticator_atom, (145, 147)),
+        ] {
+            rust_atoms.insert(
+                key.to_string(),
+                make_rust_atom("Error::from", "src/lib.rs", lines.0, lines.1),
+            );
+        }
+
+        let encoding_from = "spqr.Error.Insts.CoreConvertFromEncodingError.from";
+        let authenticator_from = "spqr.Error.Insts.CoreConvertFromAuthenticatorError.from";
+        let mut lean = BTreeMap::new();
+        for name in [encoding_from, authenticator_from] {
+            lean.insert(format!("probe:{name}"), make_lean_atom(name, "Funs.lean"));
+        }
+
+        let funcs = vec![
+            make_func(
+                encoding_from,
+                Some("spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}::from"),
+                "src/lib.rs",
+                "L139-L141",
+            ),
+            make_func(
+                authenticator_from,
+                Some("spqr::{impl core::convert::From<spqr::authenticator::Error> for spqr::Error}::from"),
+                "src/lib.rs",
+                "L144-L148",
+            ),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let pairs: Vec<(&str, &str)> = mappings
+            .iter()
+            .map(|m| (m.from.as_str(), m.to.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                (
+                    authenticator_atom,
+                    "probe:spqr.Error.Insts.CoreConvertFromAuthenticatorError.from"
+                ),
+                (
+                    serialization_atom,
+                    "probe:spqr.Error.Insts.CoreConvertFromEncodingError.from"
+                ),
+            ],
+            "{mappings:?}"
+        );
+        assert!(mappings
+            .iter()
+            .all(|m| m.method.as_deref() == Some("file+line-overlap")));
     }
 
     /// An instance record of the atom's own impl may bind by line overlap:
