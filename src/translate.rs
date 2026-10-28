@@ -189,10 +189,12 @@ pub fn generate_translations(
     );
 
     // Strategy 3: file + line overlap matching
+    let impls_with_methods = impls_with_method_records(functions);
     strategy_file_line_overlap(
         rust_data,
         lean_data,
         &file_to_funcs,
+        &impls_with_methods,
         &mut mappings,
         &mut matched_rust,
         &mut matched_lean,
@@ -240,6 +242,114 @@ pub(crate) fn normalize_rust_name(name: &str) -> String {
 
 fn extract_base_name(display_name: &str) -> &str {
     display_name.rsplit("::").next().unwrap_or(display_name)
+}
+
+/// Whether the item that a record's `rust_name` names can be the Rust atom
+/// with `display_name` (base name `base_name`), so that a line overlap may
+/// bind them. Without a `rust_name` there is nothing to compare: `true`.
+///
+/// - A function record (`spqr::{impl From<..> for spqr::Error}::from`) names
+///   a function: its last segment must equal the atom's base name.
+/// - An instance record (`symcrust::mlkem::key::{impl BoxDefault for
+///   symcrust::mlkem::key::Key}`) names a trait impl. When Aeneas translates
+///   no method of that impl as its own def (SymCRust's `Key::box_default` is
+///   an opaque axiom), the instance is the method's only translation, so it
+///   may bind: its self type must equal the atom's (`Key::box_default`), and
+///   no record may exist for a method of the impl (`impls_with_methods`).
+///   Otherwise the instance is a wrapper and the method record is the target.
+fn record_may_name_atom(
+    func: &FunctionRecord,
+    display_name: &str,
+    base_name: &str,
+    impls_with_methods: &HashSet<&str>,
+) -> bool {
+    let Some(rust_name) = func.rust_name.as_deref() else {
+        return true;
+    };
+    if rust_name.ends_with('}') {
+        if impls_with_methods.contains(rust_name) {
+            return false;
+        }
+        return match (impl_self_type(rust_name), display_self_type(display_name)) {
+            (Some(record_self), Some(atom_self)) => record_self == atom_self,
+            _ => false,
+        };
+    }
+    extract_base_name(rust_name) == base_name
+}
+
+/// The impl blocks (`a::{impl T for a::S}`) that some record names a method
+/// of (`a::{impl T for a::S}::m`), whatever the record's flags.
+fn impls_with_method_records(functions: &[FunctionRecord]) -> HashSet<&str> {
+    functions
+        .iter()
+        .filter_map(|f| f.rust_name.as_deref())
+        .filter(|name| !name.ends_with('}'))
+        .filter_map(|name| name.rfind('}').map(|end| &name[..=end]))
+        .collect()
+}
+
+/// The bare self type of the last impl block of a Rust name:
+/// `a::{impl T<u8> for a::b::Key<N>}` -> `Key`, `a::{a::b::Key}` -> `Key`.
+fn impl_self_type(rust_name: &str) -> Option<&str> {
+    let block = rust_name.strip_suffix('}')?;
+    let block = &block[block.rfind('{')? + 1..];
+    let self_part = match block.rfind(" for ") {
+        Some(idx) => &block[idx + 5..],
+        None => block.strip_prefix("impl ").unwrap_or(block),
+    };
+    bare_type(self_part)
+}
+
+/// The bare self type of an atom display name: `Key<N>::box_default` -> `Key`;
+/// `None` for a free function (`box_default`).
+fn display_self_type(display_name: &str) -> Option<&str> {
+    let (prefix, _) = display_name.rsplit_once("::")?;
+    bare_type(prefix)
+}
+
+/// Whether `s` has a comma outside any `<>`, `()` or `[]` group: the
+/// separator of a tuple's elements, not of a generic's arguments
+/// (`a::A, b::B` but not `Key<u8, u16>`).
+fn has_top_level_comma(s: &str) -> bool {
+    let mut depth = 0usize;
+    for c in s.chars() {
+        match c {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Strip references, generic arguments and the module path from a type:
+/// `&'_1 a::Key<N>`, `&0 (a::Key)` and `&mut Key` -> `Key`. A reference may
+/// carry a region (`'a`, `'_1`, or Charon's bare `0`) and wrap its target in
+/// parentheses. `None` for a compound type (tuple, slice, array, pointer),
+/// which never equals a bare type name.
+fn bare_type(ty: &str) -> Option<&str> {
+    let mut ty = ty.trim();
+    while let Some(rest) = ty.strip_prefix('&') {
+        ty = rest.trim_start();
+        if let Some((region, target)) = ty.split_once(' ') {
+            if region.starts_with('\'') || region.bytes().all(|b| b.is_ascii_digit()) {
+                ty = target.trim_start();
+            }
+        }
+        ty = ty.strip_prefix("mut ").unwrap_or(ty).trim_start();
+    }
+    if let Some(inner) = ty.strip_prefix('(').and_then(|t| t.strip_suffix(')')) {
+        if !has_top_level_comma(inner) {
+            ty = inner.trim();
+        }
+    }
+    let path = ty.split('<').next().unwrap_or(ty).trim();
+    if path.is_empty() || path.contains(|c: char| "()[]*;, ".contains(c)) {
+        return None;
+    }
+    path.rsplit("::").next()
 }
 
 /// Classify a `functions.json` entry as deferred for RQN matching.
@@ -596,14 +706,35 @@ fn strategy_file_line_overlap(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     file_to_funcs: &HashMap<String, Vec<&FunctionRecord>>,
+    impls_with_methods: &HashSet<&str>,
     mappings: &mut Vec<Mapping>,
     matched_rust: &mut HashSet<String>,
     matched_lean: &mut HashSet<String>,
 ) {
+    // Rust atoms per (file, display name). Several atoms with one display
+    // name in a file (SPQR's three `From<_> for Error` impls, all
+    // `Error::from`) are siblings, which a named record tells apart only by
+    // its lines.
+    let mut siblings: HashMap<(&str, &str), usize> = HashMap::new();
+    for atom in rust_data.values() {
+        *siblings
+            .entry((
+                normalize_source_path(&atom.code_path),
+                atom.display_name.as_str(),
+            ))
+            .or_default() += 1;
+    }
+
     for (code_name, atom) in rust_data {
         if matched_rust.contains(code_name) || atom.code_path.is_empty() {
             continue;
         }
+        let has_siblings = siblings
+            .get(&(
+                normalize_source_path(&atom.code_path),
+                atom.display_name.as_str(),
+            ))
+            .is_some_and(|n| *n > 1);
         let v_start = atom.code_text.lines_start;
         let v_end = atom.code_text.lines_end;
         if v_start == 0 {
@@ -620,6 +751,7 @@ fn strategy_file_line_overlap(
             Some(c) => c,
             None => continue,
         };
+        let base_name = extract_base_name(&atom.display_name);
 
         let mut best_match: Option<&FunctionRecord> = None;
         let mut best_overlap: i64 = -1;
@@ -629,11 +761,25 @@ fn strategy_file_line_overlap(
             if matched_lean.contains(&lean_code_name) {
                 continue;
             }
+            // When the record names its Rust item, the overlap may only decide
+            // between records of that same item.
+            if !record_may_name_atom(func, &atom.display_name, base_name, impls_with_methods) {
+                continue;
+            }
 
             let func_range = match func.lines.as_deref().and_then(|s| LineRange::parse(s).ok()) {
                 Some(r) => r,
                 None => continue,
             };
+            // The record's lines come from the source Charon compiled, which a
+            // project may patch for the Charon run (SPQR's translation
+            // patches), so they can point at a neighbouring item (issue #80).
+            // A named record binds an atom with same-named siblings only when
+            // its range contains the atom's range: a shifted record that
+            // overlaps a sibling only in part does not bind it.
+            if func.rust_name.is_some() && has_siblings && !func_range.contains(&rust_range) {
+                continue;
+            }
 
             if rust_range.overlaps(&func_range, 10) {
                 let overlap = rust_range.overlap_amount(&func_range);
@@ -1045,6 +1191,409 @@ mod tests {
         let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "file-and-lines");
+    }
+
+    /// Issue #80: on SPQR, `impl From<Version> for u8`'s `from` (189-194)
+    /// was bound by line overlap to the instance record of
+    /// `impl TryFrom<u8> for Version` (186-194), whose lines Charon took from
+    /// a patched `lib.rs`. A record that names a different Rust function must
+    /// not bind, however close its lines. A record without `rust_name` keeps
+    /// the plain overlap behavior.
+    #[test]
+    fn test_strategy_file_line_overlap_requires_same_rust_name() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:spqr/1.6.0/impl<Version>#[u8][`From<Version>`]from()".to_string(),
+            make_rust_atom("u8::from", "src/lib.rs", 189, 194),
+        );
+        rust_atoms.insert(
+            "probe:spqr/1.6.0/mystery()".to_string(),
+            make_rust_atom("mystery_fn", "src/lib.rs", 570, 590),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:spqr.proto.pq_ratchet.Version.Insts.CoreConvertTryFromU8String".to_string(),
+            make_lean_atom("CoreConvertTryFromU8String", "Funs.lean"),
+        );
+        lean.insert(
+            "probe:spqr.some_fn".to_string(),
+            make_lean_atom("some_fn", "Funs.lean"),
+        );
+
+        let funcs = vec![
+            make_func(
+                "spqr.proto.pq_ratchet.Version.Insts.CoreConvertTryFromU8String",
+                Some("spqr::{impl core::convert::TryFrom<u8, alloc::string::String> for spqr::proto::pq_ratchet::Version}"),
+                "src/lib.rs",
+                "L186-L194",
+            ),
+            make_func("spqr.some_fn", None, "src/lib.rs", "L575-L588"),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].from, "probe:spqr/1.6.0/mystery()");
+        assert_eq!(mappings[0].to, "probe:spqr.some_fn");
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    /// A record whose `rust_name` names the atom's function still binds by
+    /// line overlap. Its Lean name (`CoreConvertFromU8.from_u8`) differs from
+    /// the Rust name, so `file+display-name` does not claim it first.
+    #[test]
+    fn test_strategy_file_line_overlap_same_rust_name_binds() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:c/1.0/impl<u8>#[Foo][`From<u8>`]from()".to_string(),
+            make_rust_atom("Foo::from", "src/lib.rs", 40, 44),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:c.Foo.Insts.CoreConvertFromU8.from_u8".to_string(),
+            make_lean_atom("from_u8", "Funs.lean"),
+        );
+
+        let funcs = vec![make_func(
+            "c.Foo.Insts.CoreConvertFromU8.from_u8",
+            Some("c::{impl core::convert::From<u8> for c::Foo}::from"),
+            "src/lib.rs",
+            "L42-L46",
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(
+            mappings[0].to,
+            "probe:c.Foo.Insts.CoreConvertFromU8.from_u8"
+        );
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    /// SPQR without `charon-def-id`s: three `From<_> for Error` atoms, all
+    /// `Error::from`. The records of `impl From<EncodingError> for Error` are
+    /// shifted by the translation patches: its instance (140-144) and its
+    /// `from` (141-143) overlap the untranslated `From<serialize::Error>`
+    /// (139-141), not their own atom (133-135). Two `from` records in the
+    /// file keep `file+display-name` from claiming either one, as on SPQR.
+    ///
+    /// A named record binds a sibling only when its range contains the
+    /// atom's range. The unshifted `AuthenticatorError` record (144-148)
+    /// contains its atom (145-147) and binds it. The shifted `from` record
+    /// contains no atom, and the instance is a wrapper (its impl has a `from`
+    /// record), so neither binds.
+    #[test]
+    fn test_strategy_file_line_overlap_siblings_bind_only_contained() {
+        let encoding_atom =
+            "probe:spqr/1.6.0/impl<encoding::EncodingError>#[Error][`From<EncodingError>`]from()";
+        let serialization_atom =
+            "probe:spqr/1.6.0/impl<serialize::Error>#[Error][`From<SerializationError>`]from()";
+        let authenticator_atom =
+            "probe:spqr/1.6.0/impl<authenticator::Error>#[Error][`From<AuthenticatorError>`]from()";
+        let mut rust_atoms = BTreeMap::new();
+        for (key, lines) in [
+            (encoding_atom, (133, 135)),
+            (serialization_atom, (139, 141)),
+            (authenticator_atom, (145, 147)),
+        ] {
+            rust_atoms.insert(
+                key.to_string(),
+                make_rust_atom("Error::from", "src/lib.rs", lines.0, lines.1),
+            );
+        }
+
+        let mut lean = BTreeMap::new();
+        for name in [
+            "spqr.Error.Insts.CoreConvertFromEncodingError",
+            "spqr.Error.Insts.CoreConvertFromEncodingError.from",
+            "spqr.Error.Insts.CoreConvertFromAuthenticatorError.from",
+        ] {
+            lean.insert(format!("probe:{name}"), make_lean_atom(name, "Funs.lean"));
+        }
+
+        let encoding_impl =
+            "spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}";
+        let authenticator_impl =
+            "spqr::{impl core::convert::From<spqr::authenticator::Error> for spqr::Error}";
+        let funcs = vec![
+            make_func(
+                "spqr.Error.Insts.CoreConvertFromEncodingError",
+                Some(encoding_impl),
+                "src/lib.rs",
+                "L140-L144",
+            ),
+            make_func(
+                "spqr.Error.Insts.CoreConvertFromEncodingError.from",
+                Some(&format!("{encoding_impl}::from")),
+                "src/lib.rs",
+                "L141-L143",
+            ),
+            make_func(
+                "spqr.Error.Insts.CoreConvertFromAuthenticatorError.from",
+                Some(&format!("{authenticator_impl}::from")),
+                "src/lib.rs",
+                "L144-L148",
+            ),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].from, authenticator_atom);
+        assert_eq!(
+            mappings[0].to,
+            "probe:spqr.Error.Insts.CoreConvertFromAuthenticatorError.from"
+        );
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+
+        // A record without a `rust_name` names nothing to compare, so the
+        // sibling rule does not apply: it binds by plain line overlap.
+        lean.insert(
+            "probe:spqr.legacy_from".to_string(),
+            make_lean_atom("legacy_from", "Funs.lean"),
+        );
+        let legacy = vec![make_func(
+            "spqr.legacy_from",
+            None,
+            "src/lib.rs",
+            "L141-L143",
+        )];
+        let (legacy_mappings, _) = generate_translations(&rust_atoms, &lean, &legacy, None);
+        assert_eq!(legacy_mappings.len(), 1, "{legacy_mappings:?}");
+        assert_eq!(legacy_mappings[0].from, serialization_atom);
+        assert_eq!(legacy_mappings[0].to, "probe:spqr.legacy_from");
+        assert_eq!(
+            legacy_mappings[0].method.as_deref(),
+            Some("file+line-overlap")
+        );
+    }
+
+    /// Known limit of the containment rule: a record shifted by exactly the
+    /// spacing between siblings covers the wrong sibling completely and binds
+    /// it. Here a patch adds 6 lines above `impl From<EncodingError>`, so its
+    /// `from` record (139-141) lands on the untranslated
+    /// `From<serialize::Error>` (139-141). Lines cannot detect this; only
+    /// identity evidence such as the impl header's trait arguments could. If
+    /// this test fails because the binding is gone, the limit is fixed:
+    /// update the test and the docs.
+    #[test]
+    fn test_strategy_file_line_overlap_exact_shift_binds_sibling() {
+        let serialization_atom =
+            "probe:spqr/1.6.0/impl<serialize::Error>#[Error][`From<SerializationError>`]from()";
+        let authenticator_atom =
+            "probe:spqr/1.6.0/impl<authenticator::Error>#[Error][`From<AuthenticatorError>`]from()";
+        let mut rust_atoms = BTreeMap::new();
+        for (key, lines) in [
+            (
+                "probe:spqr/1.6.0/impl<encoding::EncodingError>#[Error][`From<EncodingError>`]from()",
+                (133, 135),
+            ),
+            (serialization_atom, (139, 141)),
+            (authenticator_atom, (145, 147)),
+        ] {
+            rust_atoms.insert(
+                key.to_string(),
+                make_rust_atom("Error::from", "src/lib.rs", lines.0, lines.1),
+            );
+        }
+
+        let encoding_from = "spqr.Error.Insts.CoreConvertFromEncodingError.from";
+        let authenticator_from = "spqr.Error.Insts.CoreConvertFromAuthenticatorError.from";
+        let mut lean = BTreeMap::new();
+        for name in [encoding_from, authenticator_from] {
+            lean.insert(format!("probe:{name}"), make_lean_atom(name, "Funs.lean"));
+        }
+
+        let funcs = vec![
+            make_func(
+                encoding_from,
+                Some("spqr::{impl core::convert::From<spqr::encoding::EncodingError> for spqr::Error}::from"),
+                "src/lib.rs",
+                "L139-L141",
+            ),
+            make_func(
+                authenticator_from,
+                Some("spqr::{impl core::convert::From<spqr::authenticator::Error> for spqr::Error}::from"),
+                "src/lib.rs",
+                "L144-L148",
+            ),
+        ];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let pairs: Vec<(&str, &str)> = mappings
+            .iter()
+            .map(|m| (m.from.as_str(), m.to.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                (
+                    authenticator_atom,
+                    "probe:spqr.Error.Insts.CoreConvertFromAuthenticatorError.from"
+                ),
+                (
+                    serialization_atom,
+                    "probe:spqr.Error.Insts.CoreConvertFromEncodingError.from"
+                ),
+            ],
+            "{mappings:?}"
+        );
+        assert!(mappings
+            .iter()
+            .all(|m| m.method.as_deref() == Some("file+line-overlap")));
+    }
+
+    /// An instance record of the atom's own impl may bind by line overlap:
+    /// Aeneas translates SymCRust's `impl BoxDefault for Key` as the instance
+    /// `Key.Insts.SymcrustCommonBoxDefault` alone (its `box_default` is an
+    /// opaque axiom with no record), so the instance is the method's
+    /// translation.
+    #[test]
+    fn test_strategy_file_line_overlap_instance_of_own_impl_binds() {
+        let mut rust_atoms = BTreeMap::new();
+        rust_atoms.insert(
+            "probe:symcrust/0.1.0/mlkem/key/impl<*mut/Self>#[Key][BoxDefault]box_default()"
+                .to_string(),
+            make_rust_atom("Key::box_default", "src/mlkem/key.rs", 222, 229),
+        );
+
+        let mut lean = BTreeMap::new();
+        lean.insert(
+            "probe:symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault".to_string(),
+            make_lean_atom("SymcrustCommonBoxDefault", "Funs.lean"),
+        );
+
+        let funcs = vec![make_func(
+            "symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault",
+            Some("symcrust::mlkem::key::{impl symcrust::common::BoxDefault for symcrust::mlkem::key::Key}"),
+            "src/mlkem/key.rs",
+            "L221-L230",
+        )];
+
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(
+            mappings[0].to,
+            "probe:symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault"
+        );
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    #[test]
+    fn test_record_may_name_atom() {
+        let none = HashSet::new();
+        let func = |rust_name: Option<&str>| make_func("x", rust_name, "src/lib.rs", "L1-L2");
+        assert!(record_may_name_atom(
+            &func(None),
+            "anything",
+            "anything",
+            &none
+        ));
+        let from = func(Some("c::{impl core::convert::From<u8> for c::Foo}::from"));
+        assert!(record_may_name_atom(&from, "Foo::from", "from", &none));
+        assert!(!record_may_name_atom(&from, "Foo::into", "into", &none));
+        let instance_name = "spqr::{impl core::convert::TryFrom<u8, alloc::string::String> for spqr::proto::pq_ratchet::Version}";
+        let instance = func(Some(instance_name));
+        assert!(record_may_name_atom(
+            &instance,
+            "Version::try_from",
+            "try_from",
+            &none
+        ));
+        assert!(!record_may_name_atom(&instance, "u8::from", "from", &none));
+        assert!(!record_may_name_atom(
+            &instance, "free_fn", "free_fn", &none
+        ));
+        // With a record for one of its methods, the instance is a wrapper.
+        let with_method = HashSet::from([instance_name]);
+        assert!(!record_may_name_atom(
+            &instance,
+            "Version::try_from",
+            "try_from",
+            &with_method
+        ));
+        let inherent = func(Some("c::{c::m::Poly<N>}"));
+        assert!(record_may_name_atom(
+            &inherent,
+            "Poly<N>::eval",
+            "eval",
+            &none
+        ));
+    }
+
+    #[test]
+    fn test_bare_type() {
+        for (ty, bare) in [
+            ("a::b::Key<N>", Some("Key")),
+            ("&a::Key", Some("Key")),
+            ("&'_1 a::Key", Some("Key")),
+            ("&'_0 u8", Some("u8")),
+            ("&0 (a::Key)", Some("Key")),
+            ("&'0 (a::Key<u8>)", Some("Key")),
+            ("&mut a::Key", Some("Key")),
+            ("&'a mut a::Key", Some("Key")),
+            ("(a::Key)", Some("Key")),
+            ("(a::A, b::B)", None),
+            ("&0 (a::A, b::B)", None),
+            ("&0 (a::Key<u8, u16>)", Some("Key")),
+            ("(a::Key<(u8, u16)>)", Some("Key")),
+            ("(a::Key<u8>, b::B)", None),
+            ("[u8]", None),
+            ("[u8; 32]", None),
+            ("*const a::Key", None),
+            ("", None),
+        ] {
+            assert_eq!(bare_type(ty), bare, "{ty}");
+        }
+    }
+
+    /// An instance-only translation of an impl on a borrowed self type binds
+    /// whichever way Charon spells the reference: `&'_0 c::Key` (current) or
+    /// `&0 (c::Key)` (older releases, see `tests/fixtures/rqn_pairs.json`).
+    #[test]
+    fn test_strategy_file_line_overlap_instance_of_borrowed_self_binds() {
+        for self_ty in ["&'_0 c::Key", "&0 (c::Key)", "&0 (c::Key<u8, u16>)"] {
+            let mut rust_atoms = BTreeMap::new();
+            rust_atoms.insert(
+                "probe:c/1.0/&Key#impl<Key>#[`&Key`][Neg]neg()".to_string(),
+                make_rust_atom("Key::neg", "src/lib.rs", 20, 24),
+            );
+            let mut lean = BTreeMap::new();
+            lean.insert(
+                "probe:c.Shared0Key.Insts.CoreOpsArithNegKey".to_string(),
+                make_lean_atom("CoreOpsArithNegKey", "Funs.lean"),
+            );
+            let rust_name = format!("c::{{impl core::ops::arith::Neg<c::Key> for {self_ty}}}");
+            let funcs = vec![make_func(
+                "c.Shared0Key.Insts.CoreOpsArithNegKey",
+                Some(&rust_name),
+                "src/lib.rs",
+                "L19-L25",
+            )];
+
+            let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+            assert_eq!(mappings.len(), 1, "{self_ty}: {mappings:?}");
+            assert_eq!(
+                mappings[0].to,
+                "probe:c.Shared0Key.Insts.CoreOpsArithNegKey"
+            );
+            assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+        }
+    }
+
+    #[test]
+    fn test_impls_with_method_records() {
+        let funcs = vec![
+            make_func("a", Some("c::{impl T for c::S}::m"), "src/lib.rs", "L1-L2"),
+            make_func("b", Some("c::{impl T for c::S}"), "src/lib.rs", "L1-L3"),
+            make_func("d", Some("c::{impl T for c::R}"), "src/lib.rs", "L5-L6"),
+            make_func("e", Some("c::free"), "src/lib.rs", "L8-L9"),
+            make_func("f", None, "src/lib.rs", "L8-L9"),
+        ];
+        assert_eq!(
+            impls_with_method_records(&funcs),
+            HashSet::from(["c::{impl T for c::S}"])
+        );
     }
 
     #[test]

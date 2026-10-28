@@ -18,7 +18,7 @@
     },
     {
       "lean_name": "Mini.helper_inner",
-      "rust_name": "mini::point::helper_inner",
+      "rust_name": null,
       "source": "src/point.rs",
       "lines": "L31-L39",
       "is_hidden": false,
