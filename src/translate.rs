@@ -308,6 +308,22 @@ fn display_self_type(display_name: &str) -> Option<&str> {
     bare_type(prefix)
 }
 
+/// Whether `s` has a comma outside any `<>`, `()` or `[]` group: the
+/// separator of a tuple's elements, not of a generic's arguments
+/// (`a::A, b::B` but not `Key<u8, u16>`).
+fn has_top_level_comma(s: &str) -> bool {
+    let mut depth = 0usize;
+    for c in s.chars() {
+        match c {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
 /// Strip references, generic arguments and the module path from a type:
 /// `&'_1 a::Key<N>`, `&0 (a::Key)` and `&mut Key` -> `Key`. A reference may
 /// carry a region (`'a`, `'_1`, or Charon's bare `0`) and wrap its target in
@@ -325,7 +341,7 @@ fn bare_type(ty: &str) -> Option<&str> {
         ty = ty.strip_prefix("mut ").unwrap_or(ty).trim_start();
     }
     if let Some(inner) = ty.strip_prefix('(').and_then(|t| t.strip_suffix(')')) {
-        if !inner.contains(',') {
+        if !has_top_level_comma(inner) {
             ty = inner.trim();
         }
     }
@@ -1519,6 +1535,9 @@ mod tests {
             ("(a::Key)", Some("Key")),
             ("(a::A, b::B)", None),
             ("&0 (a::A, b::B)", None),
+            ("&0 (a::Key<u8, u16>)", Some("Key")),
+            ("(a::Key<(u8, u16)>)", Some("Key")),
+            ("(a::Key<u8>, b::B)", None),
             ("[u8]", None),
             ("[u8; 32]", None),
             ("*const a::Key", None),
@@ -1533,7 +1552,7 @@ mod tests {
     /// `&0 (c::Key)` (older releases, see `tests/fixtures/rqn_pairs.json`).
     #[test]
     fn test_strategy_file_line_overlap_instance_of_borrowed_self_binds() {
-        for self_ty in ["&'_0 c::Key", "&0 (c::Key)"] {
+        for self_ty in ["&'_0 c::Key", "&0 (c::Key)", "&0 (c::Key<u8, u16>)"] {
             let mut rust_atoms = BTreeMap::new();
             rust_atoms.insert(
                 "probe:c/1.0/&Key#impl<Key>#[`&Key`][Neg]neg()".to_string(),
