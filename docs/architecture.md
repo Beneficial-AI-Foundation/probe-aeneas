@@ -81,6 +81,12 @@ name-suffix heuristic (`_loop`/`_body`/`.body`), which remains the fallback when
 the manifest is absent. See the manifest overlay note in
 [USAGE.md](USAGE.md#translation-strategies).
 
+**Opaque template functions.** Local `*External_Template.lean` entries of
+`translation.json` join matching as in-memory template records, resolved to
+their Lean atoms by name, with extra matching guards. They are never written to
+`functions.json`. See [USAGE.md](USAGE.md#translation-strategies)
+for the full rules.
+
 The output of this phase is the list of `Mapping` records, each with its
 `confidence` and `method`. The records stay authoritative for the rest of
 the pipeline: endpoints are normalized by the hub's P8 rule (strip trailing

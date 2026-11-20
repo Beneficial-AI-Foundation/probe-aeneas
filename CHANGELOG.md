@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.22.2] - 2026-11-19
+
+### Fixed
+- Opaque functions that a project completes by hand from Aeneas's `*External_Template.lean` now map to their Lean atoms (#82). Before, probe-aeneas dropped every template entry of `translation.json`. Also, Aeneas names a template entry without the crate prefix of its Lean declaration: SPQR's `kdf.hkdf_to_slice` is declared as `spqr.kdf.hkdf_to_slice`. Local template entries (`is_local`, or a `rust_name` under the manifest `crate`) now join matching as in-memory records. Each one resolves to a Lean atom by its exact name, or with the manifest `crate` prefix added or removed. This also fixes the reverse direction of #61. Library template entries (`core.*`) stay excluded. A template record joins by `charon-def-id` like any record. In `rust-qualified-name` and `file+line-overlap` it binds only an atom of its own crate, in its source file, whose range its range contains. It does not take part in `file+display-name`. Template records are never written to `functions.json` or listed by `listfuns`. A mapped template copies its Lean status (`trusted` for SPQR's `hkdf_to_slice`), so the derived statuses of its callers can change.
+
 ## [0.22.1] - 2026-10-27
 
 ### Fixed
