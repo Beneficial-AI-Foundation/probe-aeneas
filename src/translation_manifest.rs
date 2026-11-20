@@ -18,6 +18,9 @@
 //!   `.body`, …), a heuristic that is fragile in both directions; the overlay
 //!   records ground truth on [`FunctionRecord::is_loop_artifact`] /
 //!   `parent_lean_name` / `def_id`, which the matcher prefers over the heuristic.
+//!   [`apply`] also appends the manifest's local template records (opaque
+//!   crate functions in `*External_Template.lean`) that the file does not
+//!   already list, since a written `functions.json` never holds them.
 //!
 //! ## Error model
 //!
@@ -49,6 +52,12 @@ pub struct TranslationManifest {
     /// see docs/charon-def-id-matching-plan.md).
     #[serde(default)]
     pub charon_version: Option<String>,
+    /// The translated crate's name (top-level `crate`). Decides which
+    /// `External_Template` entries are local (see
+    /// [`TranslationFunc::is_local_template`]) and is the namespace prefix the
+    /// template-name resolver adds or removes.
+    #[serde(rename = "crate", default)]
+    pub crate_name: Option<String>,
     #[serde(default)]
     pub functions: Vec<TranslationFunc>,
     #[serde(default)]
@@ -90,14 +99,54 @@ impl TranslationManifest {
             .chain(self.trait_impls.iter().map(|e| e.lean_name.clone()))
             .collect()
     }
+
+    /// Records for the local template entries of `functions`, `globals` and
+    /// `trait_impls` (see [`TranslationFunc::is_local_template`]), flagged
+    /// `is_local_template`, sorted by `lean_name`.
+    pub fn local_template_records(&self) -> Vec<FunctionRecord> {
+        let crate_name = self.crate_name.as_deref();
+        let funcs = self
+            .functions
+            .iter()
+            .filter(|f| f.is_local_template(crate_name))
+            .map(|f| f.to_record(true));
+        let others = self
+            .globals
+            .iter()
+            .chain(self.trait_impls.iter())
+            .filter(|f| f.is_local_template(crate_name))
+            .map(|f| f.to_record(false));
+        let mut records: Vec<FunctionRecord> = funcs
+            .chain(others)
+            .map(|mut r| {
+                r.is_local_template = true;
+                r.is_template_name = true;
+                r
+            })
+            .collect();
+        records.sort_by(|a, b| a.lean_name.cmp(&b.lean_name));
+        records
+    }
+}
+
+/// The crate name in Rust/Lean identifier spelling: Cargo package names may
+/// use `-`, which both `rust_name` paths and Lean namespaces spell `_`.
+pub fn normalize_crate_name(crate_name: &str) -> String {
+    crate_name.replace('-', "_")
 }
 
 /// Build [`FunctionRecord`]s directly from the manifest — the authoritative
 /// replacement for the docstring scraper. Draws from `functions`, `globals`,
 /// and `trait_impls` (single-method trait wrappers are real translation
-/// targets, so the wrappers must be records), excluding entries in
-/// `*External_Template.lean` — external stand-ins with no local Lean atom, the
-/// same files the legacy scraper skips (they lack the Aeneas marker).
+/// targets, so the wrappers must be records).
+///
+/// Entries in `*External_Template.lean` are kept only when local
+/// ([`TranslationFunc::is_local_template`]): an opaque crate function whose
+/// template the project completes by hand (e.g. SPQR's `kdf.hkdf_to_slice` in
+/// `FunsExternal.lean`), so it can have a Lean atom. Such records are flagged
+/// `is_local_template`. Non-local template entries (library template entries
+/// such as `core.*`) stay excluded: their `/rustc/.../src/...` paths normalize like
+/// project paths and could otherwise bind project atoms.
 ///
 /// Records are sorted by `lean_name` so a possibly-unstable `translation.json`
 /// array order never leaks into probe-aeneas's output (P14). The
@@ -120,7 +169,10 @@ pub fn records_from_manifest(manifest: &TranslationManifest) -> Vec<FunctionReco
         .chain(manifest.trait_impls.iter())
         .filter(|f| !f.is_external_template())
         .map(|f| f.to_record(false));
-    let mut records: Vec<FunctionRecord> = funcs.chain(others).collect();
+    let mut records: Vec<FunctionRecord> = funcs
+        .chain(others)
+        .chain(manifest.local_template_records())
+        .collect();
     records.sort_by(|a, b| a.lean_name.cmp(&b.lean_name));
     records
 }
@@ -148,15 +200,42 @@ pub struct TranslationFunc {
     /// `lean_name` of the enclosing top-level def (loop helpers only).
     #[serde(default)]
     pub parent_lean_name: Option<String>,
+    /// Whether the def belongs to the translated crate (absent in older
+    /// manifests).
+    #[serde(default)]
+    pub is_local: Option<bool>,
 }
 
 impl TranslationFunc {
     /// Whether this entry lives in an `*External_Template.lean` file — an
-    /// external stand-in with no local Lean atom, excluded from records.
+    /// opaque def Aeneas leaves for the project to complete.
     fn is_external_template(&self) -> bool {
         self.lean_file
             .as_deref()
             .is_some_and(|f| f.ends_with("External_Template.lean"))
+    }
+
+    /// Whether this is a template entry of the translated crate itself: in an
+    /// `*External_Template.lean` file and `is_local`, or, when the manifest has
+    /// no `is_local` (older Aeneas), its `rust_name` is under `<crate>::`.
+    /// Without either signal the entry is not local (conservative).
+    pub fn is_local_template(&self, crate_name: Option<&str>) -> bool {
+        if !self.is_external_template() {
+            return false;
+        }
+        match self.is_local {
+            Some(local) => local,
+            None => match (crate_name, self.rust_name.as_deref()) {
+                (Some(krate), Some(rust_name)) => {
+                    let krate = normalize_crate_name(krate);
+                    !krate.is_empty()
+                        && rust_name
+                            .strip_prefix(krate.as_str())
+                            .is_some_and(|rest| rest.starts_with("::"))
+                }
+                _ => false,
+            },
+        }
     }
 
     /// Convert to a [`FunctionRecord`], carrying authoritative loop/primary
@@ -183,6 +262,10 @@ impl TranslationFunc {
             parent_lean_name: self.parent_lean_name.clone(),
             def_id: Some(self.def_id),
             def_id_is_fun_decl: is_fun_decl,
+            // Set by `local_template_records`, the only producer of template
+            // records.
+            is_local_template: false,
+            is_template_name: false,
         }
     }
 }
@@ -225,24 +308,39 @@ pub fn resolve_path(project_root: &Path) -> Option<PathBuf> {
 }
 
 /// What overlaying a `translation.json` yields for downstream consumers:
-/// the auxiliary-def Lean names to flag as artifacts, plus the manifest's
-/// charon version for provenance-gating the `def_id` join.
+/// the auxiliary-def Lean names to flag as artifacts, the manifest's charon
+/// version for provenance-gating the `def_id` join, and its crate name for the
+/// template-name resolver.
 #[derive(Debug, Default)]
 pub struct ManifestOverlay {
     /// Lean names of auxiliary defs (type stand-ins + trait-instance wrappers).
     pub aux_defs: HashSet<String>,
     /// charon version from the manifest, or `None` when unavailable.
     pub charon_version: Option<String>,
+    /// Crate name from the manifest, or `None` when unavailable.
+    pub crate_name: Option<String>,
 }
 
 /// Load Aeneas's `translation.json` from `path` (if any), overlay its
 /// authoritative loop/primary classification onto `functions`, and return the
 /// auxiliary-def Lean names (type stand-ins + trait-instance wrappers) plus the
-/// manifest's charon version. A `None` path is a silent no-op; a load error is
-/// reported and swallowed. Both return an empty [`ManifestOverlay`] and fall
-/// back to the name heuristics, never aborting the pipeline. Shared by the
-/// `extract` and `listfuns` flows.
-pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> ManifestOverlay {
+/// manifest's charon version and crate name.
+///
+/// It also adds the manifest's local template records
+/// ([`TranslationManifest::local_template_records`]): a `functions.json` never
+/// holds them (they are not written), so without this a repeat `extract` that
+/// reuses the file it wrote would lose them. A record already in `functions`
+/// under the same `lean_name` is kept in place (not duplicated) and marked
+/// `is_template_name`: the resolver resolves its name, and renames it (with
+/// the template matching rules) or merges it into a record that already holds
+/// the resolved name. Appended
+/// records go at the end; `functions` is not re-sorted (record order decides
+/// first-wins ties in matching).
+///
+/// A `None` path is a silent no-op; a load error is reported and swallowed.
+/// Both return an empty [`ManifestOverlay`] and fall back to the name
+/// heuristics, never aborting the pipeline.
+pub fn apply(functions: &mut Vec<FunctionRecord>, path: Option<&Path>) -> ManifestOverlay {
     let Some(path) = path else {
         return ManifestOverlay::default();
     };
@@ -253,9 +351,14 @@ pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> ManifestO
                 "  Applied translation.json overlay: {n}/{} entries classified authoritatively",
                 functions.len()
             );
+            let added = add_local_template_records(functions, &manifest);
+            if added > 0 {
+                println!("  Added {added} local template records from translation.json");
+            }
             ManifestOverlay {
                 aux_defs: manifest.auxiliary_lean_names(),
                 charon_version: manifest.charon_version,
+                crate_name: manifest.crate_name,
             }
         }
         Err(e) => {
@@ -264,6 +367,27 @@ pub fn apply(functions: &mut [FunctionRecord], path: Option<&Path>) -> ManifestO
             ManifestOverlay::default()
         }
     }
+}
+
+/// Append the manifest's local template records whose `lean_name` is not
+/// already in `functions`, and mark a record already listed under such a name
+/// `is_template_name`. Returns the number appended.
+fn add_local_template_records(
+    functions: &mut Vec<FunctionRecord>,
+    manifest: &TranslationManifest,
+) -> usize {
+    let mut templates = manifest.local_template_records();
+    let template_names: HashSet<String> = templates.iter().map(|r| r.lean_name.clone()).collect();
+    for rec in functions.iter_mut() {
+        if template_names.contains(&rec.lean_name) {
+            rec.is_template_name = true;
+        }
+    }
+    let present: HashSet<&str> = functions.iter().map(|r| r.lean_name.as_str()).collect();
+    templates.retain(|r| !present.contains(r.lean_name.as_str()));
+    let added = templates.len();
+    functions.extend(templates);
+    added
 }
 
 /// Load and parse `translation.json` from disk.
@@ -542,5 +666,127 @@ mod tests {
         assert_eq!(resolve_path(root), None);
         std::fs::write(root.join("translation.json"), "{}").unwrap();
         assert_eq!(resolve_path(root), Some(root.join("translation.json")));
+    }
+
+    #[test]
+    fn parses_crate_and_is_local() {
+        let m: TranslationManifest = serde_json::from_str(
+            r#"{"crate": "spqr", "functions": [
+                {"def_id": 1, "lean_name": "a", "is_local": true},
+                {"def_id": 2, "lean_name": "b"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(m.crate_name.as_deref(), Some("spqr"));
+        assert_eq!(m.functions[0].is_local, Some(true));
+        assert_eq!(m.functions[1].is_local, None);
+        let bare: TranslationManifest = serde_json::from_str(r#"{"functions": []}"#).unwrap();
+        assert_eq!(bare.crate_name, None);
+    }
+
+    const TEMPLATE_JSON: &str = r#"{
+        "crate": "spqr",
+        "functions": [
+            {"def_id": 43, "lean_name": "kdf.hkdf_to_slice",
+             "lean_file": "SrcTranslated/FunsExternal_Template.lean",
+             "rust_name": "spqr::kdf::hkdf_to_slice", "is_local": true, "is_opaque": true,
+             "source": {"file": "src/kdf.rs", "begin_line": 14, "end_line": 18}},
+            {"def_id": 42, "lean_name": "spqr.kdf.hkdf_to_vec",
+             "lean_file": "SrcTranslated/Funs.lean",
+             "rust_name": "spqr::kdf::hkdf_to_vec", "is_local": true,
+             "source": {"file": "src/kdf.rs", "begin_line": 5, "end_line": 12}},
+            {"def_id": 7, "lean_name": "core.slice.Slice.chunks",
+             "lean_file": "SrcTranslated/FunsExternal_Template.lean",
+             "rust_name": "core::slice::{[T]}::chunks", "is_local": false,
+             "source": {"file": "/rustc/abc/library/core/src/slice/mod.rs",
+                        "begin_line": 1, "end_line": 9}}
+        ],
+        "globals": [
+            {"def_id": 3, "lean_name": "kdf.SALT",
+             "lean_file": "SrcTranslated/FunsExternal_Template.lean",
+             "rust_name": "spqr::kdf::SALT", "is_local": true}
+        ]
+    }"#;
+
+    #[test]
+    fn records_from_manifest_keeps_only_local_templates() {
+        let m: TranslationManifest = serde_json::from_str(TEMPLATE_JSON).unwrap();
+        let recs = records_from_manifest(&m);
+        assert_eq!(
+            recs.iter()
+                .map(|r| (r.lean_name.as_str(), r.is_local_template))
+                .collect::<Vec<_>>(),
+            vec![
+                ("kdf.SALT", true),
+                ("kdf.hkdf_to_slice", true),
+                ("spqr.kdf.hkdf_to_vec", false),
+            ]
+        );
+        let slice = &recs[1];
+        assert_eq!(slice.def_id, Some(43));
+        assert!(slice.def_id_is_fun_decl);
+        assert_eq!(slice.lines.as_deref(), Some("L14-L18"));
+        assert!(
+            !recs[0].def_id_is_fun_decl,
+            "a global template is no FunDeclId"
+        );
+    }
+
+    #[test]
+    fn locality_falls_back_to_the_crate_path_without_is_local() {
+        // Older manifests: no `is_local`; hyphenated crate names use `_`.
+        let m: TranslationManifest = serde_json::from_str(
+            r#"{"crate": "my-crate", "functions": [
+                {"def_id": 1, "lean_name": "my_crate.a.f", "rust_name": "my_crate::a::f",
+                 "lean_file": "FunsExternal_Template.lean"},
+                {"def_id": 2, "lean_name": "core.g", "rust_name": "core::g",
+                 "lean_file": "FunsExternal_Template.lean"},
+                {"def_id": 3, "lean_name": "my_crate_x.h", "rust_name": "my_crate_x::h",
+                 "lean_file": "FunsExternal_Template.lean"}]}"#,
+        )
+        .unwrap();
+        let names: Vec<String> = records_from_manifest(&m)
+            .into_iter()
+            .map(|r| r.lean_name)
+            .collect();
+        assert_eq!(names, vec!["my_crate.a.f"]);
+
+        // An explicit `is_local: false` wins over the crate-path fallback.
+        let m: TranslationManifest = serde_json::from_str(
+            r#"{"crate": "spqr", "functions": [
+                {"def_id": 1, "lean_name": "spqr.a.f", "rust_name": "spqr::a::f",
+                 "is_local": false, "lean_file": "FunsExternal_Template.lean"}]}"#,
+        )
+        .unwrap();
+        assert!(records_from_manifest(&m).is_empty());
+
+        // Neither `is_local` nor `crate`: nothing is kept.
+        let m: TranslationManifest = serde_json::from_str(
+            r#"{"functions": [{"def_id": 1, "lean_name": "a.f", "rust_name": "c::a::f",
+                 "lean_file": "FunsExternal_Template.lean"}]}"#,
+        )
+        .unwrap();
+        assert!(records_from_manifest(&m).is_empty());
+    }
+
+    #[test]
+    fn add_local_template_records_appends_missing_templates_once() {
+        let m: TranslationManifest = serde_json::from_str(TEMPLATE_JSON).unwrap();
+        let mut records = vec![FunctionRecord {
+            lean_name: "spqr.kdf.hkdf_to_vec".to_string(),
+            ..Default::default()
+        }];
+        assert_eq!(add_local_template_records(&mut records, &m), 2);
+        assert_eq!(
+            records
+                .iter()
+                .map(|r| r.lean_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["spqr.kdf.hkdf_to_vec", "kdf.SALT", "kdf.hkdf_to_slice"]
+        );
+        assert!(records[2].is_local_template);
+        assert_eq!(records[2].def_id, Some(43));
+        assert!(records[2].def_id_is_fun_decl);
+        // Applying again adds nothing.
+        assert_eq!(add_local_template_records(&mut records, &m), 0);
     }
 }
