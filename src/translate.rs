@@ -280,7 +280,7 @@ fn resolve_template_name(
 /// (`<crate>.` added, or exactly that prefix removed; no other segment is ever
 /// stripped) and keeps a name only if it is a Lean atom key. The exact name
 /// wins when both exist, unless only it is the uncompleted
-/// uncompleted def in `External_Template.lean`.
+/// def in `External_Template.lean`.
 ///
 /// Records are dropped when they could only confuse matching:
 /// - a template record with no Lean atom under either name (it can never map,
