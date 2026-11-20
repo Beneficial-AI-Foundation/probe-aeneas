@@ -626,6 +626,7 @@ pub fn run_extract(
         &lean_path,
         &resolved.records,
         resolved.charon_version.as_deref(),
+        resolved.crate_name.as_deref(),
     )?;
     let aux_defs = resolved.aux_defs;
 
@@ -778,12 +779,13 @@ fn resolve_inputs(
 /// `functions` are the resolved records (source-blind: manifest-built or
 /// legacy-scraped, already carrying any `translation.json` overlay).
 /// `manifest_charon_version` provenance-gates the charon-`def_id` join (see
-/// [`generate_translations`]).
+/// [`generate_translations`]); `crate_name` drives its template-name resolver.
 fn run_translate(
     rust_path: &Path,
     lean_path: &Path,
     functions: &[FunctionRecord],
     manifest_charon_version: Option<&str>,
+    crate_name: Option<&str>,
 ) -> Result<Vec<Mapping>> {
     println!("Loading Rust atoms from {}...", rust_path.display());
     let rust_data = load_atoms(rust_path)
@@ -796,8 +798,13 @@ fn run_translate(
     println!("  {} atoms", lean_data.len());
 
     println!("\nGenerating translations...");
-    let (mappings, stats) =
-        generate_translations(&rust_data, &lean_data, functions, manifest_charon_version);
+    let (mappings, stats) = generate_translations(
+        &rust_data,
+        &lean_data,
+        functions,
+        manifest_charon_version,
+        crate_name,
+    );
 
     println!("  {} translations generated", mappings.len());
     for (conf, count) in &stats.by_confidence {
@@ -1681,6 +1688,7 @@ pub fn run_translate_only(
         &lean_data,
         &resolved.records,
         resolved.charon_version.as_deref(),
+        resolved.crate_name.as_deref(),
     );
 
     println!("  {} translations generated", mappings.len());
@@ -4328,5 +4336,247 @@ charon:
                 "{file}: unexpected error: {msg}"
             );
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Opaque `External_Template` functions (SPQR `kdf::hkdf_to_slice`):
+    // matched through the template-name resolver, the copied status is the
+    // Lean `trusted`.
+    // -----------------------------------------------------------------------
+
+    const SPQR_SLICE_RUST: &str = "probe:spqr/0.1.0/kdf/hkdf_to_slice()";
+    const SPQR_SLICE_LEAN: &str = "probe:spqr.kdf.hkdf_to_slice";
+    const SPQR_SLICE_SPEC: &str = "probe:spqr.kdf.hkdf_to_slice_spec.mvcgen_spec";
+    const SPQR_CHARON: &str = "0.1.304";
+
+    /// SPQR's `translation.json` entries for `hkdf_to_slice` (template, no
+    /// crate prefix) and `hkdf_to_vec` (regular).
+    const SPQR_MANIFEST: &str = r#"{
+        "charon_version": "0.1.304",
+        "crate": "spqr",
+        "functions": [
+            {"def_id": 43, "lean_name": "kdf.hkdf_to_slice",
+             "lean_file": "SrcTranslated/FunsExternal_Template.lean",
+             "rust_name": "spqr::kdf::hkdf_to_slice", "is_local": true, "is_opaque": true,
+             "source": {"file": "src/kdf.rs", "begin_line": 14, "end_line": 18}},
+            {"def_id": 42, "lean_name": "spqr.kdf.hkdf_to_vec",
+             "lean_file": "SrcTranslated/Funs.lean",
+             "rust_name": "spqr::kdf::hkdf_to_vec", "is_local": true,
+             "source": {"file": "src/kdf.rs", "begin_line": 5, "end_line": 12}},
+            {"def_id": 7, "lean_name": "core.slice.Slice.chunks",
+             "lean_file": "SrcTranslated/FunsExternal_Template.lean",
+             "rust_name": "core::slice::{[T]}::chunks", "is_local": false, "is_opaque": true,
+             "source": {"file": "/rustc/abc/library/core/src/slice/mod.rs",
+                        "begin_line": 1, "end_line": 9}}
+        ]
+    }"#;
+
+    fn spqr_slice_rust_atom() -> Atom {
+        let mut atom = make_rust_atom("hkdf_to_slice");
+        atom.code_path = "src/kdf.rs".to_string();
+        atom.code_text = probe::types::CodeText {
+            lines_start: 14,
+            lines_end: 18,
+        };
+        atom.extensions
+            .insert("charon-def-id".to_string(), serde_json::json!(43));
+        atom.extensions
+            .insert("charon-version".to_string(), serde_json::json!(SPQR_CHARON));
+        atom
+    }
+
+    /// The hand-completed opaque def as probe-lean extracts it.
+    fn spqr_slice_lean_atom(with_spec: bool) -> Atom {
+        let mut atom = make_lean_atom("hkdf_to_slice");
+        atom.kind = "opaque".to_string();
+        atom.code_path = "SrcTranslated/FunsExternal.lean".to_string();
+        atom.extensions.insert(
+            "verification-status".to_string(),
+            serde_json::json!("trusted"),
+        );
+        atom.extensions
+            .insert("trusted-reason".to_string(), serde_json::json!("external"));
+        if with_spec {
+            atom.extensions.insert(
+                "primary-spec".to_string(),
+                serde_json::json!(SPQR_SLICE_SPEC),
+            );
+        }
+        atom
+    }
+
+    fn spqr_opaque_pipeline(with_spec: bool) -> serde_json::Map<String, serde_json::Value> {
+        let rust = std::collections::BTreeMap::from([(
+            SPQR_SLICE_RUST.to_string(),
+            spqr_slice_rust_atom(),
+        )]);
+        let mut lean = std::collections::BTreeMap::from([(
+            SPQR_SLICE_LEAN.to_string(),
+            spqr_slice_lean_atom(with_spec),
+        )]);
+        if with_spec {
+            lean.insert(
+                SPQR_SLICE_SPEC.to_string(),
+                make_spec_atom("spqr.kdf.hkdf_to_slice", "verified"),
+            );
+        }
+        let manifest: crate::translation_manifest::TranslationManifest =
+            serde_json::from_str(SPQR_MANIFEST).unwrap();
+        let records = crate::translation_manifest::records_from_manifest(&manifest);
+        let (mappings, _) = generate_translations(
+            &rust,
+            &lean,
+            &records,
+            manifest.charon_version.as_deref(),
+            manifest.crate_name.as_deref(),
+        );
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].method.as_deref(), Some("charon-def-id"));
+        run_pipeline(rust, lean, &mappings, false)
+    }
+
+    #[test]
+    fn opaque_template_function_copies_trusted() {
+        let data = spqr_opaque_pipeline(false);
+        let rust = &data[SPQR_SLICE_RUST];
+        assert_eq!(rust["translation-name"], SPQR_SLICE_LEAN);
+        assert_eq!(rust["translation-path"], "SrcTranslated/FunsExternal.lean");
+        assert_eq!(rust["verification-status"], "trusted");
+        assert_eq!(rust["status-origin"], "translation");
+        assert_eq!(
+            data[SPQR_SLICE_LEAN]["mapped-from"],
+            serde_json::json!([{
+                "target": SPQR_SLICE_RUST, "confidence": "exact", "method": "charon-def-id",
+            }])
+        );
+    }
+
+    #[test]
+    fn opaque_template_function_stays_trusted_with_a_clean_spec() {
+        let data = spqr_opaque_pipeline(true);
+        assert_eq!(data[SPQR_SLICE_RUST]["verification-status"], "trusted");
+        assert_eq!(data[SPQR_SLICE_RUST]["status-origin"], "translation");
+    }
+
+    #[test]
+    fn translate_subcommand_matches_template_absent_from_functions_json() {
+        // A repeat run: the `functions.json` probe-aeneas wrote holds no
+        // template records; the manifest re-adds them.
+        let dir = tempfile::tempdir().unwrap();
+        let rust_path = write_envelope(
+            dir.path(),
+            "rust.json",
+            "probe-rust",
+            "0.12.0",
+            "rust",
+            std::collections::BTreeMap::from([(
+                SPQR_SLICE_RUST.to_string(),
+                spqr_slice_rust_atom(),
+            )]),
+        );
+        let lean_path = write_envelope(
+            dir.path(),
+            "lean.json",
+            "probe-lean",
+            "0.16.0",
+            "lean",
+            std::collections::BTreeMap::from([(
+                SPQR_SLICE_LEAN.to_string(),
+                spqr_slice_lean_atom(false),
+            )]),
+        );
+        let manifest_path = dir.path().join("translation.json");
+        std::fs::write(&manifest_path, SPQR_MANIFEST).unwrap();
+        let manifest: crate::translation_manifest::TranslationManifest =
+            serde_json::from_str(SPQR_MANIFEST).unwrap();
+        let functions_path = dir.path().join("functions.json");
+        write_functions_json(
+            &crate::translation_manifest::records_from_manifest(&manifest),
+            &functions_path,
+        )
+        .unwrap();
+        let written = std::fs::read_to_string(&functions_path).unwrap();
+        assert!(!written.contains("hkdf_to_slice"), "{written}");
+
+        let out = dir.path().join("translations.json");
+        run_translate_only(
+            &rust_path,
+            &lean_path,
+            &functions_path,
+            Some(&manifest_path),
+            &out,
+        )
+        .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+        assert_eq!(json["schema"], "probe/mappings");
+        assert_eq!(json["schema-version"], "3.0");
+        assert_eq!(json["tool"]["name"], "probe-aeneas");
+        assert_eq!(json["tool"]["command"], "translate");
+        assert!(json["timestamp"].as_str().is_some_and(|t| !t.is_empty()));
+        let text = json.to_string();
+        assert!(text.contains(SPQR_SLICE_LEAN), "{text}");
+
+        // Without `--translation` the template is unknown: no mapping.
+        run_translate_only(&rust_path, &lean_path, &functions_path, None, &out).unwrap();
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(!text.contains(SPQR_SLICE_LEAN), "{text}");
+    }
+
+    #[test]
+    fn run_extract_resolves_template_names_with_the_manifest_crate() {
+        // The full `extract` path: the Lean def is declared under
+        // `namespace spqr.kdf`, so only the manifest crate (passed from the
+        // resolved records to matching) finds it.
+        let dir = tempfile::tempdir().unwrap();
+        let rust_path = write_envelope(
+            dir.path(),
+            "rust.json",
+            "probe-rust",
+            "0.12.0",
+            "rust",
+            std::collections::BTreeMap::from([(
+                SPQR_SLICE_RUST.to_string(),
+                spqr_slice_rust_atom(),
+            )]),
+        );
+        let lean_path = write_envelope(
+            dir.path(),
+            "lean.json",
+            "probe-lean",
+            "0.16.0",
+            "lean",
+            std::collections::BTreeMap::from([(
+                SPQR_SLICE_LEAN.to_string(),
+                spqr_slice_lean_atom(false),
+            )]),
+        );
+        let manifest_path = dir.path().join("translation.json");
+        std::fs::write(&manifest_path, SPQR_MANIFEST).unwrap();
+        let functions_path = dir.path().join("functions.json");
+        std::fs::write(&functions_path, r#"{"functions": []}"#).unwrap();
+        let out = dir.path().join("out.json");
+        run_extract(
+            Some(&rust_path),
+            None,
+            Some(&lean_path),
+            None,
+            Some(&functions_path),
+            Some(&manifest_path),
+            Some(&out),
+            None,
+            false,
+            None,
+            false,
+            false,
+            None,
+        )
+        .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+        let rust = &json["data"][SPQR_SLICE_RUST];
+        assert_eq!(rust["translation-name"], SPQR_SLICE_LEAN, "{rust}");
+        assert_eq!(rust["verification-status"], "trusted");
+        assert_eq!(rust["status-origin"], "translation");
     }
 }

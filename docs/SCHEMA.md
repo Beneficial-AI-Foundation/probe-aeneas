@@ -41,7 +41,7 @@ sections below), but share this structure:
   "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.22.0",
+    "version": "0.22.2",
     "command": "extract"
   },
   "inputs": [
@@ -596,7 +596,7 @@ entries with:
   "schema-version": "3.0",
   "tool": {
     "name": "probe-aeneas",
-    "version": "0.22.0",
+    "version": "0.22.2",
     "command": "translate"
   },
   "timestamp": "2026-03-16T12:00:00Z",
@@ -671,6 +671,12 @@ probe-rust emits `charon-def-id` **and** its `charon-version` matches the
 manifest's `charon_version`. Otherwise the name/location strategies handle the
 atom, so output degrades gracefully rather than binding across charon versions.
 
+**Opaque template functions.** Local `*External_Template.lean` entries of
+`translation.json` join matching as in-memory template records, resolved to
+their Lean atoms by name, with extra matching guards. They are never written to
+`functions.json`. See [USAGE.md](USAGE.md#translation-strategies)
+for the full rules.
+
 ---
 
 ## 3. `listfuns` -- Function Listing
@@ -680,14 +686,18 @@ atom, so output degrades gracefully rather than binding across charon versions.
 
 The `listfuns` command has three modes:
 
-1. **Enriched (default):** Parses Aeneas-generated `.lean` files, runs
+1. **Enriched (default):** Builds the function records from
+   `translation.json` (else by parsing Aeneas-generated `.lean` files), runs
    `probe-lean extract` internally, and produces an enriched function list
    with verification data, dependencies, and classification flags.
-2. **Basic (`--no-enrich`):** Parses Aeneas-generated `.lean` files and
+2. **Basic (`--no-enrich`):** Builds the function records the same way and
    produces a minimal function list without verification data.
 3. **Lake (`--lake`):** Delegates entirely to `lake exe listfuns` in the
    Lean project. The output format is defined by the project's `listfuns`
    executable.
+
+The enriched and basic modes never list local opaque template records (see
+section 2).
 
 ### Enriched Output (default)
 

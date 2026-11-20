@@ -35,19 +35,25 @@ cargo fmt && cargo clippy --all-targets && cargo test
 ```
 src/
 ├── main.rs            # CLI entry point with subcommand routing (clap)
+├── lib.rs             # Library crate root (used by the integration tests)
 ├── extract.rs         # Extract pipeline: input resolution, translation, merge orchestration
 ├── enrich.rs          # Shared enrichment: heuristic classifiers, atom helpers, enrichment pipeline
-├── translate.rs       # Translation logic: three matching strategies, JSON I/O, unit tests
-├── translation_manifest.rs # Parses Aeneas translation.json; overlays authoritative loop/primary classification onto FunctionRecords
+├── translate.rs       # Translation logic: four matching strategies, template-name resolver, JSON I/O
+├── translation_manifest.rs # Parses Aeneas translation.json; builds records, overlays authoritative loop/primary classification
+├── function_source.rs # Single dispatch that resolves function records (override, manifest, lake, legacy scrape)
 ├── extract_runner.rs  # Runs probe-rust and probe-lean extractors, auto-install logic
 ├── listfuns.rs        # Enriched listfuns pipeline, or delegates to `lake exe listfuns`
-├── gen_functions.rs   # Parses Aeneas-generated .lean files into function records
+├── gen_functions.rs   # Parses Aeneas-generated .lean files into function records; writes functions.json
+├── cfg_eval.rs        # Evaluates #[cfg] predicates against the Aeneas build features (KB P25)
+├── aeneas_config.rs   # Loads the optional per-project .verilib/aeneas.json config
+├── setup.rs           # `setup` subcommand: installs probe-rust and charon
 └── types.rs           # FunctionRecord, FunctionsFile, LineRange for functions.json parsing
 docs/
 ├── architecture.md    # How probe-aeneas relates to probe merge
 ├── SCHEMA.md          # JSON schema specification for all output formats
 ├── USAGE.md           # Full command reference with examples
-└── testing.md         # Manual testing on real Aeneas projects
+├── testing.md         # Manual testing on real Aeneas projects
+└── *-plan.md, ...     # Design plans and analyses for individual changes
 tests/
 ├── extract_check.rs   # Integration test: library extract on the synthetic fixture
 └── fixtures/mini/     # Synthetic Rust and Lean extracts and functions.json
@@ -68,6 +74,8 @@ tests/
 1. `rust-qualified-name` -- exact match via Charon-derived qualified names joined with `functions.json` `rust_name` entries
 2. `file+display-name` -- same source file path + matching base method name (unambiguous only)
 3. `file+line-overlap` -- same source file + overlapping line ranges (best overlap wins); a record with a `rust_name` must name the atom's item (same base method name, or the instance of an impl with the atom's self type when that impl has no method record) and binds an atom that has a same-named sibling in its file only when the record's range contains the atom's range
+
+**Opaque template functions**: local `*External_Template.lean` entries of `translation.json` (`is_local`, or for an entry without it a `rust_name` under the manifest `crate`) join matching as in-memory `is_local_template` records (`translation_manifest::local_template_records`; the Override arm adds them again via `apply`). Library template entries (`core.*`) stay excluded. Before the strategies run, `translate::resolve_template_lean_names` resolves each to a Lean atom key: exact name, else the manifest `crate` prefix added or removed (never another segment; when both are atoms the exact name wins unless only it is the uncompleted def in `External_Template.lean`); atom-less templates are dropped. Templates join by `charon-def-id` like any record. In `rust-qualified-name` they run after all regular records, in `file+line-overlap` they lose ties to regular records, and in both they bind only an atom of their own crate (first segment of the atom's `rust-qualified-name`, else its code-name package, = first `rust_name` segment) in their own file and inside their line range; they stay out of the `file+display-name` index. A record an Override `functions.json` already lists under a template's manifest name is marked `is_template_name`: it gets name resolution, plus the template matching rules if the resolver renames it; it merges into another record that already holds the resolved name; otherwise it stays an ordinary record. Template records are never written to `functions.json` or listed by `listfuns`. Full rules: `docs/USAGE.md` (Translation Strategies).
 
 **Translation Metadata on Merged Atoms**: Merged Rust atoms carry `translation-name`, `translation-path`, and `translation-text` fields pointing to the primary Lean translation. A translated function gets a copied `verification-status` (marked `status-origin: "translation"`) only when its Lean def is `"trusted"`/`"failed"` or a primary spec is found; when no primary spec is found, the translation gets no status. Inputs are guarded: every provenance entry of `--rust` must be `probe-rust/extract` and of `--lean` `probe-lean/extract` (`check_input_authority`), so for valid input `translation-name` and statuses on Rust atoms come from this run. All Rust atoms also carry `untracked` following the KB P24/P25 two-state scope model: `false` (tracked backlog) by default for every compiled function, and always `false` for an atom with a status or with a matched translation not annotated `@[out_of_scope]` (the in-scope rule; only `@[out_of_scope]` can untrack a matched translation); `true` (out of scope, no `verification-status`) only when the in-scope rule does not apply **and** the function is cfg-inactive in the Aeneas build (its probe-rust `cfg` predicate is false — probe-rust >= 0.10.0 folds parent-file mod-chain gates into it, with `file-cfg` carrying the chain component for reason granularity), unmounted (probe-rust's `is-unmounted`: no `mod` chain from the package's lib/bin roots reaches its file), a foreign declaration (probe-rust's `is-foreign`: declared inside an `extern` block), a bodyless trait method signature with no matched translation (probe-rust's `trait-required`: no default body, so nothing for Aeneas to translate and no status ever possible — the `impl`s carry the obligations), its Lean translation carries `@[out_of_scope]`, a non-library target, or a config `out-of-scope` glob match. probe-aeneas evaluates and applies policy only; all source-fact extraction lives in probe-rust. When `untracked` is set, `untracked-reason` records the cause. Membership in `functions.json` does not affect scope — a compiled-but-untranslated function is backlog, not disabled. The active feature set is resolved via `cargo metadata` (default features overlaid by `charon.cargo_args`; only the positional `PROJECT` form applies `cargo_args`, and pre-generated `--rust` input skips cfg classification) in `cfg_eval.rs`; when unresolvable, cfg classification is skipped (conservative).
 

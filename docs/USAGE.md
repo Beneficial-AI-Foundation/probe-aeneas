@@ -261,7 +261,7 @@ probe-aeneas translate [OPTIONS]
 | `--rust <PATH>` | | Path to Rust atoms JSON (from `probe-rust extract`). Required. |
 | `--lean <PATH>` | | Path to Lean atoms JSON (from `probe-lean extract`). Required. |
 | `--functions <PATH>` | | Path to `functions.json` (from `lake exe listfuns`). Required. |
-| `--translation <PATH>` | | Path to Aeneas's `translation.json` (`emit-json` arg). Optional authoritative loop/primary classification overlay. |
+| `--translation <PATH>` | | Path to Aeneas's `translation.json` (`emit-json` arg). Optional authoritative loop/primary classification overlay; also needed to match opaque template functions, which `functions.json` never lists. |
 | `--output <PATH>` | `-o` | Output file path. Default: `translations.json`. |
 
 ### Examples
@@ -357,6 +357,40 @@ authoritative source: an entry is a loop helper iff its manifest record carries 
 manifest, classification falls back to name-suffix heuristics (`_loop`, `_body`,
 `.body`). The manifest makes the outcome deterministic and immune to a real
 function that merely happens to end in `_body`/`_loop`.
+
+**Opaque template functions.** Aeneas lists opaque functions in
+`*External_Template.lean`. A project can complete such a template by hand (for
+example in `FunsExternal.lean`), so the function can have a Lean atom.
+
+- Which entries: when `translation.json` is available, its **local** template
+  entries join matching as in-memory template records. An entry is local if
+  `is_local` is true. For an entry without `is_local`, it is local if its
+  `rust_name` is under the manifest `crate`. Library template entries
+  (`core.*`) stay excluded.
+- Name resolution: Aeneas names template entries inconsistently with the
+  namespace that the project declares them in (`kdf.hkdf_to_slice` against the
+  declared `spqr.kdf.hkdf_to_slice`, or the reverse in older Aeneas,
+  probe-aeneas#61). Before matching, each template record resolves to a Lean
+  atom key: its exact name, else the name with the manifest `crate` prefix
+  added or removed. No other segment is ever stripped. When both names are
+  atoms, the exact name wins, unless only the exact one is the uncompleted def
+  in `External_Template.lean`. A template record with no Lean atom is dropped.
+- Matching: a template record joins by `charon-def-id` like any record. In
+  `rust-qualified-name` it runs after all regular records. In
+  `file+line-overlap` it comes after the regular records, which decides only
+  ties: a larger overlap still wins. In both, it binds only an atom of its own
+  crate, in its own source file, inside its line range. The record's crate is
+  the first segment of its `rust_name`. The atom's crate is the first segment
+  of its `rust-qualified-name`, else its code-name package. Template records
+  never take part in `file+display-name`.
+- Listed records: a record that a user or `lake` `functions.json` lists under a
+  template's manifest name gets the same name resolution. If the resolver
+  renames it, it also gets the template matching rules. If another record
+  already holds the resolved name, it merges into that record. Otherwise it
+  stays an ordinary record.
+- Output: template records are never written to `functions.json` or listed by
+  `listfuns`. The manifest adds them again on every run, so `translate` needs
+  `--translation` to match them.
 
 ### 0. `charon-def-id` (confidence: `exact`)
 

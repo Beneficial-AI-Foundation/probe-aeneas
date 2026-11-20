@@ -138,7 +138,13 @@ pub fn run_enriched_listfuns(
         false,
     )
     .context("resolve function records")?;
-    let records = resolved.records;
+    // Local template records are for translation matching only; like
+    // `functions.json`, the enriched listing never includes them.
+    let records: Vec<_> = resolved
+        .records
+        .into_iter()
+        .filter(|r| !r.is_local_template)
+        .collect();
     let aux_defs = resolved.aux_defs;
     println!("Resolved {} function records", records.len());
 
@@ -266,5 +272,65 @@ mod tests {
     fn detect_crate_empty_for_empty_records() {
         let records: Vec<FunctionRecord> = vec![];
         assert_eq!(detect_crate_name(&records), "");
+    }
+
+    /// SPQR-shaped manifest: a local template entry (`kdf.hkdf_to_slice`,
+    /// completed under `spqr.kdf` in `FunsExternal.lean`) and a regular one.
+    const TEMPLATE_MANIFEST: &str = r#"{
+        "charon_version": "0.1.304",
+        "crate": "spqr",
+        "functions": [
+            {"def_id": 43, "lean_name": "kdf.hkdf_to_slice",
+             "lean_file": "SrcTranslated/FunsExternal_Template.lean",
+             "rust_name": "spqr::kdf::hkdf_to_slice", "is_local": true,
+             "source": {"file": "src/kdf.rs", "begin_line": 14, "end_line": 18}},
+            {"def_id": 42, "lean_name": "spqr.kdf.hkdf_to_vec",
+             "lean_file": "SrcTranslated/Funs.lean",
+             "rust_name": "spqr::kdf::hkdf_to_vec", "is_local": true,
+             "source": {"file": "src/kdf.rs", "begin_line": 5, "end_line": 12}}
+        ]
+    }"#;
+
+    fn lean_atoms_envelope(dir: &Path) -> std::path::PathBuf {
+        let atom = |path: &str| {
+            serde_json::json!({
+                "display-name": "f", "dependencies": [], "code-module": "M",
+                "code-path": path, "code-text": {"lines-start": 1, "lines-end": 2},
+                "kind": "def", "language": "lean",
+            })
+        };
+        let envelope = serde_json::json!({
+            "schema": "probe-lean/extract", "schema-version": "3.0",
+            "tool": {"name": "probe-lean", "version": "0.16.0", "command": "extract"},
+            "source": {"repo": "", "commit": "", "language": "lean",
+                       "package": "spqr", "package-version": "0.1.0"},
+            "timestamp": "2026-11-19T00:00:00Z",
+            "data": {
+                "probe:spqr.kdf.hkdf_to_vec": atom("SrcTranslated/Funs.lean"),
+                "probe:spqr.kdf.hkdf_to_slice": atom("SrcTranslated/FunsExternal.lean"),
+            },
+        });
+        let path = dir.join("lean.json");
+        std::fs::write(&path, envelope.to_string()).unwrap();
+        path
+    }
+
+    #[test]
+    fn listfuns_outputs_omit_local_template_records() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("translation.json"), TEMPLATE_MANIFEST).unwrap();
+
+        let basic = dir.path().join("basic.json");
+        run_basic_listfuns(dir.path(), &basic).unwrap();
+        let text = std::fs::read_to_string(&basic).unwrap();
+        assert!(text.contains("spqr.kdf.hkdf_to_vec"), "{text}");
+        assert!(!text.contains("hkdf_to_slice"), "{text}");
+
+        let atoms = lean_atoms_envelope(dir.path());
+        let enriched = dir.path().join("enriched.json");
+        run_enriched_listfuns(dir.path(), &enriched, Some(&atoms), None, None).unwrap();
+        let text = std::fs::read_to_string(&enriched).unwrap();
+        assert!(text.contains("spqr.kdf.hkdf_to_vec"), "{text}");
+        assert!(!text.contains("hkdf_to_slice"), "{text}");
     }
 }

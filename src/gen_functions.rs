@@ -85,8 +85,15 @@ pub fn generate_functions_json(lean_project: &Path, output: &Path) -> Result<()>
 /// overlay fields on [`FunctionRecord`] are `#[serde(skip)]`, so they never
 /// appear in the output regardless of whether the manifest overlay ran.
 pub fn write_functions_json(records: &[FunctionRecord], output: &Path) -> Result<()> {
+    // Local template records exist only for translation matching: their
+    // manifest names may not be atom keys, and `translation_manifest::apply`
+    // re-adds them on every run that reads this file back.
     let output_json = FunctionsFileOutput {
-        functions: records.iter().map(|r| r.into()).collect(),
+        functions: records
+            .iter()
+            .filter(|r| !r.is_local_template)
+            .map(|r| r.into())
+            .collect(),
     };
 
     let json = serde_json::to_string_pretty(&output_json).context("serialize functions.json")?;

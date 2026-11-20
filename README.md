@@ -120,7 +120,7 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 {
   "schema": "probe-aeneas/extract",
   "schema-version": "3.0",
-  "tool": { "name": "probe-aeneas", "version": "0.22.0", "command": "extract" },
+  "tool": { "name": "probe-aeneas", "version": "0.22.2", "command": "extract" },
   "inputs": [
     { "schema": "probe-rust/extract", "package": "curve25519-dalek", "package-version": "4.1.3" },
     { "schema": "probe-lean/extract", "package": "Curve25519Dalek", "package-version": "0.1.0" }
@@ -152,9 +152,10 @@ Running `probe-aeneas extract` produces a JSON envelope. Each entry in `data` de
 ## How It Works
 
 1. **Input resolution** -- accepts an Aeneas project directory (auto-detects paths from `aeneas-config.yml`), pre-generated JSON files, explicit project paths, or a mix. A pre-generated Rust file must come from probe-rust and a Lean file from probe-lean (every provenance entry is checked), so a probe-aeneas output cannot be fed back in. Both inputs also pass the hub's ADR-006 version gate (probe-lean output must come from 0.16.0 or later) before any other work.
-2. **Extraction** -- runs `probe-rust extract --with-charon` on the Rust crate and `probe-lean extract` on the Lean project in parallel. Charon is auto-installed by `probe-rust` if not already present and provides Aeneas-compatible qualified names for Rust functions.
-3. **`functions.json` generation** -- if no `functions.json` is provided, one is generated automatically by parsing the Aeneas-generated `.lean` files in the Lean project. This file maps Lean definitions back to their Rust source names and locations.
-4. **Translation generation** -- matches Rust atoms to Lean atoms via `functions.json` using three strategies in priority order:
+2. **Extraction** -- runs `probe-rust extract` on the Rust crate and `probe-lean extract` on the Lean project in parallel. When `translation.json` is available, probe-rust gets `--translation` and reads the charon `def_id`s from it. Without it, probe-rust runs with `--with-charon` to get Aeneas-compatible qualified names; Charon is auto-installed if it is not present.
+3. **Function records** -- if no `functions.json` is provided, the function records come from Aeneas's `translation.json`, else from `lake exe listfuns` with `--lake`, else from parsing the Aeneas-generated `.lean` files. They map Lean definitions back to their Rust source names and locations, and are written to `functions.json`. Local opaque template functions (`*External_Template.lean`) join as in-memory records only.
+4. **Translation generation** -- matches Rust atoms to Lean atoms through the function records, using four strategies in priority order:
+   0. `charon-def-id` -- integer join of the atom's charon `FunDeclId` with the manifest `def_id`, when both come from the same charon version
    1. `rust-qualified-name` -- exact match via Charon-derived qualified names
    2. `file+display-name` -- same source file + matching base method name
    3. `file+line-overlap` -- same source file + overlapping line ranges; a record with a `rust_name` must have the same base name, or be the instance of an impl with the same self type that has no method record, and binds an atom with a same-named sibling in its file only when its range contains the atom's range

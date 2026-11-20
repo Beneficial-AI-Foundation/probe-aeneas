@@ -63,6 +63,22 @@ pub struct FunctionRecord {
     /// `false` (the default) keeps globals/trait-impl records out of it.
     #[serde(skip)]
     pub def_id_is_fun_decl: bool,
+    /// Whether this record is a *local template record*: a manifest entry in
+    /// an `*External_Template.lean` file (an opaque function the project
+    /// completes by hand) that belongs to the crate. Such records join
+    /// translation matching only, with a crate-prefix name resolver
+    /// (`translate::resolve_template_lean_names`), and are never written to a
+    /// `functions.json`.
+    #[serde(skip)]
+    pub is_local_template: bool,
+    /// Whether `lean_name` is a local template entry's manifest name. Set on
+    /// template records and on a record a user/lake `functions.json` already
+    /// lists under such a name (`translation_manifest::apply`). The latter
+    /// gets name resolution: the resolver renames it (and gives it the
+    /// template matching rules) or merges it into a record that already holds
+    /// the resolved name.
+    #[serde(skip)]
+    pub is_template_name: bool,
 }
 
 /// Top-level structure of `functions.json`.
