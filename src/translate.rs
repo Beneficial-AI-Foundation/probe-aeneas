@@ -119,12 +119,20 @@ pub struct TranslateStats {
 /// docs/upstream-issues/charon-expose-commit-and-versioned-releases.md). When the
 /// versions disagree (or either is absent), the join is skipped and matching
 /// falls back to the name-based strategies. See docs/charon-def-id-matching-plan.md.
+///
+/// `crate_name` is the manifest's top-level `crate` (`None` without a
+/// manifest). Local template records are first resolved to their Lean atom
+/// keys by [`resolve_template_lean_names`]; every strategy below sees the
+/// resolved records.
 pub fn generate_translations(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
     functions: &[FunctionRecord],
     manifest_charon_version: Option<&str>,
+    crate_name: Option<&str>,
 ) -> (Vec<Mapping>, TranslateStats) {
+    let resolved = resolve_template_lean_names(functions, lean_data, crate_name);
+    let functions = resolved.as_slice();
     let mut mappings = Vec::new();
     let mut matched_rust: HashSet<String> = HashSet::new();
     let mut matched_lean: HashSet<String> = HashSet::new();
@@ -141,12 +149,19 @@ pub fn generate_translations(
         }
         if let Some(ref src) = func.source {
             let norm_src = normalize_source_path(src).to_string();
-            file_to_funcs
-                .entry(norm_src.clone())
-                .or_default()
-                .push(func);
+            // A template record without a `rust_name` is not gated by
+            // `record_may_name_atom`, so it could bind any overlapping atom.
+            if !func.is_local_template || func.rust_name.is_some() {
+                file_to_funcs
+                    .entry(norm_src.clone())
+                    .or_default()
+                    .push(func);
+            }
             let base = func.lean_name.rsplit('.').next().unwrap_or("");
-            if !base.is_empty() {
+            // Template records stay out of the display-name index: a kept
+            // template with the same file and base name as a regular record
+            // would make that unique key ambiguous.
+            if !base.is_empty() && !func.is_local_template {
                 file_name_to_funcs
                     .entry((norm_src, base.to_string()))
                     .or_default()
@@ -210,6 +225,215 @@ pub fn generate_translations(
     let stats = TranslateStats { by_confidence };
 
     (mappings, stats)
+}
+
+/// Resolve one template name to a Lean atom key (without `probe:`): the exact
+/// name, else the name with `crate_prefix` (`<crate>.`) added or exactly that
+/// prefix removed. When both have atoms, the exact name wins unless only it is
+/// the uncompleted def in `External_Template.lean`. Returns the name and
+/// whether it is the exact one; `None` when neither has an atom.
+fn resolve_template_name(
+    exact: &str,
+    lean_data: &BTreeMap<String, Atom>,
+    crate_prefix: Option<&str>,
+) -> Option<(String, bool)> {
+    let is_uncompleted = |name: &str| {
+        lean_data
+            .get(&format!("probe:{name}"))
+            .is_some_and(|a| a.code_path.ends_with("External_Template.lean"))
+    };
+    let alt = crate_prefix.and_then(|prefix| match exact.strip_prefix(prefix) {
+        Some(rest) if !rest.is_empty() => Some(rest.to_string()),
+        Some(_) => None,
+        None => Some(format!("{prefix}{exact}")),
+    });
+    let exact_ok = lean_data.contains_key(&format!("probe:{exact}"));
+    let alt = alt.filter(|a| lean_data.contains_key(&format!("probe:{a}")));
+    match (exact_ok, alt) {
+        (true, Some(alt)) => {
+            let pick_alt = is_uncompleted(exact) && !is_uncompleted(&alt);
+            eprintln!(
+                "  ⚠ template record {exact}: Lean atoms exist under both {exact} and \
+                 {alt}; using {}",
+                if pick_alt { &alt } else { exact }
+            );
+            Some(if pick_alt {
+                (alt, false)
+            } else {
+                (exact.to_string(), true)
+            })
+        }
+        (true, None) => Some((exact.to_string(), true)),
+        (false, Some(alt)) => Some((alt, false)),
+        (false, None) => None,
+    }
+}
+
+/// Resolve local template records ([`FunctionRecord::is_local_template`]) to
+/// the Lean atom keys of their hand-completed defs.
+///
+/// Aeneas names template entries inconsistently with the namespace the project
+/// declares them in: recent Aeneas writes `kdf.hkdf_to_slice` while the project
+/// declares `spqr.kdf.hkdf_to_slice`; older Aeneas wrote the prefixed name while
+/// the file declared it at root (probe-aeneas#61, AeneasVerif/aeneas#1248). For
+/// each template record this looks up both the exact name and the alternative
+/// (`<crate>.` added, or exactly that prefix removed; no other segment is ever
+/// stripped) and keeps a name only if it is a Lean atom key. The exact name
+/// wins when both exist, unless only it is the uncompleted
+/// uncompleted def in `External_Template.lean`.
+///
+/// Records are dropped when they could only confuse matching:
+/// - a template record with no Lean atom under either name (it can never map,
+///   and could still win a line overlap against a real record);
+/// - a template record resolving to a non-template record's name (that record
+///   gets the template's `def_id` if it had none);
+/// - all but one of several template records resolving to one name (kept: an
+///   exact-name hit, then a `FunDeclId`, then the smallest `def_id`);
+/// - a listed record ([`FunctionRecord::is_template_name`]) whose resolved
+///   name another record already holds (that record gets its `def_id` if it
+///   had none).
+///
+/// A listed record whose resolved name is free is renamed and gets the
+/// template matching rules.
+///
+/// Output: non-template records in input order, then the kept template
+/// records and the renamed listed records, sorted by resolved `lean_name`.
+/// So templates never precede a regular record in first-wins contention, and
+/// a first run (records built from the manifest) and a repeat run (records
+/// read back from the written `functions.json`, templates re-appended) see
+/// the same order. Without template records and template-named records, the
+/// input is returned unchanged.
+pub fn resolve_template_lean_names(
+    functions: &[FunctionRecord],
+    lean_data: &BTreeMap<String, Atom>,
+    crate_name: Option<&str>,
+) -> Vec<FunctionRecord> {
+    let (mut regular, templates): (Vec<FunctionRecord>, Vec<FunctionRecord>) = functions
+        .iter()
+        .cloned()
+        .partition(|f| !f.is_local_template);
+    let crate_prefix = crate_name
+        .map(crate::translation_manifest::normalize_crate_name)
+        .filter(|c| !c.is_empty())
+        .map(|c| format!("{c}."));
+
+    // A regular record that a user/lake `functions.json` lists under a
+    // manifest template name. When its exact name is not the Lean def to bind
+    // (no atom there, or only the uncompleted def in `External_Template.lean`):
+    // - if the resolved name is free, the record is renamed to it in place
+    //   and gets the template matching rules (`is_local_template`), since an
+    //   unguarded record could bind a same-named impl outside its range;
+    // - if another record already holds the resolved name, the listed record
+    //   merges into it, as a template record does: that record gets the
+    //   `def_id` if it had none, and the listed record is dropped (left in,
+    //   its `def_id` would bind the uncompleted def in the charon join).
+    // A record whose exact name is the def to bind stays ordinary.
+    let first_index: HashMap<String, usize> = regular
+        .iter()
+        .enumerate()
+        .rev()
+        .map(|(i, r)| (r.lean_name.clone(), i))
+        .collect();
+    let mut merged: Vec<(usize, usize)> = Vec::new();
+    for (i, rec) in regular.iter_mut().enumerate() {
+        if !rec.is_template_name {
+            continue;
+        }
+        let Some((name, false)) =
+            resolve_template_name(&rec.lean_name, lean_data, crate_prefix.as_deref())
+        else {
+            continue;
+        };
+        match first_index.get(&name) {
+            Some(&holder) => merged.push((i, holder)),
+            None => {
+                rec.lean_name = name;
+                rec.is_local_template = true;
+            }
+        }
+    }
+    for &(from, into) in &merged {
+        if regular[into].def_id.is_none() {
+            regular[into].def_id = regular[from].def_id;
+            regular[into].def_id_is_fun_decl = regular[from].def_id_is_fun_decl;
+        }
+    }
+    let dropped: HashSet<usize> = merged.iter().map(|&(from, _)| from).collect();
+    if !dropped.is_empty() {
+        regular = regular
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| !dropped.contains(i))
+            .map(|(_, r)| r)
+            .collect();
+    }
+    // Renamed records follow the template order rule: after all ordinary
+    // records, so they never win a first-wins tie against one.
+    let (mut renamed, mut regular): (Vec<FunctionRecord>, Vec<FunctionRecord>) =
+        regular.into_iter().partition(|r| r.is_local_template);
+    if templates.is_empty() {
+        renamed.sort_by(|a, b| a.lean_name.cmp(&b.lean_name));
+        regular.extend(renamed);
+        return regular;
+    }
+    // Resolved name -> (exact-name hit, record), best candidate per name.
+    let mut by_name: BTreeMap<String, (bool, FunctionRecord)> = BTreeMap::new();
+    for mut rec in templates {
+        let Some((name, exact_hit)) =
+            resolve_template_name(&rec.lean_name, lean_data, crate_prefix.as_deref())
+        else {
+            continue;
+        };
+        rec.lean_name = name.clone();
+        // Full tie-break, so the kept record never depends on input order.
+        let rank = |hit: bool, r: &FunctionRecord| {
+            (
+                !hit,
+                !r.def_id_is_fun_decl,
+                r.def_id,
+                r.rust_name.clone(),
+                r.source.clone(),
+                r.lines.clone(),
+            )
+        };
+        match by_name.get(&name) {
+            Some((hit, kept)) if rank(*hit, kept) <= rank(exact_hit, &rec) => {}
+            _ => {
+                by_name.insert(name, (exact_hit, rec));
+            }
+        }
+    }
+
+    // First occurrence of each name: the one first-wins matching uses.
+    let mut regular_index: HashMap<String, usize> = HashMap::new();
+    for (i, r) in regular.iter().enumerate() {
+        regular_index.entry(r.lean_name.clone()).or_insert(i);
+    }
+    let renamed_index: HashMap<String, usize> = renamed
+        .iter()
+        .enumerate()
+        .rev()
+        .map(|(i, r)| (r.lean_name.clone(), i))
+        .collect();
+    let mut kept = Vec::new();
+    for (name, (_, rec)) in by_name {
+        let existing = if let Some(&i) = regular_index.get(&name) {
+            &mut regular[i]
+        } else if let Some(&i) = renamed_index.get(&name) {
+            &mut renamed[i]
+        } else {
+            kept.push(rec);
+            continue;
+        };
+        if existing.def_id.is_none() {
+            existing.def_id = rec.def_id;
+            existing.def_id_is_fun_decl = rec.def_id_is_fun_decl;
+        }
+    }
+    kept.extend(renamed);
+    kept.sort_by(|a, b| a.lean_name.cmp(&b.lean_name));
+    regular.extend(kept);
+    regular
 }
 
 /// Build a set of normalized Rust qualified names from `functions.json` entries.
@@ -437,7 +661,7 @@ fn build_def_id_to_primary_lean(functions: &[FunctionRecord]) -> HashMap<u64, St
 ///
 /// Forward-compatible no-op until probe-rust emits `charon-def-id`: with no such
 /// atoms the loop binds nothing and output is unchanged. Respects
-/// `matched_rust`/`matched_lean` (P11) so later strategies never re-bind.
+/// `matched_rust`/`matched_lean` (1-to-1 matching) so later strategies never re-bind.
 #[allow(clippy::too_many_arguments)]
 fn strategy_charon_def_id(
     rust_data: &BTreeMap<String, Atom>,
@@ -532,10 +756,12 @@ fn strategy_charon_def_id(
 /// while `{From for crate::LookupTable}` and `{From for crate::NafTable}`
 /// remain distinct.
 ///
-/// Runs in two passes: visible, non-artifact entries first, then deferred
+/// Runs in three passes: visible, non-artifact entries first, then deferred
 /// entries ([`is_deferred_entry`]) as a fallback for Rust atoms nothing else
-/// claimed. This makes the outcome independent of the order Aeneas emits
-/// defs in `Funs.lean` when several entries share a normalized `rust_name`.
+/// claimed, then local template records, so that within this strategy a
+/// template never takes an atom that a regular record can bind. This makes
+/// the outcome independent of the order Aeneas emits defs in `Funs.lean`
+/// when several entries share a normalized `rust_name`.
 fn strategy_rust_qualified_name(
     rust_data: &BTreeMap<String, Atom>,
     lean_data: &BTreeMap<String, Atom>,
@@ -556,10 +782,14 @@ fn strategy_rust_qualified_name(
 
     // Pass 1: visible, non-artifact entries. Pass 2: deferred entries, which
     // only bind Rust atoms still unmatched after pass 1 (`matched_rust`).
+    // Pass 3: local template records, so that within this strategy a
+    // template never takes an atom a regular record can bind.
+    let (templates, regular): (Vec<&FunctionRecord>, Vec<&FunctionRecord>) =
+        functions.iter().partition(|f| f.is_local_template);
     let (preferred, deferred): (Vec<&FunctionRecord>, Vec<&FunctionRecord>) =
-        functions.iter().partition(|f| !is_deferred_entry(f));
+        regular.into_iter().partition(|f| !is_deferred_entry(f));
 
-    for func in preferred.into_iter().chain(deferred) {
+    for func in preferred.into_iter().chain(deferred).chain(templates) {
         let rn = match func.rust_name.as_deref() {
             Some(rn) if !rn.is_empty() => rn,
             _ => continue,
@@ -585,6 +815,14 @@ fn strategy_rust_qualified_name(
                 None => continue,
             }
         };
+        // A template record's own Rust atom may be missing (Aeneas keeps
+        // templates for functions probe-rust did not extract), and
+        // `normalize_rust_name` collapses distinct impls (owned/borrowed
+        // `AddAssign`), so its normalized name alone must not bind another
+        // atom: the atom must be in the record's file and inside its range.
+        if func.is_local_template && !template_contains_atom(func, rust_code_name, rust_data) {
+            continue;
+        }
 
         if lean_data.contains_key(&lean_code_name)
             && !matched_rust.contains(rust_code_name)
@@ -605,6 +843,67 @@ fn strategy_rust_qualified_name(
             matched_lean.insert(lean_code_name);
         }
     }
+}
+
+/// Whether the Rust atom `code_name` lives in the record's `source` file and
+/// inside the record's `lines`. A record missing either never qualifies.
+fn template_contains_atom(
+    func: &FunctionRecord,
+    code_name: &str,
+    rust_data: &BTreeMap<String, Atom>,
+) -> bool {
+    let (Some(src), Some(range)) = (
+        func.source.as_deref(),
+        func.lines.as_deref().and_then(|l| LineRange::parse(l).ok()),
+    ) else {
+        return false;
+    };
+    rust_data.get(code_name).is_some_and(|atom| {
+        atom_in_record_crate(func, code_name, atom)
+            && normalize_source_path(&atom.code_path) == normalize_source_path(src)
+            && atom.code_text.lines_start != 0
+            && range.contains(&LineRange {
+                start: atom.code_text.lines_start,
+                end: atom.code_text.lines_end,
+            })
+    })
+}
+
+/// Whether the Rust atom `code_name` belongs to the crate the record's
+/// `rust_name` names (its first segment). Source paths alone cannot tell
+/// workspace members apart, because [`normalize_source_path`] cuts
+/// everything before `/src/`.
+///
+/// The atom's crate is the first segment of its `rust-qualified-name`, which
+/// uses the library crate name like `rust_name` does. Without one, it is the
+/// package segment of the code name (`probe:<package>/<version>/...`), with
+/// `-` read as `_`; a package whose library has another name (`md-5`
+/// exports `md5`) then does not match. False when a name is missing.
+fn atom_in_record_crate(func: &FunctionRecord, code_name: &str, atom: &Atom) -> bool {
+    let first_segment = |name: &str| {
+        name.split("::")
+            .next()
+            .filter(|c| !c.is_empty())
+            .map(str::to_string)
+    };
+    let Some(record_crate) = func.rust_name.as_deref().and_then(first_segment) else {
+        return false;
+    };
+    let rqn_crate = atom
+        .extensions
+        .get("rust-qualified-name")
+        .and_then(|v| v.as_str())
+        .and_then(first_segment);
+    let atom_crate = rqn_crate.or_else(|| {
+        code_name
+            .strip_prefix("probe:")
+            .and_then(|rest| rest.split_once('/'))
+            .map(|(package, _)| package)
+            .filter(|p| !p.is_empty())
+            .map(crate::translation_manifest::normalize_crate_name)
+    });
+    atom_crate
+        .is_some_and(|c| c == crate::translation_manifest::normalize_crate_name(&record_crate))
 }
 
 /// When multiple Rust atoms share the same normalized RQN, use the
@@ -778,6 +1077,15 @@ fn strategy_file_line_overlap(
             // its range contains the atom's range: a shifted record that
             // overlaps a sibling only in part does not bind it.
             if func.rust_name.is_some() && has_siblings && !func_range.contains(&rust_range) {
+                continue;
+            }
+            // A template's own Rust atom may be missing, so it binds only an
+            // atom of its crate that its range contains, never a nearby
+            // same-named item or a same-path item of another workspace member.
+            if func.is_local_template
+                && (!func_range.contains(&rust_range)
+                    || !atom_in_record_crate(func, code_name, atom))
+            {
                 continue;
             }
 
@@ -1160,7 +1468,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "file-and-name");
         assert_eq!(mappings[0].from, "probe:crate/1.0/reduce()");
@@ -1188,7 +1496,7 @@ mod tests {
             "L210-L240",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "file-and-lines");
     }
@@ -1231,7 +1539,7 @@ mod tests {
             make_func("spqr.some_fn", None, "src/lib.rs", "L575-L588"),
         ];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         assert_eq!(mappings.len(), 1, "{mappings:?}");
         assert_eq!(mappings[0].from, "probe:spqr/1.6.0/mystery()");
         assert_eq!(mappings[0].to, "probe:spqr.some_fn");
@@ -1262,7 +1570,7 @@ mod tests {
             "L42-L46",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         assert_eq!(mappings.len(), 1, "{mappings:?}");
         assert_eq!(
             mappings[0].to,
@@ -1337,7 +1645,7 @@ mod tests {
             ),
         ];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         assert_eq!(mappings.len(), 1, "{mappings:?}");
         assert_eq!(mappings[0].from, authenticator_atom);
         assert_eq!(
@@ -1358,7 +1666,7 @@ mod tests {
             "src/lib.rs",
             "L141-L143",
         )];
-        let (legacy_mappings, _) = generate_translations(&rust_atoms, &lean, &legacy, None);
+        let (legacy_mappings, _) = generate_translations(&rust_atoms, &lean, &legacy, None, None);
         assert_eq!(legacy_mappings.len(), 1, "{legacy_mappings:?}");
         assert_eq!(legacy_mappings[0].from, serialization_atom);
         assert_eq!(legacy_mappings[0].to, "probe:spqr.legacy_from");
@@ -1419,7 +1727,7 @@ mod tests {
             ),
         ];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         let pairs: Vec<(&str, &str)> = mappings
             .iter()
             .map(|m| (m.from.as_str(), m.to.as_str()))
@@ -1470,7 +1778,7 @@ mod tests {
             "L221-L230",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         assert_eq!(mappings.len(), 1, "{mappings:?}");
         assert_eq!(
             mappings[0].to,
@@ -1571,7 +1879,7 @@ mod tests {
                 "L19-L25",
             )];
 
-            let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+            let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
             assert_eq!(mappings.len(), 1, "{self_ty}: {mappings:?}");
             assert_eq!(
                 mappings[0].to,
@@ -1619,7 +1927,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].confidence, "exact");
         assert_eq!(mappings[0].method.as_deref(), Some("rust-qualified-name"));
@@ -1648,7 +1956,7 @@ mod tests {
             "L100-L120",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         // Should only match once (via strategy 1), not again via strategy 2 or 3
         assert_eq!(mappings.len(), 1);
     }
@@ -1699,7 +2007,7 @@ mod tests {
             ),
         ];
 
-        let (mappings, _stats) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _stats) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
 
         assert_eq!(
             mappings.len(),
@@ -1766,7 +2074,7 @@ mod tests {
         primary.is_loop_artifact = Some(false);
         let funcs = vec![body, loopfn, primary];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
 
         assert_eq!(mappings.len(), 1);
         assert_eq!(
@@ -1810,7 +2118,7 @@ mod tests {
         assert!(enrich::is_extraction_artifact("crate.http.parse_body"));
         assert!(!is_deferred_entry(&func));
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], None, None);
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].to, "probe:crate.http.parse_body");
         assert_eq!(mappings[0].confidence, "exact");
@@ -1898,7 +2206,7 @@ mod tests {
             ),
         ];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
 
         assert_eq!(mappings.len(), 1);
         assert_eq!(
@@ -1934,7 +2242,7 @@ mod tests {
             false,
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
 
         assert_eq!(
             mappings.len(),
@@ -1984,7 +2292,7 @@ mod tests {
             ),
         ];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
         assert_eq!(
             mappings.len(),
             1,
@@ -2043,7 +2351,7 @@ mod tests {
             "L10-L20",
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, None, None);
 
         // With C6 bug: rqn_to_rust.insert() overwrites, so the last Rust atom
         // (in BTreeMap iteration order) wins. The first atom is silently dropped.
@@ -2178,7 +2486,8 @@ mod tests {
             false,
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"), None);
 
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].method.as_deref(), Some("charon-def-id"));
@@ -2221,7 +2530,8 @@ mod tests {
             make_func_def_id("spqr.encoding.gf.GF16.div_impl", 439, false),
         ];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"), None);
 
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].to, "probe:spqr.encoding.gf.GF16.div_impl");
@@ -2266,7 +2576,8 @@ mod tests {
         func.is_loop_artifact = Some(false);
         func.def_id_is_fun_decl = true;
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &[func], Some("0.1.217"), None);
 
         // The name strategy still binds it (correctly, by RQN), but the gate
         // prevented the charon-def-id method from firing.
@@ -2316,7 +2627,7 @@ mod tests {
         func.is_loop_artifact = Some(false);
         func.def_id_is_fun_decl = true;
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], None);
+        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], None, None);
 
         assert_eq!(
             mappings.len(),
@@ -2358,7 +2669,8 @@ mod tests {
         func.is_loop_artifact = Some(false);
         func.def_id_is_fun_decl = true;
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[func], Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &[func], Some("0.1.217"), None);
 
         // Falls back to the name matcher; no charon-def-id method used.
         assert_eq!(mappings.len(), 1);
@@ -2389,7 +2701,8 @@ mod tests {
             false,
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"), None);
 
         assert!(
             mappings.is_empty(),
@@ -2422,7 +2735,8 @@ mod tests {
             false,
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"), None);
 
         assert!(
             mappings.is_empty(),
@@ -2452,7 +2766,8 @@ mod tests {
             false,
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"), None);
 
         assert!(
             mappings
@@ -2486,7 +2801,8 @@ mod tests {
             false,
         )];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"), None);
 
         assert!(
             mappings.is_empty(),
@@ -2523,7 +2839,8 @@ mod tests {
         let mut global = make_func_def_id("spqr.encoding.gf.ALPHA", 439, false);
         global.def_id_is_fun_decl = false;
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &[global], Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &[global], Some("0.1.217"), None);
 
         assert!(
             mappings.is_empty(),
@@ -2554,7 +2871,8 @@ mod tests {
 
         let funcs = vec![make_func_def_id("x.div_impl", 439, false)];
 
-        let (mappings, _) = generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"));
+        let (mappings, _) =
+            generate_translations(&rust_atoms, &lean, &funcs, Some("0.1.217"), None);
 
         let id_binds: Vec<&Mapping> = mappings
             .iter()
@@ -2693,7 +3011,7 @@ mod tests {
             make_func_def_id("x.add_assign_shared", 101, false),
         ];
 
-        let (mappings, _) = generate_translations(&rust, &lean, &funcs, Some("v1"));
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, Some("v1"), None);
 
         assert_eq!(mappings.len(), 2, "both colliding-name atoms must map");
         assert!(
@@ -2709,5 +3027,1154 @@ mod tests {
             2,
             "the id-join must send the two atoms to distinct Lean defs"
         );
+    }
+
+    // -- Local template records (opaque `External_Template` functions) --
+    //
+    // Fixtures copy SPQR's real entries (Aeneas nightly-2026.11.03, charon
+    // 0.1.304, `"crate": "spqr"`): `kdf.hkdf_to_slice` (def_id 43) is in
+    // `FunsExternal_Template.lean` without the crate prefix, completed by hand
+    // in `FunsExternal.lean` under `namespace spqr.kdf`; its neighbour
+    // `spqr.kdf.hkdf_to_vec` (def_id 42) is a regular `Funs.lean` def.
+
+    const SPQR_CHARON: &str = "0.1.304";
+    const SLICE_RUST: &str = "probe:spqr/0.1.0/kdf/hkdf_to_slice()";
+    const VEC_RUST: &str = "probe:spqr/0.1.0/kdf/hkdf_to_vec()";
+
+    fn template_record(
+        lean_name: &str,
+        rust_name: &str,
+        source: &str,
+        lines: &str,
+        def_id: u64,
+    ) -> FunctionRecord {
+        FunctionRecord {
+            def_id: Some(def_id),
+            def_id_is_fun_decl: true,
+            is_loop_artifact: Some(false),
+            is_local_template: true,
+            ..make_func(lean_name, Some(rust_name), source, lines)
+        }
+    }
+
+    fn hkdf_to_slice_template(lean_name: &str) -> FunctionRecord {
+        template_record(
+            lean_name,
+            "spqr::kdf::hkdf_to_slice",
+            "src/kdf.rs",
+            "L14-L18",
+            43,
+        )
+    }
+
+    fn hkdf_to_vec_record() -> FunctionRecord {
+        FunctionRecord {
+            def_id: Some(42),
+            def_id_is_fun_decl: true,
+            is_loop_artifact: Some(false),
+            ..make_func(
+                "spqr.kdf.hkdf_to_vec",
+                Some("spqr::kdf::hkdf_to_vec"),
+                "src/kdf.rs",
+                "L5-L12",
+            )
+        }
+    }
+
+    fn spqr_rust_atoms() -> BTreeMap<String, Atom> {
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            SLICE_RUST.to_string(),
+            make_rust_atom_charon("hkdf_to_slice", "src/kdf.rs", 14, 18, 43, SPQR_CHARON),
+        );
+        rust.insert(
+            VEC_RUST.to_string(),
+            make_rust_atom_charon("hkdf_to_vec", "src/kdf.rs", 5, 12, 42, SPQR_CHARON),
+        );
+        rust
+    }
+
+    fn lean_atoms(entries: &[(&str, &str)]) -> BTreeMap<String, Atom> {
+        entries
+            .iter()
+            .map(|(name, path)| (format!("probe:{name}"), make_lean_atom(name, path)))
+            .collect()
+    }
+
+    fn mapping_tuples(mappings: &[Mapping]) -> Vec<(String, String, String, Option<String>)> {
+        mappings
+            .iter()
+            .map(|m| {
+                (
+                    m.from.clone(),
+                    m.to.clone(),
+                    m.confidence.clone(),
+                    m.method.clone(),
+                )
+            })
+            .collect()
+    }
+
+    fn names(records: &[FunctionRecord]) -> Vec<&str> {
+        records.iter().map(|r| r.lean_name.as_str()).collect()
+    }
+
+    #[test]
+    fn template_resolver_adds_crate_prefix() {
+        let lean = lean_atoms(&[("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean")]);
+        let out = resolve_template_lean_names(
+            &[hkdf_to_slice_template("kdf.hkdf_to_slice")],
+            &lean,
+            Some("spqr"),
+        );
+        assert_eq!(names(&out), vec!["spqr.kdf.hkdf_to_slice"]);
+        assert_eq!(out[0].def_id, Some(43));
+    }
+
+    #[test]
+    fn template_resolver_strips_crate_prefix_issue_61() {
+        // Older Aeneas: prefixed manifest name, root-level declaration.
+        let lean = lean_atoms(&[("kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean")]);
+        let out = resolve_template_lean_names(
+            &[hkdf_to_slice_template("spqr.kdf.hkdf_to_slice")],
+            &lean,
+            Some("spqr"),
+        );
+        assert_eq!(names(&out), vec!["kdf.hkdf_to_slice"]);
+    }
+
+    #[test]
+    fn template_resolver_prefers_exact_name_unless_it_is_uncompleted() {
+        let both = lean_atoms(&[
+            ("kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.kdf.hkdf_to_slice", "SrcTranslated/Other.lean"),
+        ]);
+        let out = resolve_template_lean_names(
+            &[hkdf_to_slice_template("kdf.hkdf_to_slice")],
+            &both,
+            Some("spqr"),
+        );
+        assert_eq!(names(&out), vec!["kdf.hkdf_to_slice"]);
+
+        // The exact atom is the uncompleted def in the template file: use the
+        // completed def instead.
+        let uncompleted = lean_atoms(&[
+            (
+                "kdf.hkdf_to_slice",
+                "SrcTranslated/FunsExternal_Template.lean",
+            ),
+            ("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let out = resolve_template_lean_names(
+            &[hkdf_to_slice_template("kdf.hkdf_to_slice")],
+            &uncompleted,
+            Some("spqr"),
+        );
+        assert_eq!(names(&out), vec!["spqr.kdf.hkdf_to_slice"]);
+
+        // Both atoms are uncompleted defs: the exact name wins.
+        let both_uncompleted = lean_atoms(&[
+            (
+                "kdf.hkdf_to_slice",
+                "SrcTranslated/FunsExternal_Template.lean",
+            ),
+            ("spqr.kdf.hkdf_to_slice", "Other/FunsExternal_Template.lean"),
+        ]);
+        let out = resolve_template_lean_names(
+            &[hkdf_to_slice_template("kdf.hkdf_to_slice")],
+            &both_uncompleted,
+            Some("spqr"),
+        );
+        assert_eq!(names(&out), vec!["kdf.hkdf_to_slice"]);
+    }
+
+    #[test]
+    fn template_resolver_drops_records_without_an_atom() {
+        // SPQR's `core.slice.Slice.chunks` case: no atom under either name.
+        let lean = lean_atoms(&[("spqr.kdf.hkdf_to_vec", "SrcTranslated/Funs.lean")]);
+        let out = resolve_template_lean_names(
+            &[
+                hkdf_to_vec_record(),
+                hkdf_to_slice_template("kdf.hkdf_to_slice"),
+            ],
+            &lean,
+            Some("spqr"),
+        );
+        assert_eq!(names(&out), vec!["spqr.kdf.hkdf_to_vec"]);
+    }
+
+    #[test]
+    fn template_resolver_never_strips_a_non_crate_prefix() {
+        // `core.` is not the crate: `x` must not be found by stripping it.
+        let lean = lean_atoms(&[("x", "SrcTranslated/FunsExternal.lean")]);
+        let rec = template_record("core.x", "spqr::x", "src/x.rs", "L1-L2", 7);
+        let out = resolve_template_lean_names(&[rec], &lean, Some("spqr"));
+        assert!(out.is_empty(), "{:?}", names(&out));
+    }
+
+    #[test]
+    fn template_resolver_leaves_regular_records_alone() {
+        // A regular record with a missing atom is never renamed, even when the
+        // prefixed name exists.
+        let lean = lean_atoms(&[("spqr.kdf.f", "SrcTranslated/Funs.lean")]);
+        let rec = make_func("kdf.f", Some("spqr::kdf::f"), "src/kdf.rs", "L1-L2");
+        let out = resolve_template_lean_names(&[rec], &lean, Some("spqr"));
+        assert_eq!(names(&out), vec!["kdf.f"]);
+        assert!(!out[0].is_local_template);
+    }
+
+    #[test]
+    fn template_resolver_without_crate_tries_only_the_exact_name() {
+        let lean = lean_atoms(&[
+            ("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean"),
+            ("kdf.exact", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let out = resolve_template_lean_names(
+            &[
+                hkdf_to_slice_template("kdf.hkdf_to_slice"),
+                template_record("kdf.exact", "spqr::kdf::exact", "src/kdf.rs", "L30-L31", 44),
+            ],
+            &lean,
+            None,
+        );
+        assert_eq!(names(&out), vec!["kdf.exact"]);
+    }
+
+    #[test]
+    fn template_resolver_normalizes_hyphenated_crate_names() {
+        let lean = lean_atoms(&[
+            ("my_crate.a.f", "SrcTranslated/FunsExternal.lean"),
+            ("b.g", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let out = resolve_template_lean_names(
+            &[
+                template_record("a.f", "my_crate::a::f", "src/a.rs", "L1-L2", 1),
+                template_record("my_crate.b.g", "my_crate::b::g", "src/b.rs", "L1-L2", 2),
+            ],
+            &lean,
+            Some("my-crate"),
+        );
+        assert_eq!(names(&out), vec!["b.g", "my_crate.a.f"]);
+    }
+
+    #[test]
+    fn template_resolver_dedupes_templates_order_independently() {
+        let lean = lean_atoms(&[("spqr.kdf.f", "SrcTranslated/FunsExternal.lean")]);
+        // `kdf.f` resolves to `spqr.kdf.f` via the prefix; the second entry hits
+        // it exactly and wins, whatever the input order.
+        let via_prefix = template_record("kdf.f", "spqr::kdf::f", "src/kdf.rs", "L1-L2", 1);
+        let exact = template_record("spqr.kdf.f", "spqr::kdf::f", "src/kdf.rs", "L1-L2", 9);
+        for input in [
+            vec![via_prefix.clone(), exact.clone()],
+            vec![exact.clone(), via_prefix.clone()],
+        ] {
+            let out = resolve_template_lean_names(&input, &lean, Some("spqr"));
+            assert_eq!(names(&out), vec!["spqr.kdf.f"]);
+            assert_eq!(out[0].def_id, Some(9));
+        }
+
+        // Between two prefix hits, a FunDeclId beats a global's smaller id.
+        let global = FunctionRecord {
+            def_id_is_fun_decl: false,
+            ..template_record("kdf.f", "spqr::kdf::F", "src/kdf.rs", "L1-L2", 1)
+        };
+        let func = template_record("kdf.f", "spqr::kdf::f", "src/kdf.rs", "L1-L2", 5);
+        for input in [
+            vec![global.clone(), func.clone()],
+            vec![func.clone(), global.clone()],
+        ] {
+            let out = resolve_template_lean_names(&input, &lean, Some("spqr"));
+            assert_eq!(out.len(), 1);
+            assert_eq!(out[0].def_id, Some(5));
+            assert!(out[0].def_id_is_fun_decl);
+        }
+    }
+
+    #[test]
+    fn template_resolver_merges_into_an_existing_regular_record() {
+        // A user/lake `functions.json` already lists the completed def.
+        let lean = lean_atoms(&[("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean")]);
+        let existing = make_func(
+            "spqr.kdf.hkdf_to_slice",
+            Some("spqr::kdf::hkdf_to_slice"),
+            "src/kdf.rs",
+            "L14-L18",
+        );
+        let out = resolve_template_lean_names(
+            &[existing, hkdf_to_slice_template("kdf.hkdf_to_slice")],
+            &lean,
+            Some("spqr"),
+        );
+        assert_eq!(names(&out), vec!["spqr.kdf.hkdf_to_slice"]);
+        assert!(!out[0].is_local_template);
+        assert_eq!(out[0].def_id, Some(43), "gains the template's def_id");
+        assert!(out[0].def_id_is_fun_decl);
+    }
+
+    #[test]
+    fn template_merge_keeps_the_holders_own_def_id() {
+        let lean = lean_atoms(&[("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean")]);
+        let holder = FunctionRecord {
+            def_id: Some(50),
+            def_id_is_fun_decl: true,
+            ..make_func(
+                "spqr.kdf.hkdf_to_slice",
+                Some("spqr::kdf::hkdf_to_slice"),
+                "src/kdf.rs",
+                "L14-L18",
+            )
+        };
+        // A manifest template and a listed record both merge into it.
+        let listed = FunctionRecord {
+            is_template_name: true,
+            def_id: Some(44),
+            def_id_is_fun_decl: true,
+            ..make_func(
+                "kdf.hkdf_to_slice",
+                Some("spqr::kdf::hkdf_to_slice"),
+                "src/kdf.rs",
+                "L14-L18",
+            )
+        };
+        for input in [
+            vec![holder.clone(), hkdf_to_slice_template("kdf.hkdf_to_slice")],
+            vec![holder.clone(), listed],
+        ] {
+            let out = resolve_template_lean_names(&input, &lean, Some("spqr"));
+            assert_eq!(names(&out), vec!["spqr.kdf.hkdf_to_slice"]);
+            assert_eq!(out[0].def_id, Some(50), "the holder keeps its def_id");
+        }
+    }
+
+    #[test]
+    fn listed_record_whose_exact_name_is_the_def_stays_ordinary() {
+        // The project declares the def at root, under the manifest name.
+        let lean = lean_atoms(&[("kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean")]);
+        let listed = FunctionRecord {
+            is_template_name: true,
+            ..make_func(
+                "kdf.hkdf_to_slice",
+                Some("spqr::kdf::hkdf_to_slice"),
+                "src/kdf.rs",
+                "L14-L18",
+            )
+        };
+        let out = resolve_template_lean_names(std::slice::from_ref(&listed), &lean, Some("spqr"));
+        assert_eq!(names(&out), vec!["kdf.hkdf_to_slice"]);
+        assert!(!out[0].is_local_template);
+
+        let rust = BTreeMap::from([(
+            SLICE_RUST.to_string(),
+            rqn_atom(
+                "hkdf_to_slice",
+                "src/kdf.rs",
+                14,
+                18,
+                "spqr::kdf::hkdf_to_slice",
+            ),
+        )]);
+        let (mappings, _) = generate_translations(&rust, &lean, &[listed], None, Some("spqr"));
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].to, "probe:kdf.hkdf_to_slice");
+    }
+
+    #[test]
+    fn deferred_regular_record_binds_before_a_template_in_rqn_matching() {
+        // A hidden (deferred) regular record and a template share the atom's
+        // qualified name; the template's range contains the atom. The
+        // template pass runs after both regular passes.
+        let rust = BTreeMap::from([(
+            "probe:spqr/0.1.0/m/f()".to_string(),
+            rqn_atom("f", "src/m.rs", 1, 5, "spqr::m::f"),
+        )]);
+        let lean = lean_atoms(&[
+            ("spqr.m.f", "SrcTranslated/Funs.lean"),
+            ("spqr.m.f_ext", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let hidden = FunctionRecord {
+            is_hidden: true,
+            ..make_func("spqr.m.f", Some("spqr::m::f"), "src/m.rs", "L1-L5")
+        };
+        let template = template_record("m.f_ext", "spqr::m::f", "src/m.rs", "L1-L5", 3);
+        for funcs in [
+            vec![hidden.clone(), template.clone()],
+            vec![template.clone(), hidden.clone()],
+        ] {
+            let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+            assert_eq!(mappings.len(), 1, "{mappings:?}");
+            assert_eq!(mappings[0].to, "probe:spqr.m.f");
+            assert_eq!(mappings[0].method.as_deref(), Some("rust-qualified-name"));
+        }
+    }
+
+    #[test]
+    fn template_merges_into_a_renamed_listed_record() {
+        // The listed `kdf.f` is renamed to `spqr.kdf.f`; a manifest template
+        // listed under that exact name resolves to it too. One record stays.
+        let lean = lean_atoms(&[("spqr.kdf.f", "SrcTranslated/FunsExternal.lean")]);
+        let listed = FunctionRecord {
+            is_template_name: true,
+            ..make_func("kdf.f", Some("spqr::kdf::f"), "src/kdf.rs", "L1-L5")
+        };
+        let template = template_record("spqr.kdf.f", "spqr::kdf::f", "src/kdf.rs", "L1-L5", 9);
+        for input in [
+            vec![listed.clone(), template.clone()],
+            vec![template.clone(), listed.clone()],
+        ] {
+            let out = resolve_template_lean_names(&input, &lean, Some("spqr"));
+            assert_eq!(names(&out), vec!["spqr.kdf.f"]);
+            assert!(out[0].is_local_template);
+            assert_eq!(out[0].def_id, Some(9), "gains the template's def_id");
+        }
+    }
+
+    #[test]
+    fn renamed_listed_records_are_sorted_without_templates() {
+        let lean = lean_atoms(&[
+            ("spqr.a.f", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.b.f", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let listed = |name: &str, rust: &str| FunctionRecord {
+            is_template_name: true,
+            ..make_func(name, Some(rust), "src/x.rs", "L1-L2")
+        };
+        let input = vec![
+            listed("b.f", "spqr::b::f"),
+            make_func("spqr.z", Some("spqr::z"), "src/z.rs", "L1-L2"),
+            listed("a.f", "spqr::a::f"),
+        ];
+        let out = resolve_template_lean_names(&input, &lean, Some("spqr"));
+        assert_eq!(names(&out), vec!["spqr.z", "spqr.a.f", "spqr.b.f"]);
+    }
+
+    #[test]
+    fn templates_and_renamed_records_are_sorted_together() {
+        let lean = lean_atoms(&[
+            ("spqr.a.t", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.b.listed", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.c.t", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.z", "SrcTranslated/Funs.lean"),
+        ]);
+        let listed = FunctionRecord {
+            is_template_name: true,
+            ..make_func("b.listed", Some("spqr::b::listed"), "src/b.rs", "L1-L2")
+        };
+        let input = vec![
+            listed,
+            template_record("c.t", "spqr::c::t", "src/c.rs", "L1-L2", 1),
+            make_func("spqr.z", Some("spqr::z"), "src/z.rs", "L1-L2"),
+            template_record("a.t", "spqr::a::t", "src/a.rs", "L1-L2", 2),
+        ];
+        let expected = vec!["spqr.z", "spqr.a.t", "spqr.b.listed", "spqr.c.t"];
+        let out = resolve_template_lean_names(&input, &lean, Some("spqr"));
+        assert_eq!(names(&out), expected);
+        let mut reversed = input.clone();
+        reversed.reverse();
+        assert_eq!(
+            names(&resolve_template_lean_names(&reversed, &lean, Some("spqr"))),
+            expected
+        );
+    }
+
+    #[test]
+    fn template_resolver_puts_templates_last_sorted() {
+        let lean = lean_atoms(&[
+            ("spqr.z", "SrcTranslated/Funs.lean"),
+            ("spqr.a.t2", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.b.t1", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let input = vec![
+            template_record("b.t1", "spqr::b::t1", "src/b.rs", "L1-L2", 1),
+            make_func("spqr.z", Some("spqr::z"), "src/z.rs", "L1-L2"),
+            template_record("a.t2", "spqr::a::t2", "src/a.rs", "L1-L2", 2),
+        ];
+        let out = resolve_template_lean_names(&input, &lean, Some("spqr"));
+        assert_eq!(names(&out), vec!["spqr.z", "spqr.a.t2", "spqr.b.t1"]);
+        let mut reversed = input.clone();
+        reversed.reverse();
+        let out_rev = resolve_template_lean_names(&reversed, &lean, Some("spqr"));
+        assert_eq!(names(&out_rev), names(&out));
+    }
+
+    #[test]
+    fn opaque_template_maps_by_charon_def_id() {
+        let lean = lean_atoms(&[
+            ("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.kdf.hkdf_to_vec", "SrcTranslated/Funs.lean"),
+        ]);
+        let funcs = vec![
+            hkdf_to_slice_template("kdf.hkdf_to_slice"),
+            hkdf_to_vec_record(),
+        ];
+        let (mappings, _) = generate_translations(
+            &spqr_rust_atoms(),
+            &lean,
+            &funcs,
+            Some(SPQR_CHARON),
+            Some("spqr"),
+        );
+        let got: Vec<(&str, &str, Option<&str>)> = mappings
+            .iter()
+            .map(|m| (m.from.as_str(), m.to.as_str(), m.method.as_deref()))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    SLICE_RUST,
+                    "probe:spqr.kdf.hkdf_to_slice",
+                    Some("charon-def-id")
+                ),
+                (
+                    VEC_RUST,
+                    "probe:spqr.kdf.hkdf_to_vec",
+                    Some("charon-def-id")
+                ),
+            ]
+        );
+
+        // Without the crate the bare name has no atom: the old miss.
+        let (old, _) =
+            generate_translations(&spqr_rust_atoms(), &lean, &funcs, Some(SPQR_CHARON), None);
+        assert!(old.iter().all(|m| m.from != SLICE_RUST), "{old:?}");
+    }
+
+    #[test]
+    fn opaque_template_maps_in_issue_61_direction() {
+        let lean = lean_atoms(&[("kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean")]);
+        let funcs = vec![hkdf_to_slice_template("spqr.kdf.hkdf_to_slice")];
+        let (mappings, _) = generate_translations(
+            &spqr_rust_atoms(),
+            &lean,
+            &funcs,
+            Some(SPQR_CHARON),
+            Some("spqr"),
+        );
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].from, SLICE_RUST);
+        assert_eq!(mappings[0].to, "probe:kdf.hkdf_to_slice");
+    }
+
+    #[test]
+    fn opaque_template_without_lean_atom_maps_nothing() {
+        let lean = lean_atoms(&[("spqr.kdf.hkdf_to_vec", "SrcTranslated/Funs.lean")]);
+        let funcs = vec![
+            hkdf_to_slice_template("kdf.hkdf_to_slice"),
+            hkdf_to_vec_record(),
+        ];
+        let (mappings, _) = generate_translations(
+            &spqr_rust_atoms(),
+            &lean,
+            &funcs,
+            Some(SPQR_CHARON),
+            Some("spqr"),
+        );
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].from, VEC_RUST);
+    }
+
+    #[test]
+    fn atomless_template_does_not_block_line_overlap() {
+        // The template overlaps the atom more than the regular record does,
+        // but has no Lean atom: the regular record still binds.
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:spqr/0.1.0/m/f()".to_string(),
+            make_rust_atom("f", "src/m.rs", 10, 20),
+        );
+        // `spqr.m.g` shares no base name with the atom, so only strategy 3
+        // can bind it.
+        let lean = lean_atoms(&[("spqr.m.g", "SrcTranslated/Funs.lean")]);
+        let funcs = vec![
+            make_func("spqr.m.g", None, "src/m.rs", "L12-L18"),
+            template_record("m.other", "spqr::m::f", "src/m.rs", "L10-L20", 3),
+        ];
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].to, "probe:spqr.m.g");
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    #[test]
+    fn template_with_atom_keeps_display_name_match_unambiguous() {
+        // A template sharing (file, base name) with a regular record must not
+        // make the regular record's file+display-name key ambiguous.
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:spqr/0.1.0/m/fmt()".to_string(),
+            make_rust_atom("fmt", "src/m.rs", 0, 0),
+        );
+        let lean = lean_atoms(&[
+            ("spqr.m.A.fmt", "SrcTranslated/Funs.lean"),
+            ("spqr.m.B.fmt", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let funcs = vec![
+            make_func("spqr.m.A.fmt", None, "src/m.rs", "L1-L5"),
+            template_record("m.B.fmt", "spqr::m::B::fmt", "src/m.rs", "L40-L45", 4),
+        ];
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].to, "probe:spqr.m.A.fmt");
+        assert_eq!(mappings[0].method.as_deref(), Some("file+display-name"));
+    }
+
+    fn rqn_atom(display: &str, path: &str, start: usize, end: usize, rqn: &str) -> Atom {
+        let mut atom = make_rust_atom(display, path, start, end);
+        atom.extensions
+            .insert("rust-qualified-name".to_string(), serde_json::json!(rqn));
+        atom
+    }
+
+    #[test]
+    fn template_never_takes_a_regular_records_rqn_atom() {
+        // The template (sorting first by name, own Rust atom missing) collides
+        // with the regular record's normalized rust_name.
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:spqr/0.1.0/a/f()".to_string(),
+            rqn_atom("f", "src/a.rs", 1, 5, "spqr::a::f"),
+        );
+        let lean = lean_atoms(&[
+            ("spqr.a.f", "SrcTranslated/Funs.lean"),
+            ("spqr.a.b", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let funcs = vec![
+            template_record("a.b", "spqr::a::f", "src/b.rs", "L1-L5", 8),
+            make_func("spqr.a.f", Some("spqr::a::f"), "src/a.rs", "L1-L5"),
+        ];
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].to, "probe:spqr.a.f");
+
+        // Even when the regular record has no Lean atom (its Rust atom stays
+        // unmatched), the template from another file does not bind it.
+        let lean = lean_atoms(&[("spqr.a.b", "SrcTranslated/FunsExternal.lean")]);
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert!(mappings.is_empty(), "{mappings:?}");
+    }
+
+    const BOX_DEFAULT_IMPL: &str =
+        "symcrust::mlkem::key::{impl symcrust::common::BoxDefault for symcrust::mlkem::key::Key}";
+
+    fn box_default_fixture() -> (BTreeMap<String, Atom>, Vec<FunctionRecord>) {
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:symcrust/0.1.0/mlkem/key/impl<*mut/Self>#[Key][BoxDefault]box_default()"
+                .to_string(),
+            make_rust_atom("Key::box_default", "src/mlkem/key.rs", 222, 229),
+        );
+        let funcs = vec![
+            make_func(
+                "symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault",
+                Some(BOX_DEFAULT_IMPL),
+                "src/mlkem/key.rs",
+                "L221-L230",
+            ),
+            template_record(
+                "mlkem.key.Key.box_default",
+                &format!("{BOX_DEFAULT_IMPL}::box_default"),
+                "src/mlkem/key.rs",
+                "L222-L229",
+                12,
+            ),
+        ];
+        (rust, funcs)
+    }
+
+    #[test]
+    fn atomless_template_method_does_not_block_its_instance() {
+        let (rust, funcs) = box_default_fixture();
+        let lean = lean_atoms(&[(
+            "symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault",
+            "Funs.lean",
+        )]);
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("symcrust"));
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(
+            mappings[0].to,
+            "probe:symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault"
+        );
+    }
+
+    #[test]
+    fn template_method_with_atom_is_the_methods_translation() {
+        // When the axiom has a Lean atom, it is the method's own def.
+        let (rust, funcs) = box_default_fixture();
+        let lean = lean_atoms(&[
+            (
+                "symcrust.mlkem.key.Key.Insts.SymcrustCommonBoxDefault",
+                "Funs.lean",
+            ),
+            ("symcrust.mlkem.key.Key.box_default", "FunsExternal.lean"),
+        ]);
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("symcrust"));
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].to, "probe:symcrust.mlkem.key.Key.box_default");
+    }
+
+    #[test]
+    fn global_template_never_joins_by_def_id() {
+        // A template from `globals` carries a GlobalDeclId: an atom whose
+        // charon-def-id collides with it must not bind through strategy 0.
+        let lean = lean_atoms(&[("spqr.kdf.K", "SrcTranslated/FunsExternal.lean")]);
+        let global = FunctionRecord {
+            def_id_is_fun_decl: false,
+            ..template_record("kdf.K", "spqr::kdf::K", "src/other.rs", "L90-L91", 43)
+        };
+        let (mappings, _) = generate_translations(
+            &spqr_rust_atoms(),
+            &lean,
+            &[global],
+            Some(SPQR_CHARON),
+            Some("spqr"),
+        );
+        assert!(mappings.is_empty(), "{mappings:?}");
+    }
+
+    #[test]
+    fn template_without_rust_atom_does_not_take_a_nearby_atom() {
+        // `B::fmt`'s template has a Lean atom but no Rust atom; its (shifted)
+        // range partly overlaps `A::fmt`, which has no record of its own.
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:spqr/0.1.0/m/A/fmt()".to_string(),
+            make_rust_atom("A::fmt", "src/m.rs", 30, 36),
+        );
+        let lean = lean_atoms(&[("spqr.m.B.fmt", "SrcTranslated/FunsExternal.lean")]);
+        let funcs = vec![template_record(
+            "m.B.fmt",
+            "spqr::m::{impl core::fmt::Display for spqr::m::B}::fmt",
+            "src/m.rs",
+            "L33-L40",
+            5,
+        )];
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert!(mappings.is_empty(), "{mappings:?}");
+    }
+
+    #[test]
+    fn resolved_template_without_rust_atom_keeps_other_mappings() {
+        // SPQR's `encode_state_pb` shape: the template has a Lean atom but its
+        // Rust atom is missing; a same-file atom keeps its own mapping.
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:spqr/0.1.0/s/encode()".to_string(),
+            make_rust_atom("encode", "src/s.rs", 10, 20),
+        );
+        let lean = lean_atoms(&[
+            ("spqr.s.encode", "SrcTranslated/Funs.lean"),
+            ("spqr.s.encode_state_pb", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let funcs = vec![
+            make_func(
+                "spqr.s.encode",
+                Some("spqr::s::encode"),
+                "src/s.rs",
+                "L10-L20",
+            ),
+            template_record(
+                "s.encode_state_pb",
+                "spqr::s::encode_state_pb",
+                "src/s.rs",
+                "L9-L21",
+                6,
+            ),
+        ];
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].to, "probe:spqr.s.encode");
+    }
+
+    #[test]
+    fn template_records_do_not_change_unsorted_regular_matching() {
+        // An unsorted Override `functions.json`: two regular records contend
+        // for one atom (first wins). Adding a template must not reorder them.
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:spqr/0.1.0/p/f()".to_string(),
+            make_rust_atom("f", "src/p.rs", 10, 20),
+        );
+        rust.insert(
+            SLICE_RUST.to_string(),
+            spqr_rust_atoms()[SLICE_RUST].clone(),
+        );
+        let lean = lean_atoms(&[
+            ("spqr.z.f", "SrcTranslated/Funs.lean"),
+            ("spqr.a.f", "SrcTranslated/Funs.lean"),
+            ("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let regular = vec![
+            make_func("spqr.z.f", None, "src/p.rs", "L10-L20"),
+            make_func("spqr.a.f", None, "src/p.rs", "L10-L20"),
+        ];
+        let (without, _) = generate_translations(&rust, &lean, &regular, None, Some("spqr"));
+        let mut with_template = regular.clone();
+        with_template.push(hkdf_to_slice_template("kdf.hkdf_to_slice"));
+        let (with, _) = generate_translations(&rust, &lean, &with_template, None, Some("spqr"));
+        let regular_only: Vec<Mapping> =
+            with.into_iter().filter(|m| m.from != SLICE_RUST).collect();
+        assert_eq!(mapping_tuples(&regular_only), mapping_tuples(&without));
+        assert_eq!(without[0].to, "probe:spqr.z.f", "file order decides");
+    }
+
+    #[test]
+    fn manifest_array_order_does_not_change_records_or_mappings() {
+        let entries = [
+            r#"{"def_id": 43, "lean_name": "kdf.hkdf_to_slice",
+                "lean_file": "SrcTranslated/FunsExternal_Template.lean",
+                "rust_name": "spqr::kdf::hkdf_to_slice", "is_local": true,
+                "source": {"file": "src/kdf.rs", "begin_line": 14, "end_line": 18}}"#,
+            r#"{"def_id": 42, "lean_name": "spqr.kdf.hkdf_to_vec",
+                "lean_file": "SrcTranslated/Funs.lean",
+                "rust_name": "spqr::kdf::hkdf_to_vec", "is_local": true,
+                "source": {"file": "src/kdf.rs", "begin_line": 5, "end_line": 12}}"#,
+            r#"{"def_id": 44, "lean_name": "spqr.kdf.hkdf_to_slice",
+                "lean_file": "SrcTranslated/FunsExternal_Template.lean",
+                "rust_name": "spqr::kdf::hkdf_to_slice", "is_local": true,
+                "source": {"file": "src/kdf.rs", "begin_line": 14, "end_line": 18}}"#,
+        ];
+        let manifest = |order: &[usize]| {
+            let funcs: Vec<&str> = order.iter().map(|&i| entries[i]).collect();
+            let json = format!(
+                r#"{{"charon_version": "{SPQR_CHARON}", "crate": "spqr",
+                    "functions": [{}]}}"#,
+                funcs.join(",")
+            );
+            let m: crate::translation_manifest::TranslationManifest =
+                serde_json::from_str(&json).unwrap();
+            crate::translation_manifest::records_from_manifest(&m)
+        };
+        let lean = lean_atoms(&[
+            ("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.kdf.hkdf_to_vec", "SrcTranslated/Funs.lean"),
+        ]);
+        let run = |records: &[FunctionRecord]| {
+            let resolved = resolve_template_lean_names(records, &lean, Some("spqr"));
+            let summary: Vec<(String, Option<u64>)> = resolved
+                .iter()
+                .map(|r| (r.lean_name.clone(), r.def_id))
+                .collect();
+            let (mappings, _) = generate_translations(
+                &spqr_rust_atoms(),
+                &lean,
+                records,
+                Some(SPQR_CHARON),
+                Some("spqr"),
+            );
+            (summary, mapping_tuples(&mappings))
+        };
+        let forward = run(&manifest(&[0, 1, 2]));
+        let reversed = run(&manifest(&[2, 1, 0]));
+        assert_eq!(forward, reversed);
+        // The exact-name template (def_id 44) wins the dedupe.
+        assert!(forward
+            .0
+            .contains(&("spqr.kdf.hkdf_to_slice".to_string(), Some(44))));
+    }
+
+    #[test]
+    fn template_rqn_match_requires_range_containment() {
+        // `normalize_rust_name` collapses the owned and borrowed `AddAssign`
+        // impls. The template (borrowed impl, own Rust atom missing) must not
+        // bind the owned impl's atom in the same file outside its range.
+        let rqn = "spqr::a::{impl core::ops::AddAssign<&spqr::a::X> for spqr::a::X}::add_assign";
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:spqr/0.1.0/a/owned_add_assign()".to_string(),
+            rqn_atom(
+                "X::add_assign",
+                "src/a.rs",
+                10,
+                15,
+                "spqr::a::{impl core::ops::AddAssign<spqr::a::X> for spqr::a::X}::add_assign",
+            ),
+        );
+        assert_eq!(
+            normalize_rust_name(rqn),
+            normalize_rust_name(
+                "spqr::a::{impl core::ops::AddAssign<spqr::a::X> for spqr::a::X}::add_assign"
+            ),
+            "the fixture relies on the normalizer collision"
+        );
+        let lean = lean_atoms(&[("spqr.a.X.borrowed_add_assign", "FunsExternal.lean")]);
+        let funcs = vec![template_record(
+            "a.X.borrowed_add_assign",
+            rqn,
+            "src/a.rs",
+            "L20-L25",
+            9,
+        )];
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert!(mappings.is_empty(), "{mappings:?}");
+
+        // Its own atom, inside its range, still binds by qualified name.
+        rust.insert(
+            "probe:spqr/0.1.0/a/borrowed_add_assign()".to_string(),
+            rqn_atom("X::add_assign", "src/a.rs", 20, 25, rqn),
+        );
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].from, "probe:spqr/0.1.0/a/borrowed_add_assign()");
+        assert_eq!(mappings[0].method.as_deref(), Some("rust-qualified-name"));
+    }
+
+    #[test]
+    fn renamed_listed_template_name_requires_range_containment() {
+        // The Override counterpart of the test above: a `functions.json`
+        // lists the borrowed impl under its manifest name, and the resolver
+        // renames it to the prefixed Lean atom.
+        let borrowed =
+            "spqr::a::{impl core::ops::AddAssign<&spqr::a::X> for spqr::a::X}::add_assign";
+        let owned = "spqr::a::{impl core::ops::AddAssign<spqr::a::X> for spqr::a::X}::add_assign";
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:spqr/0.1.0/a/owned_add_assign()".to_string(),
+            rqn_atom("X::add_assign", "src/a.rs", 10, 15, owned),
+        );
+        let lean = lean_atoms(&[("spqr.a.X.borrowed_add_assign", "FunsExternal.lean")]);
+        let funcs = vec![FunctionRecord {
+            is_template_name: true,
+            def_id: Some(9),
+            def_id_is_fun_decl: true,
+            ..make_func(
+                "a.X.borrowed_add_assign",
+                Some(borrowed),
+                "src/a.rs",
+                "L20-L25",
+            )
+        }];
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert!(mappings.is_empty(), "{mappings:?}");
+
+        // Its own atom, inside its range, still binds by qualified name.
+        rust.insert(
+            "probe:spqr/0.1.0/a/borrowed_add_assign()".to_string(),
+            rqn_atom("X::add_assign", "src/a.rs", 20, 25, borrowed),
+        );
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].from, "probe:spqr/0.1.0/a/borrowed_add_assign()");
+    }
+
+    #[test]
+    fn listed_template_name_is_renamed_or_merged() {
+        let lean = lean_atoms(&[
+            ("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean"),
+            ("spqr.kdf.taken", "SrcTranslated/Funs.lean"),
+        ]);
+        let listed = FunctionRecord {
+            is_template_name: true,
+            ..make_func(
+                "kdf.hkdf_to_slice",
+                Some("spqr::kdf::hkdf_to_slice"),
+                "src/kdf.rs",
+                "L14-L18",
+            )
+        };
+        // Its prefixed name is held by another record: merged into it.
+        let blocked = FunctionRecord {
+            is_template_name: true,
+            def_id: Some(7),
+            def_id_is_fun_decl: true,
+            ..make_func("kdf.taken", Some("spqr::kdf::taken"), "src/kdf.rs", "L1-L2")
+        };
+        let other = make_func(
+            "spqr.kdf.taken",
+            Some("spqr::kdf::taken2"),
+            "src/kdf.rs",
+            "L3-L4",
+        );
+        // No atom under either name: kept as is.
+        let missing = FunctionRecord {
+            is_template_name: true,
+            ..make_func("kdf.gone", Some("spqr::kdf::gone"), "src/kdf.rs", "L5-L6")
+        };
+        let out =
+            resolve_template_lean_names(&[listed, blocked, other, missing], &lean, Some("spqr"));
+        assert_eq!(
+            names(&out),
+            vec!["spqr.kdf.taken", "kdf.gone", "spqr.kdf.hkdf_to_slice"]
+        );
+        assert_eq!(out[0].def_id, Some(7), "the holder gains the def_id");
+        assert!(out[0].def_id_is_fun_decl);
+        // Only the renamed record takes the template rules, and it moves
+        // after the ordinary records.
+        assert_eq!(
+            out.iter().map(|r| r.is_local_template).collect::<Vec<_>>(),
+            vec![false, false, true]
+        );
+    }
+
+    #[test]
+    fn template_binds_no_atom_of_another_workspace_member() {
+        // Two workspace members both have `src/m.rs` with `f` at the same
+        // lines. The `spqr` template's own atom is missing; only `other`'s
+        // atom exists. Path normalization makes the two files equal.
+        let lean = lean_atoms(&[("spqr.m.f", "FunsExternal.lean")]);
+        let funcs = vec![template_record(
+            "m.f",
+            "spqr::m::f",
+            "src/m.rs",
+            "L10-L15",
+            3,
+        )];
+        let other = |rqn: Option<&str>| {
+            let atom = match rqn {
+                Some(rqn) => rqn_atom("f", "other/src/m.rs", 10, 15, rqn),
+                None => make_rust_atom("f", "other/src/m.rs", 10, 15),
+            };
+            BTreeMap::from([("probe:other/0.1.0/m/f()".to_string(), atom)])
+        };
+        // With its qualified name the atom never collides with the template
+        // in strategy 1, and the crate check rejects it in strategy 3;
+        // without one, the package rejects it.
+        for rust in [other(Some("other::m::f")), other(None)] {
+            let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("spqr"));
+            assert!(mappings.is_empty(), "{mappings:?}");
+        }
+
+        // The template's own crate still binds by line overlap.
+        let own = BTreeMap::from([(
+            "probe:spqr/0.1.0/m/f()".to_string(),
+            make_rust_atom("f", "spqr/src/m.rs", 10, 15),
+        )]);
+        let (mappings, _) = generate_translations(&own, &lean, &funcs, None, Some("spqr"));
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    #[test]
+    fn atom_in_record_crate_prefers_the_qualified_name_crate() {
+        let func = make_func("x.f", Some("md5::x::f"), "src/x.rs", "L1-L2");
+        let plain = make_rust_atom("f", "src/x.rs", 1, 2);
+        // Package `md-5` exports the library crate `md5`.
+        let with_rqn = rqn_atom("f", "src/x.rs", 1, 2, "md5::x::f");
+        assert!(atom_in_record_crate(
+            &func,
+            "probe:md-5/0.10.6/x/f()",
+            &with_rqn
+        ));
+        // Without a qualified name only the package is known.
+        assert!(!atom_in_record_crate(
+            &func,
+            "probe:md-5/0.10.6/x/f()",
+            &plain
+        ));
+        // A hyphenated package that names its library the same way.
+        let dalek = make_func("x.f", Some("curve25519_dalek::x::f"), "src/x.rs", "L1-L2");
+        assert!(atom_in_record_crate(
+            &dalek,
+            "probe:curve25519-dalek/4.1.3/x/f()",
+            &plain
+        ));
+        // Another crate, by qualified name or by package.
+        let other = rqn_atom("f", "src/x.rs", 1, 2, "other::x::f");
+        assert!(!atom_in_record_crate(
+            &func,
+            "probe:md-5/0.10.6/x/f()",
+            &other
+        ));
+        assert!(!atom_in_record_crate(
+            &dalek,
+            "probe:other/0.1.0/x/f()",
+            &plain
+        ));
+        assert!(!atom_in_record_crate(&dalek, "not-a-code-name", &plain));
+    }
+
+    #[test]
+    fn template_binds_its_renamed_library_atom() {
+        // Package `opaque-pkg` declares `[lib] name = "opaque_core"`; the
+        // atom has no `charon-def-id`, so the name strategies must bind it.
+        let lean = lean_atoms(&[("opaque_core.f", "FunsExternal.lean")]);
+        let funcs = vec![template_record(
+            "f",
+            "opaque_core::f",
+            "src/lib.rs",
+            "L10-L15",
+            1,
+        )];
+        let rust = BTreeMap::from([(
+            "probe:opaque-pkg/0.1.0/f()".to_string(),
+            rqn_atom("f", "src/lib.rs", 10, 15, "opaque_core::f"),
+        )]);
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("opaque_core"));
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].to, "probe:opaque_core.f");
+    }
+
+    #[test]
+    fn renamed_listed_record_loses_line_overlap_ties_to_regular_records() {
+        // The listed template record comes first in the file and ties the
+        // regular record on line overlap; the regular record must win.
+        let mut rust = BTreeMap::new();
+        rust.insert(
+            "probe:c/0.1.0/m/A/f()".to_string(),
+            make_rust_atom("A::f", "src/m.rs", 10, 15),
+        );
+        let lean = lean_atoms(&[("c.m.B.f", "FunsExternal.lean"), ("c.m.A.f0", "Funs.lean")]);
+        let funcs = vec![
+            FunctionRecord {
+                is_template_name: true,
+                ..make_func("m.B.f", Some("c::m::B::f"), "src/m.rs", "L10-L15")
+            },
+            make_func("c.m.A.f0", Some("c::m::A::f"), "src/m.rs", "L10-L15"),
+        ];
+        let (mappings, _) = generate_translations(&rust, &lean, &funcs, None, Some("c"));
+        assert_eq!(mappings.len(), 1, "{mappings:?}");
+        assert_eq!(mappings[0].to, "probe:c.m.A.f0");
+        assert_eq!(mappings[0].method.as_deref(), Some("file+line-overlap"));
+    }
+
+    #[test]
+    fn listed_uncompleted_def_merges_into_the_listed_completed_def() {
+        // An Override file lists both the uncompleted def's name and the
+        // completed def; the charon join must bind the completed def.
+        let lean = lean_atoms(&[
+            (
+                "kdf.hkdf_to_slice",
+                "SrcTranslated/FunsExternal_Template.lean",
+            ),
+            ("spqr.kdf.hkdf_to_slice", "SrcTranslated/FunsExternal.lean"),
+        ]);
+        let uncompleted = FunctionRecord {
+            is_template_name: true,
+            def_id: Some(43),
+            def_id_is_fun_decl: true,
+            is_loop_artifact: Some(false),
+            ..make_func(
+                "kdf.hkdf_to_slice",
+                Some("spqr::kdf::hkdf_to_slice"),
+                "src/kdf.rs",
+                "L14-L18",
+            )
+        };
+        let completed = make_func(
+            "spqr.kdf.hkdf_to_slice",
+            Some("spqr::kdf::hkdf_to_slice"),
+            "src/kdf.rs",
+            "L14-L18",
+        );
+        for funcs in [
+            vec![uncompleted.clone(), completed.clone()],
+            vec![completed.clone(), uncompleted.clone()],
+        ] {
+            let (mappings, _) = generate_translations(
+                &spqr_rust_atoms(),
+                &lean,
+                &funcs,
+                Some(SPQR_CHARON),
+                Some("spqr"),
+            );
+            assert_eq!(
+                mapping_tuples(&mappings),
+                vec![(
+                    SLICE_RUST.to_string(),
+                    "probe:spqr.kdf.hkdf_to_slice".to_string(),
+                    "exact".to_string(),
+                    Some("charon-def-id".to_string()),
+                )]
+            );
+        }
     }
 }
